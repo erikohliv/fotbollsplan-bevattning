@@ -147,6 +147,8 @@ curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
 - Se till att Siemens LOGO/VFD hanterar mjukstart; pumpstyrningen sker via `Signal_Pump` (på/av), men rampning sköts av VFD.
 
 ### Automatisk bevattning (01:00 dagligen)
+
+#### Alternativ 1: Systemd timer (rekommenderat)
 Installera systemd timer för daglig auto-bevattning:
 ```bash
 sudo cp systemd_bevattning-scheduler.timer /etc/systemd/system/
@@ -160,6 +162,14 @@ Verifiera timer-status:
 ```bash
 sudo systemctl status bevattning-scheduler.timer
 sudo systemctl list-timers bevattning-scheduler.timer
+```
+
+#### Alternativ 2: Cron
+Alternativt kan du använda cron. Se `crontab.example` för konfiguration:
+```bash
+crontab -e
+# Lägg till följande rad:
+0 1 * * * /home/pi/fotbollsplan-bevattning/.venv/bin/python3 /home/pi/fotbollsplan-bevattning/bevattning_scheduler.py --run-now --auto-start >> /home/pi/bevattning_scheduler.log 2>&1
 ```
 
 Scheduler kontrollerar automatiskt block-villkor (MW73 BlockReason) innan auto-bevattning startar:

@@ -1,0 +1,13 @@
+# Cron configuration for bevattning auto-watering
+# Add this to your crontab using: crontab -e
+#
+# This runs the bevattning scheduler daily at 01:00
+# The scheduler checks block conditions (MW73) before auto-watering
+#
+# Adjust paths as needed for your installation
+
+# Run auto-watering daily at 01:00
+0 1 * * * /home/pi/fotbollsplan-bevattning/.venv/bin/python3 /home/pi/fotbollsplan-bevattning/bevattning_scheduler.py --run-now --auto-start >> /home/pi/bevattning_scheduler.log 2>&1
+
+# Alternative: Run with custom log file location
+# 0 1 * * * /home/pi/fotbollsplan-bevattning/.venv/bin/python3 /home/pi/fotbollsplan-bevattning/bevattning_scheduler.py --run-now --auto-start --log-file /var/log/bevattning_scheduler.log >> /var/log/bevattning_scheduler_output.log 2>&1
