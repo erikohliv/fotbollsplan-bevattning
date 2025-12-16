@@ -35,7 +35,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 Test: `curl -H "X-API-Key: <nyckel>" http://localhost:8000/status`
 
 ### systemd (service)
-Kopiera `systemd/bevattning-api.service` till `/etc/systemd/system/`, justera sökvägar/användare vid behov.
+Kopiera `systemd_bevattning-api.service` till `/etc/systemd/system/`, justera sökvägar/användare vid behov.
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable bevattning-api
