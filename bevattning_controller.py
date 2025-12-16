@@ -43,6 +43,7 @@ MW_TID_HORN = 21
 MW_MARKFUKT = 30
 MW_REGEN24 = 31
 MW_TEMP = 32
+MW_BLOCK_REASON = 73  # BlockReasonReg: 0=OK, 1=Rain, 2=Moisture, 3=Anti-collision, 4=E-stop
 
 MK_REG_ADDR = 100  # exempelfält för extern markfukt-läsning
 
@@ -268,13 +269,13 @@ def build_argparser():
     p.add_argument("--loop", action="store_true", help="Kör i loop")
     p.add_argument("--interval", type=int, default=60, help="Intervall i minuter i loop mode")
     p.add_argument("--simulate", action="store_true", help="Simulera, skriv ej Modbus, ingen puls")
-    p.add_argument("--simulate-markfukt-value", type=int, default=30, help="Simulerad markfukt (%)")
+    p.add_argument("--simulate-markfukt-value", type=int, default=30, help="Simulerad markfukt (procent)")
     p.add_argument("--read-markfukt", action="store_true", help="Läs markfukt från Modbus addr MK_REG_ADDR")
     p.add_argument("--auto-start", action="store_true", help="Pulsera Remote_Command (MW10) om tider > 0")
     p.add_argument("--pulse-seconds", type=float, default=1.0, help="Sekunder för puls")
     p.add_argument("--dry-run", action="store_true", help="Logga men skriv inte Modbus")
     p.add_argument("--rain-threshold", type=float, default=GRANS_REGN_PROGNOS, help="Regntröskel mm/24h")
-    p.add_argument("--moisture-threshold", type=int, default=80, help="Markfuktströskel (%)")
+    p.add_argument("--moisture-threshold", type=int, default=80, help="Markfuktströskel (procent)")
     p.add_argument("--temp-min", type=float, default=GRANS_TEMP_MIN, help="Temperatur min för reducerad drift")
     p.add_argument("--log-file", default=None, help="Loggfil (om inte angiven används default)")
     p.add_argument("--once", action="store_true", help="Kör endast en gång")
