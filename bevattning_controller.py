@@ -93,7 +93,7 @@ def hamta_vader(lat, lon, timeout=10):
         # Rimliga gränser
         temp_nu = max(-30.0, min(50.0, temp_nu))
         total_regn = max(0.0, min(500.0, total_regn))
-        
+
         return temp_nu, total_regn
     except Exception as e:
         logger.warning("Kunde inte hämta väder från Open-Meteo: %s", e)
