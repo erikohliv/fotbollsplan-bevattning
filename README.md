@@ -6,6 +6,13 @@
 - **FastAPI-backend:** API/Webb-UI + Modbus-brygga. Skyddas med API-nyckel.
 - **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump_enable styr Siemens LOGO → VFD (mjukstart).
 
+## Nyckelfiler i repo
+- `Fotbollsplan_Master_Version12.st` – PLC-programmet i ST.
+- `bevattning_controller.py` – Pythonkontrollern som skriver Modbus-register baserat på väderdata.
+- `api_main.py` – FastAPI-backend med API och webb-UI.
+- `api_requirements.txt` – Pythonberoenden för API:t.
+- `systemd_bevattning-api.service` – exempel på systemd-tjänstfil.
+
 ## Bygg & kör på Raspberry Pi
 ```bash
 sudo apt update
