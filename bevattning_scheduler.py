@@ -58,7 +58,7 @@ def check_block_conditions(args):
             if client.connect():
                 # Read MW73 (BlockReasonReg)
                 rr = client.read_holding_registers(
-                    bevattning_controller.MW_BLOCK_REASON if hasattr(bevattning_controller, 'MW_BLOCK_REASON') else 73,
+                    bevattning_controller.MW_BLOCK_REASON,
                     1, 
                     unit=args.unit
                 )
