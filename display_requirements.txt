@@ -1,0 +1,10 @@
+# Requirements for Display Manager
+# I2C communication for LCD displays
+smbus2==0.4.3
+
+# GPIO control for buttons (Raspberry Pi)
+# Note: RPi.GPIO is hardware-specific and may need to be installed separately
+# RPi.GPIO==0.7.1
+
+# Modbus communication (already in api_requirements.txt)
+pymodbus==3.6.8
