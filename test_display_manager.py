@@ -211,41 +211,28 @@ def test_display2_buttons():
         # Test UP button (increment zone)
         logger.info("\nSimulating UP button press (increment zone)...")
         initial_zone = display.selected_zone
-        display.handle_button_press('up')
+        display.handle_button_press('up', is_held=False)
         logger.info(f"Zone changed from {initial_zone} to {display.selected_zone}")
         assert display.selected_zone == initial_zone + 1
         
         # Test DOWN button (decrement zone)
         logger.info("\nSimulating DOWN button press (decrement zone)...")
         current_zone = display.selected_zone
-        display.handle_button_press('down')
+        display.handle_button_press('down', is_held=False)
         logger.info(f"Zone changed from {current_zone} to {display.selected_zone}")
         assert display.selected_zone == current_zone - 1
         
-        # Test RIGHT button (navigate to time selection)
+        # Test hold-to-confirm
+        logger.info("\nSimulating UP button hold (confirm zone)...")
+        display.zone_confirmed = False
+        display.handle_button_press('up', is_held=True)
+        logger.info(f"Zone confirmed: {display.zone_confirmed}")
+        assert display.zone_confirmed == True
+        
+        # Test RIGHT button (navigate back to overview - only 2 views now)
         logger.info("\nSimulating RIGHT button press...")
-        display.handle_button_press('right')
-        assert display.current_view == Display2View.TIME_SELECTION
-        logger.info(f"Current view: {display.current_view.name}")
-        
-        # Test UP button (increment time)
-        logger.info("\nSimulating UP button press (increment time)...")
-        initial_time = display.selected_time
-        display.handle_button_press('up')
-        logger.info(f"Time changed from {initial_time} to {display.selected_time} min")
-        assert display.selected_time == initial_time + 1
-        
-        # Test DOWN button (decrement time)
-        logger.info("\nSimulating DOWN button press (decrement time)...")
-        current_time = display.selected_time
-        display.handle_button_press('down')
-        logger.info(f"Time changed from {current_time} to {display.selected_time} min")
-        assert display.selected_time == current_time - 1
-        
-        # Test LEFT button (navigate back)
-        logger.info("\nSimulating LEFT button press...")
-        display.handle_button_press('left')
-        assert display.current_view == Display2View.ZONE_SELECTION
+        display.handle_button_press('right', is_held=False)
+        assert display.current_view == Display2View.OVERVIEW
         logger.info(f"Current view: {display.current_view.name}")
         
         logger.info("\nDisplay 2 test completed successfully!")
@@ -353,24 +340,18 @@ def test_display_rendering():
         
         # Test zone boundaries
         d2.selected_zone = 7
-        d2.handle_button_press('up')
+        d2.handle_button_press('up', is_held=False)
         assert d2.selected_zone == 1, "Zone should wrap from 7 to 1"
         
         d2.selected_zone = 1
-        d2.handle_button_press('down')
+        d2.handle_button_press('down', is_held=False)
         assert d2.selected_zone == 7, "Zone should wrap from 1 to 7"
         
-        # Switch to time selection view
-        d2.current_view = Display2View.TIME_SELECTION
-        
-        # Test time boundaries
-        d2.selected_time = 240
-        d2.handle_button_press('up')
-        assert d2.selected_time == 240, "Time should not exceed 240"
-        
-        d2.selected_time = 1
-        d2.handle_button_press('down')
-        assert d2.selected_time == 1, "Time should not go below 1"
+        # Test hold-to-confirm (3 second hold)
+        d2.selected_zone = 3
+        d2.zone_confirmed = False
+        d2.handle_button_press('up', is_held=True)
+        assert d2.zone_confirmed == True, "Zone should be confirmed after holding button"
         
         logger.info("\nDisplay rendering test completed successfully!")
 
