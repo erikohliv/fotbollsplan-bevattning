@@ -82,6 +82,12 @@ class ManualCommand(BaseModel):
     minutes: Optional[int] = None  # om None används befintligt MW64
     pulse_seconds: float = 1.0
 
+class SetZone(BaseModel):
+    zone: int
+
+class SetManualTime(BaseModel):
+    minutes: int
+
 
 class ConfigUpdate(BaseModel):
     tid_center: Optional[int] = None
@@ -136,6 +142,24 @@ def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
     # Puls manual start
     write_reg(MW_MANUAL_START, 1)
     return {"ok": True, "zone": cmd.zone, "minutes": cmd.minutes}
+
+
+@app.post("/command/set-zone")
+def set_zone(cmd: SetZone, x_api_key: Optional[str] = Header(None)):
+    require_key(x_api_key)
+    if cmd.zone < 1 or cmd.zone > 7:
+        raise HTTPException(status_code=400, detail="zone must be 1..7")
+    write_reg(MW_SET_SELECTED, cmd.zone)
+    return {"ok": True, "zone": cmd.zone}
+
+
+@app.post("/command/set-manual-time")
+def set_manual_time(cmd: SetManualTime, x_api_key: Optional[str] = Header(None)):
+    require_key(x_api_key)
+    if cmd.minutes < 1 or cmd.minutes > 240:
+        raise HTTPException(status_code=400, detail="minutes must be 1..240")
+    write_reg(MW_MANUAL_TIME, cmd.minutes)
+    return {"ok": True, "minutes": cmd.minutes}
 
 
 @app.post("/command/stop")
