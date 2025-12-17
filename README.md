@@ -8,6 +8,24 @@
 - **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump_enable styr Siemens LOGO → VFD (mjukstart).
 
 ## Bygg & kör på Raspberry Pi
+
+### Snabbstart med setup.py (Rekommenderat)
+För automatisk installation och konfiguration:
+```bash
+sudo apt update
+sudo apt install -y python3-venv python3-pip i2c-tools python3-smbus
+git clone https://github.com/IKKAMP/fotbollsplan-bevattning.git
+cd fotbollsplan-bevattning
+python3 setup.py
+```
+
+Setup-scriptet guidar dig genom:
+- Konfiguration av API-nyckel och Modbus-inställningar (IP, port, unit ID)
+- Automatisk installation av Python-beroenden
+- Valfri installation och konfiguration av Tailscale för fjärråtkomst
+- Firewall-konfiguration för Tailscale (om ufw är tillgängligt)
+
+### Manuell installation
 ```bash
 sudo apt update
 sudo apt install -y python3-venv python3-pip i2c-tools python3-smbus
@@ -39,6 +57,17 @@ Alternativt kan du manuellt redigera `api_.env` och ställa in:
 - `SMTP_FROM`, `SMTP_TO` (kommaseparerade mottagare)
 
 **OBS för Gmail-användare med 2FA:** Generera ett "App Password" på https://myaccount.google.com/apppasswords
+
+### Konfigurera Tailscale (Fjärråtkomst)
+Tailscale installeras automatiskt om du använder `setup.py`. För manuell installation:
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up --ssh
+```
+
+Tailscale ger säker fjärråtkomst via SSH utan att öppna portar eller konfigurera portvidarebefordran. Efter installation:
+- Kontrollera status: `sudo tailscale status`
+- Hämta Tailscale IP: `sudo tailscale ip`
 
 ### Starta API manuellt
 ```bash
