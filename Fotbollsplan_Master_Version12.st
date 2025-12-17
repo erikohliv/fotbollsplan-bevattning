@@ -230,16 +230,16 @@ PROGRAM Fotbollsplan_Master
   SelectedZoneReg := SelectedZone;
   IF NOT ModeIsAuto THEN
     IF NOT PrevSelectedZoneInit THEN
-      PrevSelectedZoneManual := SelectedZone;
       PrevSelectedZoneInit := TRUE;
     ELSE
       IF (Steg = 0) AND (SelectedZone <> PrevSelectedZoneManual) THEN
         Start_Request := TRUE;
       END_IF;
-      PrevSelectedZoneManual := SelectedZone;
     END_IF;
+    PrevSelectedZoneManual := SelectedZone;
   ELSE
     PrevSelectedZoneInit := FALSE;
+    PrevSelectedZoneManual := 0;
   END_IF;
 
   (* Anti-kollision: blockera start om sekvens aktiv *)
