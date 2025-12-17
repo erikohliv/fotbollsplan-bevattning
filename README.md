@@ -2,7 +2,7 @@
 
 ## Arkitektur
 - **PLC (ST):** Säker/sekvenslogik, anti-vattenslag, E-stop, zonbyte.
-- **Python controller:** Hämtar SMHI, markfukt (valfritt), skriver Modbus-register, pulserar start.
+- **Python controller:** Hämtar Open-Meteo, markfukt (valfritt), skriver Modbus-register, pulserar start.
 - **FastAPI-backend:** API/Webb-UI + Modbus-brygga. Skyddas med API-nyckel.
 - **Display Manager:** Hanterar två I2C LCD-displayer för status och manuell styrning.
 - **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump_enable styr Siemens LOGO → VFD (mjukstart).
@@ -84,9 +84,11 @@ sudo systemctl start bevattning-api
 - **Zonbyte:** När körtid är slut: pump av först, CloseDelay, stäng ventiler, PauseDelay, nästa zon, OpenDelay, pump på.
 - **Stop/E-stop:** Pump av direkt, CloseDelay, stäng ventiler. E-stop nollar sekvens och blockreason=4.
 - **Next-knapp:** Roterar SelectedZone 1→7→1. Vid omstart initieras SelectedZone=1.
+- **Manuell start:** Välj zon (rotationsknapp/display), ställ tid, och bekräfta med fysiska startknappen.
 
-## Python SMHI-controller
+## Python Open-Meteo-controller
 - Fil: `bevattning_controller.py`
+- Hämtar väderdata från Open-Meteo (gratis, inget API-nyckel behövs)
 - Typisk körning (en gång):
   ```bash
   python3 bevattning_controller.py --auto-start
@@ -102,8 +104,14 @@ sudo systemctl start bevattning-api
   - `GET /status`
   - `POST /command/start-auto` (pulserar MW10=50->0)
   - `POST /command/manual` `{ "zone": 1..7, "minutes": <valfritt> }` (skriver MW64 om minutes anges, skriver MW63 och pulsar MW61)
+  - `POST /command/set-zone` `{ "zone": 1..7 }` (sätter MW63 utan att starta)
+  - `POST /command/set-manual-time` `{ "minutes": 1..240 }` (sätter MW64 utan att starta)
   - `POST /command/stop` (sätter Remote_Command=0 och ModeOverride=0 för att stoppa auto)
   - `POST /config` (tider, trösklar, markfukt, regen, temp, manual_time, mode_override)
+
+## Healthcheck
+- Script: `python healthcheck.py`
+- Env: `API_URL` (default `http://127.0.0.1:8000/status`), `API_KEY`, `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_TO` (komma-separerad).
 
 ## Säkerhet
 - API-nyckel krävs för alla anrop (`X-API-Key`).
@@ -127,7 +135,7 @@ curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
 
 ## Rekommenderad drift
 - PLC kör ST-programmet (task 100 ms).
-- Python SMHI-controller körs t.ex. via cron eller systemd timer för periodiska uppdateringar av väder/markfukt.
+- Python väder-controller körs t.ex. via cron eller systemd timer för periodiska uppdateringar av väder/markfukt.
 - FastAPI kör som systemd-tjänst för app/webb-styrning.
 - Display Manager körs som systemd-tjänst för lokal styrning och övervakning.
 - Se till att Siemens LOGO/VFD hanterar mjukstart; pumpstyrningen sker via `Signal_Pump` (på/av), men rampning sköts av VFD.
