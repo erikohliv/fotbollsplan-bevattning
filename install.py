@@ -15,6 +15,17 @@ import re
 from email.message import EmailMessage
 from getpass import getpass
 from pathlib import Path
+from typing import Tuple, Optional
+
+
+# Constants
+DEFAULT_API_KEY = 'byt-mig'
+DEFAULT_SMTP_HOST = 'smtp.gmail.com'
+DEFAULT_SMTP_PORT = '587'
+DEFAULT_SMTP_TIMEOUT = '10'
+DEFAULT_MODBUS_HOST = '127.0.0.1'
+DEFAULT_MODBUS_PORT = '502'
+DEFAULT_MODBUS_UNIT = '1'
 
 
 def print_header(text: str) -> None:
@@ -45,7 +56,7 @@ def validate_email(email: str) -> bool:
     return re.match(pattern, email) is not None
 
 
-def validate_port(port_str: str) -> tuple[bool, int]:
+def validate_port(port_str: str) -> Tuple[bool, int]:
     """Validate port number (1-65535)."""
     try:
         port = int(port_str)
@@ -94,11 +105,13 @@ def get_yes_no(prompt: str, default: bool = False) -> bool:
         print_error("Please answer 'y' or 'n'.")
 
 
-def test_smtp_connection(smtp_host: str, smtp_port: int, smtp_user: str, 
-                         smtp_pass: str, smtp_from: str, smtp_to: str,
-                         use_2fa: bool) -> tuple[bool, str]:
+def test_smtp_connection(smtp_host: str, smtp_port: int, smtp_user: Optional[str], 
+                         smtp_pass: Optional[str], smtp_from: str, smtp_to: str,
+                         use_2fa: bool) -> Tuple[bool, str]:
     """
     Test SMTP configuration by sending a test email.
+    
+    Authentication is optional - only performed if both smtp_user and smtp_pass are provided.
     
     Returns: (success: bool, message: str)
     """
@@ -223,11 +236,11 @@ def main() -> int:
     print_header("SMTP Server Configuration")
     
     # Get SMTP server
-    default_smtp_host = existing_vars.get('SMTP_HOST', 'smtp.gmail.com')
+    default_smtp_host = existing_vars.get('SMTP_HOST', DEFAULT_SMTP_HOST)
     smtp_host = get_input("SMTP server address", default=default_smtp_host)
     
     # Get SMTP port
-    default_smtp_port = existing_vars.get('SMTP_PORT', '587')
+    default_smtp_port = existing_vars.get('SMTP_PORT', DEFAULT_SMTP_PORT)
     while True:
         port_str = get_input("SMTP port", default=default_smtp_port)
         valid, smtp_port = validate_port(port_str)
@@ -250,8 +263,13 @@ def main() -> int:
     # Ask about 2FA
     use_2fa = get_yes_no("Are you using two-factor authentication (2FA)?", default=False)
     if use_2fa:
-        print_info("Note: For Gmail with 2FA, you need an 'App Password'.")
-        print_info("Generate one at: https://myaccount.google.com/apppasswords")
+        # Provide generic 2FA guidance with specific example for Gmail
+        if 'gmail' in smtp_host.lower():
+            print_info("Note: For Gmail with 2FA, you need an 'App Password'.")
+            print_info("Generate one at: https://myaccount.google.com/apppasswords")
+        else:
+            print_info("Note: With 2FA enabled, you may need an 'App Password' from your email provider.")
+            print_info("Check your email provider's documentation for app-specific passwords.")
     
     # Get sender email (usually same as SMTP_USER)
     default_from = existing_vars.get('SMTP_FROM', smtp_user)
@@ -271,7 +289,7 @@ def main() -> int:
             return 1
     
     # SMTP timeout
-    default_timeout = existing_vars.get('SMTP_TIMEOUT', '10')
+    default_timeout = existing_vars.get('SMTP_TIMEOUT', DEFAULT_SMTP_TIMEOUT)
     smtp_timeout = get_input("SMTP timeout (seconds)", default=default_timeout)
     
     print_header("Configuration Summary")
@@ -313,13 +331,13 @@ def main() -> int:
     
     # Ensure API configuration exists
     if 'API_KEY' not in existing_vars:
-        existing_vars['API_KEY'] = 'byt-mig'
+        existing_vars['API_KEY'] = DEFAULT_API_KEY
     if 'MODBUS_HOST' not in existing_vars:
-        existing_vars['MODBUS_HOST'] = '127.0.0.1'
+        existing_vars['MODBUS_HOST'] = DEFAULT_MODBUS_HOST
     if 'MODBUS_PORT' not in existing_vars:
-        existing_vars['MODBUS_PORT'] = '502'
+        existing_vars['MODBUS_PORT'] = DEFAULT_MODBUS_PORT
     if 'MODBUS_UNIT' not in existing_vars:
-        existing_vars['MODBUS_UNIT'] = '1'
+        existing_vars['MODBUS_UNIT'] = DEFAULT_MODBUS_UNIT
     
     try:
         save_env_file(env_file, existing_vars)

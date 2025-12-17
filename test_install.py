@@ -19,26 +19,26 @@ def test_validation_functions():
     print("Testing validation functions...")
     
     # Test email validation
-    assert install.validate_email('test@example.com') == True
-    assert install.validate_email('user.name+tag@example.co.uk') == True
-    assert install.validate_email('invalid-email') == False
-    assert install.validate_email('test@') == False
-    assert install.validate_email('@example.com') == False
+    assert install.validate_email('test@example.com')
+    assert install.validate_email('user.name+tag@example.co.uk')
+    assert not install.validate_email('invalid-email')
+    assert not install.validate_email('test@')
+    assert not install.validate_email('@example.com')
     print("✓ Email validation works")
     
     # Test port validation
     valid, port = install.validate_port('587')
-    assert valid == True and port == 587
+    assert valid and port == 587
     valid, port = install.validate_port('1')
-    assert valid == True and port == 1
+    assert valid and port == 1
     valid, port = install.validate_port('65535')
-    assert valid == True and port == 65535
+    assert valid and port == 65535
     valid, port = install.validate_port('0')
-    assert valid == False
+    assert not valid
     valid, port = install.validate_port('65536')
-    assert valid == False
+    assert not valid
     valid, port = install.validate_port('abc')
-    assert valid == False
+    assert not valid
     print("✓ Port validation works")
 
 
