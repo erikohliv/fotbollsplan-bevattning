@@ -76,6 +76,7 @@ sudo systemctl start bevattning-api
 - **Zonbyte:** När körtid är slut: pump av först, CloseDelay, stäng ventiler, PauseDelay, nästa zon, OpenDelay, pump på.
 - **Stop/E-stop:** Pump av direkt, CloseDelay, stäng ventiler. E-stop nollar sekvens och blockreason=4.
 - **Next-knapp:** Roterar SelectedZone 1→7→1. Vid omstart initieras SelectedZone=1.
+- **Manuell start via display/LED:** I manuellt läge startas vald zon automatiskt när den väljs (LED visar vald/aktiv zon), ingen separat startknapp behövs.
 
 ## Python SMHI-controller
 - Fil: `bevattning_controller.py`
