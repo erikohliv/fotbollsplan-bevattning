@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Bevattning_controller.py (uppdaterad)
-- Hämtar SMHI, valfritt markfukt via Modbus.
+- Hämtar väder från Open-Meteo, valfritt markfukt via Modbus.
 - Skriver temp/regn/markfukt/tider till PLC via Modbus.
 - Pulserar Remote_Command (MW10) vid behov.
 - Fallback och begränsning av rimliga värden.
@@ -62,39 +62,41 @@ def open_modbus_client(host, port, timeout=5):
     return client
 
 
-def hamta_vader_smhi(lat, lon, timeout=10):
+def hamta_vader(lat, lon, timeout=10):
+    """
+    Hämtar väderdata från Open-Meteo API.
+    Returnerar aktuell temperatur och total nederbörd kommande 24h.
+    """
     try:
-        url = f"https://opendata-download-metfcst.smhi.se/api/category/pmp3g/version/2/geotype/point/lon/{lon}/lat/{lat}/data.json"
-        headers = {"User-Agent": "BevattningController/1.1"}
+        # Open-Meteo API - gratis, inget API-nyckel behövs
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m&hourly=precipitation&timezone=auto&forecast_days=2"
+        headers = {"User-Agent": "BevattningController/1.2"}
         r = requests.get(url, timeout=timeout, headers=headers)
         r.raise_for_status()
         data = r.json()
 
-        now = datetime.utcnow()
-        end_time = now + timedelta(hours=24)
-        total_regn = 0.0
-        temp_nu = None
-
-        for ts in data.get("timeSeries", []):
-            valid_time = datetime.strptime(ts["validTime"], "%Y-%m-%dT%H:%M:%SZ")
-            if temp_nu is None and valid_time >= now - timedelta(minutes=60):
-                for p in ts.get("parameters", []):
-                    if p.get("name") == "t":
-                        temp_nu = float(p.get("values", [None])[0])
-            if now < valid_time <= end_time:
-                for p in ts.get("parameters", []):
-                    if p.get("name") == "pmean":
-                        total_regn += float(p.get("values", [0])[0] or 0.0)
-
+        # Hämta aktuell temperatur
+        temp_nu = data.get("current", {}).get("temperature_2m")
         if temp_nu is None:
             temp_nu = 15.0
+        else:
+            temp_nu = float(temp_nu)
 
-        # rimliga gränser
+        # Beräkna total nederbörd för kommande 24h
+        hourly_precip = data.get("hourly", {}).get("precipitation", [])
+        if hourly_precip:
+            # Ta första 24 timmarna
+            total_regn = sum(float(p or 0.0) for p in hourly_precip[:24])
+        else:
+            total_regn = 0.0
+
+        # Rimliga gränser
         temp_nu = max(-30.0, min(50.0, temp_nu))
         total_regn = max(0.0, min(500.0, total_regn))
+
         return temp_nu, total_regn
     except Exception as e:
-        logger.warning("Kunde inte hämta väder från SMHI: %s", e)
+        logger.warning("Kunde inte hämta väder från Open-Meteo: %s", e)
         return None, None
 
 
@@ -164,7 +166,7 @@ def pulse_remote_command(host, port, unit, cmd_reg=MW_REMOTE_CMD, cmd_value=50, 
 
 def main_once(args):
     logger.info("Startar bevattningsscript")
-    temp, regn = hamta_vader_smhi(args.lat, args.lon)
+    temp, regn = hamta_vader(args.lat, args.lon)
     if temp is None:
         temp = 15.0
         regn = 0.0
@@ -259,22 +261,22 @@ def main_once(args):
 
 
 def build_argparser():
-    p = argparse.ArgumentParser(description="Bevattning controller - SMHI -> Modbus")
+    p = argparse.ArgumentParser(description="Bevattning controller - Open-Meteo -> Modbus")
     p.add_argument("--host", "-H", default=DEFAULT_MODBUS_HOST, help="Modbus host")
     p.add_argument("--port", "-P", type=int, default=DEFAULT_MODBUS_PORT, help="Modbus port")
     p.add_argument("--unit", "-u", type=int, default=DEFAULT_MODBUS_UNIT, help="Modbus unit id")
-    p.add_argument("--lat", default=DEFAULT_LATITUDE, help="Latitude SMHI")
-    p.add_argument("--lon", default=DEFAULT_LONGITUDE, help="Longitude SMHI")
+    p.add_argument("--lat", default=DEFAULT_LATITUDE, help="Latitude för vädertjänst")
+    p.add_argument("--lon", default=DEFAULT_LONGITUDE, help="Longitude för vädertjänst")
     p.add_argument("--loop", action="store_true", help="Kör i loop")
     p.add_argument("--interval", type=int, default=60, help="Intervall i minuter i loop mode")
     p.add_argument("--simulate", action="store_true", help="Simulera, skriv ej Modbus, ingen puls")
-    p.add_argument("--simulate-markfukt-value", type=int, default=30, help="Simulerad markfukt (%)")
+    p.add_argument("--simulate-markfukt-value", type=int, default=30, help="Simulerad markfukt (procent)")
     p.add_argument("--read-markfukt", action="store_true", help="Läs markfukt från Modbus addr MK_REG_ADDR")
     p.add_argument("--auto-start", action="store_true", help="Pulsera Remote_Command (MW10) om tider > 0")
     p.add_argument("--pulse-seconds", type=float, default=1.0, help="Sekunder för puls")
     p.add_argument("--dry-run", action="store_true", help="Logga men skriv inte Modbus")
     p.add_argument("--rain-threshold", type=float, default=GRANS_REGN_PROGNOS, help="Regntröskel mm/24h")
-    p.add_argument("--moisture-threshold", type=int, default=80, help="Markfuktströskel (%)")
+    p.add_argument("--moisture-threshold", type=int, default=80, help="Markfuktströskel (procent)")
     p.add_argument("--temp-min", type=float, default=GRANS_TEMP_MIN, help="Temperatur min för reducerad drift")
     p.add_argument("--log-file", default=None, help="Loggfil (om inte angiven används default)")
     p.add_argument("--once", action="store_true", help="Kör endast en gång")

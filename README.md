@@ -2,7 +2,7 @@
 
 ## Arkitektur
 - **PLC (ST):** Säker/sekvenslogik, anti-vattenslag, E-stop, zonbyte.
-- **Python controller:** Hämtar SMHI, markfukt (valfritt), skriver Modbus-register, pulserar start.
+- **Python controller:** Hämtar väder från Open-Meteo, markfukt (valfritt), skriver Modbus-register, pulserar start.
 - **FastAPI-backend:** API/Webb-UI + Modbus-brygga. Skyddas med API-nyckel.
 - **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump_enable styr Siemens LOGO → VFD (mjukstart).
 
@@ -82,8 +82,9 @@ sudo systemctl start bevattning-api
 - **D1 (20x4):** Rullar status/fel/info var ~3s. Prioritet på fel (E-stop/blockreason). Kan visa IP/SSH-info.
 - **D2 (8x1/8x2 + 4 knappar):** Byter vyer och väljer zon/tid i manuellt läge. Använd API-endpoints `/command/set-zone` och `/command/set-manual-time` för att uppdatera PLC-register. Start bekräftas via fysiska startknappen. D2 ersätter tidigare LED-indikering.
 
-## Python SMHI-controller
+## Python väder-controller
 - Fil: `bevattning_controller.py`
+- Hämtar väderdata från Open-Meteo (gratis, inget API-nyckel behövs)
 - Typisk körning (en gång):
   ```bash
   python3 bevattning_controller.py --auto-start
@@ -130,7 +131,7 @@ curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
 
 ## Rekommenderad drift
 - PLC kör ST-programmet (task 100 ms).
-- Python SMHI-controller körs t.ex. via cron eller systemd timer för periodiska uppdateringar av väder/markfukt.
+- Python väder-controller körs t.ex. via cron eller systemd timer för periodiska uppdateringar av väder/markfukt.
 - FastAPI kör som systemd-tjänst för app/webb-styrning.
 - Se till att Siemens LOGO/VFD hanterar mjukstart; pumpstyrningen sker via `Signal_Pump` (på/av), men rampning sköts av VFD.
 
