@@ -76,6 +76,11 @@ sudo systemctl start bevattning-api
 - **Zonbyte:** När körtid är slut: pump av först, CloseDelay, stäng ventiler, PauseDelay, nästa zon, OpenDelay, pump på.
 - **Stop/E-stop:** Pump av direkt, CloseDelay, stäng ventiler. E-stop nollar sekvens och blockreason=4.
 - **Next-knapp:** Roterar SelectedZone 1→7→1. Vid omstart initieras SelectedZone=1.
+- **Manuell start:** Välj zon (rotationsknapp/display), ställ tid, och bekräfta med fysiska startknappen.
+
+## Displayer
+- **D1 (20x4):** Rullar status/fel/info var ~3s. Prioritet på fel (E-stop/blockreason). Kan visa IP/SSH-info.
+- **D2 (8x1/8x2 + 4 knappar):** Byter vyer och väljer zon/tid i manuellt läge. Använd API-endpoints `/command/set-zone` och `/command/set-manual-time` för att uppdatera PLC-register. Start bekräftas via fysiska startknappen. D2 ersätter tidigare LED-indikering.
 
 ## Python SMHI-controller
 - Fil: `bevattning_controller.py`
@@ -94,8 +99,14 @@ sudo systemctl start bevattning-api
   - `GET /status`
   - `POST /command/start-auto` (pulserar MW10=50->0)
   - `POST /command/manual` `{ "zone": 1..7, "minutes": <valfritt> }` (skriver MW64 om minutes anges, skriver MW63 och pulsar MW61)
+  - `POST /command/set-zone` `{ "zone": 1..7 }` (sätter MW63 utan att starta)
+  - `POST /command/set-manual-time` `{ "minutes": 1..240 }` (sätter MW64 utan att starta)
   - `POST /command/stop` (sätter Remote_Command=0 och ModeOverride=0 för att stoppa auto)
   - `POST /config` (tider, trösklar, markfukt, regen, temp, manual_time, mode_override)
+
+## Healthcheck
+- Script: `python healthcheck.py`
+- Env: `API_URL` (default `http://127.0.0.1:8000/status`), `API_KEY`, `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_TO` (komma-separerad).
 
 ## Säkerhet
 - API-nyckel krävs för alla anrop (`X-API-Key`).
