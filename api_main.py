@@ -136,7 +136,7 @@ def write_regs_bulk(start_address, values):
 
 class ManualCommand(BaseModel):
     zone: int
-    minutes: Optional[int] = None  # om None används befintligt MW64
+    # minutes parameter removed - manual mode now uses auto mode times (Set_Tid_Center/Set_Tid_Horn)
     pulse_seconds: float = 1.0
 
 class SetZone(BaseModel):
@@ -152,7 +152,7 @@ class ConfigUpdate(BaseModel):
     markfukt: Optional[int] = None
     regen24: Optional[int] = None
     temp_c: Optional[int] = None
-    manual_time: Optional[int] = None  # MW64
+    manual_time: Optional[int] = None  # DEPRECATED - kept for backward compatibility
     mode_override: Optional[int] = None  # 1=Auto, 0=Manual
 
 
@@ -203,16 +203,15 @@ def start_auto(x_api_key: Optional[str] = Header(None), pulse_seconds: float = 1
 
 @app.post("/command/manual")
 def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
+    """
+    Start manual irrigation from selected zone.
+    Manual mode now runs a full sequence from the selected zone to zone 7,
+    using the same times as auto mode (Set_Tid_Center for zones 1-3, Set_Tid_Horn for zones 4-7).
+    """
     require_key(x_api_key)
     zone = validate_zone(cmd.zone)
-    minutes = cmd.minutes
-    # Reuse connection for multiple writes
+    # Write selected zone and pulse manual start
     with get_modbus_connection() as client:
-        if cmd.minutes is not None:
-            minutes = validate_minutes(cmd.minutes)
-            rr = client.write_register(MW_MANUAL_TIME, minutes, unit=MODBUS_UNIT)
-            if rr is None or (hasattr(rr, "isError") and rr.isError()):
-                raise HTTPException(status_code=502, detail="Modbus write error")
         rr = client.write_register(MW_SET_SELECTED, zone, unit=MODBUS_UNIT)
         if rr is None or (hasattr(rr, "isError") and rr.isError()):
             raise HTTPException(status_code=502, detail="Modbus write error")
@@ -220,7 +219,7 @@ def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
         rr = client.write_register(MW_MANUAL_START, 1, unit=MODBUS_UNIT)
         if rr is None or (hasattr(rr, "isError") and rr.isError()):
             raise HTTPException(status_code=502, detail="Modbus write error")
-    return {"ok": True, "zone": zone, "minutes": minutes}
+    return {"ok": True, "zone": zone, "note": "Manual mode runs full sequence using auto times"}
 
 
 @app.post("/command/set-zone")
@@ -233,10 +232,15 @@ def set_zone(cmd: SetZone, x_api_key: Optional[str] = Header(None)):
 
 @app.post("/command/set-manual-time")
 def set_manual_time(cmd: SetManualTime, x_api_key: Optional[str] = Header(None)):
+    """
+    DEPRECATED: Manual time setting is no longer used.
+    Manual mode now uses the same times as auto mode (Set_Tid_Center/Set_Tid_Horn).
+    This endpoint is kept for backward compatibility but has no effect.
+    """
     require_key(x_api_key)
     minutes = validate_minutes(cmd.minutes)
-    write_reg(MW_MANUAL_TIME, minutes)
-    return {"ok": True, "minutes": minutes}
+    # Endpoint kept for backward compatibility but does nothing
+    return {"ok": True, "minutes": minutes, "note": "DEPRECATED - manual mode now uses auto times"}
 
 
 @app.post("/command/stop")
@@ -296,10 +300,10 @@ def config(cfg: ConfigUpdate, x_api_key: Optional[str] = Header(None)):
                 if rr is None or (hasattr(rr, "isError") and rr.isError()):
                     raise HTTPException(status_code=502, detail="Modbus write error")
         
+        # manual_time is deprecated - kept for backward compatibility but does nothing
         if cfg.manual_time is not None:
-            rr = client.write_register(MW_MANUAL_TIME, max(1, min(240, cfg.manual_time)), unit=MODBUS_UNIT)
-            if rr is None or (hasattr(rr, "isError") and rr.isError()):
-                raise HTTPException(status_code=502, detail="Modbus write error")
+            # No-op for backward compatibility
+            pass
         if cfg.mode_override is not None:
             rr = client.write_register(MW_MODE_OVERRIDE, 1 if cfg.mode_override == 1 else 0, unit=MODBUS_UNIT)
             if rr is None or (hasattr(rr, "isError") and rr.isError()):
