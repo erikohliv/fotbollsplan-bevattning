@@ -108,6 +108,8 @@ def hamta_vader_openmeteo(lat, lon, timeout=10):
             temp_nu = float(temp_list[0])
         if temp_nu is None:
             temp_nu = 15.0
+        else:
+            temp_nu = float(temp_nu)
 
         temp_nu = max(-30.0, min(50.0, float(temp_nu)))
         total_regn = max(0.0, min(500.0, float(total_regn)))
@@ -278,22 +280,22 @@ def main_once(args):
 
 
 def build_argparser():
-    p = argparse.ArgumentParser(description="Bevattning controller - SMHI -> Modbus")
+    p = argparse.ArgumentParser(description="Bevattning controller - Open-Meteo -> Modbus")
     p.add_argument("--host", "-H", default=DEFAULT_MODBUS_HOST, help="Modbus host")
     p.add_argument("--port", "-P", type=int, default=DEFAULT_MODBUS_PORT, help="Modbus port")
     p.add_argument("--unit", "-u", type=int, default=DEFAULT_MODBUS_UNIT, help="Modbus unit id")
-    p.add_argument("--lat", default=DEFAULT_LATITUDE, help="Latitude SMHI")
-    p.add_argument("--lon", default=DEFAULT_LONGITUDE, help="Longitude SMHI")
+    p.add_argument("--lat", default=DEFAULT_LATITUDE, help="Latitude för vädertjänst")
+    p.add_argument("--lon", default=DEFAULT_LONGITUDE, help="Longitude för vädertjänst")
     p.add_argument("--loop", action="store_true", help="Kör i loop")
     p.add_argument("--interval", type=int, default=60, help="Intervall i minuter i loop mode")
     p.add_argument("--simulate", action="store_true", help="Simulera, skriv ej Modbus, ingen puls")
-    p.add_argument("--simulate-markfukt-value", type=int, default=30, help="Simulerad markfukt (%)")
+    p.add_argument("--simulate-markfukt-value", type=int, default=30, help="Simulerad markfukt (procent)")
     p.add_argument("--read-markfukt", action="store_true", help="Läs markfukt från Modbus addr MK_REG_ADDR")
     p.add_argument("--auto-start", action="store_true", help="Pulsera Remote_Command (MW10) om tider > 0")
     p.add_argument("--pulse-seconds", type=float, default=1.0, help="Sekunder för puls")
     p.add_argument("--dry-run", action="store_true", help="Logga men skriv inte Modbus")
     p.add_argument("--rain-threshold", type=float, default=GRANS_REGN_PROGNOS, help="Regntröskel mm/24h")
-    p.add_argument("--moisture-threshold", type=int, default=80, help="Markfuktströskel (%)")
+    p.add_argument("--moisture-threshold", type=int, default=80, help="Markfuktströskel (procent)")
     p.add_argument("--temp-min", type=float, default=GRANS_TEMP_MIN, help="Temperatur min för reducerad drift")
     p.add_argument("--log-file", default=None, help="Loggfil (om inte angiven används default)")
     p.add_argument("--once", action="store_true", help="Kör endast en gång")
