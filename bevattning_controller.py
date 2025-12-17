@@ -47,6 +47,11 @@ MW_TEMP = 32
 
 MK_REG_ADDR = 100  # exempelfält för extern markfukt-läsning
 
+# Weather cache to avoid excessive API calls in loop mode.
+# Simple global cache is sufficient for single-threaded controller script.
+# For multi-threaded use, consider thread-safe caching library.
+_weather_cache = {"data": None, "timestamp": None, "cache_duration": 600}  # 10 minutes cache
+
 logger = logging.getLogger("bevattning")
 logger.setLevel(logging.DEBUG)
 _formatter = logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
@@ -63,11 +68,19 @@ def open_modbus_client(host, port, timeout=5):
     return client
 
 
-def hamta_vader_openmeteo(lat, lon, timeout=10):
+def hamta_vader(lat, lon, timeout=10, use_cache=True):
     """
-    Hämtar temperatur (nuvarande) och summerat regn för kommande 24h
-    från Open-Meteo. Faller tillbaka till None vid fel.
+    Hämtar väderdata från Open-Meteo API.
+    Returnerar aktuell temperatur och total nederbörd kommande 24h.
+    Cache reduces API calls in loop mode.
     """
+    # Check cache first
+    if use_cache and _weather_cache["data"] is not None and _weather_cache["timestamp"] is not None:
+        age = time.time() - _weather_cache["timestamp"]
+        if age < _weather_cache["cache_duration"]:
+            logger.debug("Using cached weather data (age: %.1f seconds)", age)
+            return _weather_cache["data"]
+    
     try:
         latitude = float(lat)
         longitude = float(lon)
@@ -111,11 +124,33 @@ def hamta_vader_openmeteo(lat, lon, timeout=10):
         else:
             temp_nu = float(temp_nu)
 
-        temp_nu = max(-30.0, min(50.0, float(temp_nu)))
-        total_regn = max(0.0, min(500.0, float(total_regn)))
-        return temp_nu, total_regn
+        # Beräkna total nederbörd för kommande 24h
+        hourly_precip = data.get("hourly", {}).get("precipitation", [])
+        if hourly_precip:
+            # Ta första 24 timmarna
+            total_regn = sum(float(p or 0.0) for p in hourly_precip[:24])
+        else:
+            total_regn = 0.0
+
+        # Rimliga gränser
+        temp_nu = max(-30.0, min(50.0, temp_nu))
+        total_regn = max(0.0, min(500.0, total_regn))
+
+        result = (temp_nu, total_regn)
+        
+        # Update cache
+        if use_cache:
+            _weather_cache["data"] = result
+            _weather_cache["timestamp"] = time.time()
+            logger.debug("Weather data cached")
+        
+        return result
     except Exception as e:
         logger.warning("Kunde inte hämta väder från Open-Meteo: %s", e)
+        # Return cached data if available even if expired
+        if _weather_cache["data"] is not None:
+            logger.info("Using expired cached weather data due to API error")
+            return _weather_cache["data"]
         return None, None
 
 
@@ -143,6 +178,19 @@ def read_markfukt_from_modbus(addr, host, port, unit=DEFAULT_MODBUS_UNIT):
         except Exception:
             pass
         return None
+
+
+def write_registers_bulk(client, start_address, values, unit=DEFAULT_MODBUS_UNIT):
+    """Write multiple consecutive registers in one operation for better performance."""
+    try:
+        rr = client.write_registers(start_address, [int(v) for v in values], unit=unit)
+        if rr is None or (hasattr(rr, "isError") and rr.isError()):
+            logger.warning("Modbus bulk write error at address %s", start_address)
+            return False
+        return True
+    except Exception as e:
+        logger.warning("Modbus bulk write exception: %s", e)
+        return False
 
 
 def write_register(client, address, value, unit=DEFAULT_MODBUS_UNIT):
@@ -227,13 +275,15 @@ def main_once(args):
             client = open_modbus_client(args.host, args.port)
             try:
                 if client.connect():
-                    write_register(client, MW_MARKFUKT, int(markfukt), unit=args.unit)
-                    write_register(client, MW_REGEN24, int(regn if regn is not None else 0), unit=args.unit)
-                    write_register(client, MW_TEMP, int(temp), unit=args.unit)
-                    write_register(client, MW_TID_CENTER, int(tid_center), unit=args.unit)
-                    write_register(client, MW_TID_HORN, int(tid_horn), unit=args.unit)
+                    # Use bulk write for better performance - write registers in two groups
+                    # Group 1: MW20-21 (tid_center, tid_horn)
+                    ok1 = write_registers_bulk(client, MW_TID_CENTER, [int(tid_center), int(tid_horn)], unit=args.unit)
+                    # Group 2: MW30-32 (markfukt, regen, temp)
+                    ok2 = write_registers_bulk(client, MW_MARKFUKT, 
+                                              [int(markfukt), int(regn if regn is not None else 0), int(temp)], 
+                                              unit=args.unit)
                     client.close()
-                    wrote = True
+                    wrote = ok1 and ok2
                 else:
                     logger.warning("Kunde inte ansluta till Modbus för skrivning.")
             except Exception as e:
@@ -299,6 +349,7 @@ def build_argparser():
     p.add_argument("--temp-min", type=float, default=GRANS_TEMP_MIN, help="Temperatur min för reducerad drift")
     p.add_argument("--log-file", default=None, help="Loggfil (om inte angiven används default)")
     p.add_argument("--once", action="store_true", help="Kör endast en gång")
+    p.add_argument("--max-retry-delay", type=int, default=300, help="Max retry delay in seconds for exponential backoff")
     return p
 
 
@@ -315,9 +366,32 @@ def main():
     try:
         if args.loop and not args.once:
             logger.info("Startar i loop mode, intervall %d minuter.", args.interval)
+            consecutive_failures = 0
             while True:
-                main_once(args)
-                time.sleep(max(10, args.interval * 60))
+                try:
+                    result = main_once(args)
+                    # Reset failure count on success
+                    if result and isinstance(result, dict) and result.get("wrote"):
+                        consecutive_failures = 0
+                    else:
+                        consecutive_failures += 1
+                    
+                    # Calculate delay with exponential backoff on failures
+                    base_delay = max(10, args.interval * 60)
+                    if consecutive_failures > 0:
+                        # Exponential backoff: delay * 2^failures, capped at max_retry_delay
+                        backoff_delay = min(base_delay * (2 ** (consecutive_failures - 1)), args.max_retry_delay)
+                        logger.info("Backing off due to %d consecutive failures, waiting %d seconds", 
+                                  consecutive_failures, backoff_delay)
+                        time.sleep(backoff_delay)
+                    else:
+                        time.sleep(base_delay)
+                except Exception as e:
+                    consecutive_failures += 1
+                    logger.exception("Error in loop iteration: %s", e)
+                    backoff_delay = min(60 * (2 ** (consecutive_failures - 1)), args.max_retry_delay)
+                    logger.info("Retrying after %d seconds", backoff_delay)
+                    time.sleep(backoff_delay)
         else:
             main_once(args)
     except KeyboardInterrupt:
