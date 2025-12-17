@@ -155,7 +155,7 @@ python3 bevattning_controller.py --loop --interval 60 --auto-start
 ## Språkanvändning
 - **Svenska**: Domänspecifika termer (bevattning, zoner, ventiler, pump)
 - **Svenska**: Kommentarer som förklarar bevattningslogik
-- **Engelska**: Tekniska begreep (Modbus, API, endpoints)
+- **Engelska**: Tekniska begrepp (Modbus, API, endpoints)
 - **Engelska**: Variabelnamn i kod (följer Python-konventioner)
 - **Blandning är OK**: README och denna fil blandar språk naturligt
 
