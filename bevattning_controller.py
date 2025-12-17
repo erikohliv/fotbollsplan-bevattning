@@ -46,7 +46,9 @@ MW_TEMP = 32
 
 MK_REG_ADDR = 100  # exempelfält för extern markfukt-läsning
 
-# Weather cache to avoid excessive API calls in loop mode
+# Weather cache to avoid excessive API calls in loop mode.
+# Simple global cache is sufficient for single-threaded controller script.
+# For multi-threaded use, consider thread-safe caching library.
 _weather_cache = {"data": None, "timestamp": None, "cache_duration": 600}  # 10 minutes cache
 
 logger = logging.getLogger("bevattning")

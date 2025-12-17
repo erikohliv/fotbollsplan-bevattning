@@ -134,7 +134,10 @@ class ConfigUpdate(BaseModel):
 @app.get("/status")
 def status(x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
-    # Read registers in two groups to avoid reading undefined intermediate registers
+    # Read registers in two groups to avoid reading undefined intermediate registers.
+    # According to the PLC register map, MW54-59, MW62, MW65-69 are not defined.
+    # Reading only defined registers prevents potential issues with non-existent or 
+    # side-effect registers while still being more efficient than the original implementation.
     # Group 1: MW50-53 (zone, pump, steg, selected_zone)
     # Group 2: MW70-73 (heartbeat data)
     with get_modbus_connection() as client:
