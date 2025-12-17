@@ -335,7 +335,7 @@ class ModbusReader:
                 return False
             
             # Invalidate cache for this register
-            keys_to_remove = [k for k in self._cache.keys() if k[0] <= address < k[0] + k[1]]
+            keys_to_remove = [k for k in self._cache.keys() if k[0] <= address <= k[0] + k[1] - 1]
             for key in keys_to_remove:
                 del self._cache[key]
             
