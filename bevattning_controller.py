@@ -44,6 +44,7 @@ MW_TID_HORN = 21
 MW_MARKFUKT = 30
 MW_REGEN24 = 31
 MW_TEMP = 32
+MW_BLOCK_REASON = 73  # BlockReasonReg: 0=OK, 1=Rain, 2=Moisture, 3=Anti-collision, 4=E-stop
 
 MK_REG_ADDR = 100  # exempelfält för extern markfukt-läsning
 

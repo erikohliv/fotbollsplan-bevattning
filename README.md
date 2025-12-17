@@ -99,6 +99,28 @@ sudo systemctl start bevattning-api
   ```
 - Flaggor: `--simulate`, `--dry-run`, `--read-markfukt`, `--rain-threshold`, `--moisture-threshold`, `--temp-min`.
 
+## Python Scheduler (Auto-bevattning kl 01:00)
+- Fil: `bevattning_scheduler.py`
+- Kör daglig auto-bevattning kl 01:00 med villkorskontroller
+- Kontrollerar BlockReason (MW73) innan start - blockerar om värde != 0
+- Typisk körning (kontinuerlig schemaläggare):
+  ```bash
+  python3 bevattning_scheduler.py --auto-start
+  ```
+- Körning nu (för test):
+  ```bash
+  python3 bevattning_scheduler.py --run-now --auto-start
+  ```
+- Kör en gång vid nästa schemalagda tid:
+  ```bash
+  python3 bevattning_scheduler.py --once --auto-start
+  ```
+- Ändra schematid:
+  ```bash
+  python3 bevattning_scheduler.py --schedule-hour 2 --schedule-minute 30 --auto-start
+  ```
+- Flaggor: samma som `bevattning_controller.py` plus `--schedule-hour`, `--schedule-minute`, `--run-now`, `--once`.
+
 ## FastAPI
 - Endpoints (alla kräver `X-API-Key`):
   - `GET /status`
@@ -135,32 +157,44 @@ curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
 
 ## Rekommenderad drift
 - PLC kör ST-programmet (task 100 ms).
-- Python väder-controller körs t.ex. via cron eller systemd timer för periodiska uppdateringar av väder/markfukt.
+- Python SMHI-controller körs t.ex. via cron eller systemd timer för periodiska uppdateringar av väder/markfukt.
+- **Auto-bevattning:** Använd `bevattning_scheduler.py` med systemd timer för daglig körning kl 01:00.
 - FastAPI kör som systemd-tjänst för app/webb-styrning.
 - Display Manager körs som systemd-tjänst för lokal styrning och övervakning.
 - Se till att Siemens LOGO/VFD hanterar mjukstart; pumpstyrningen sker via `Signal_Pump` (på/av), men rampning sköts av VFD.
 
-## Display-system
-Systemet stöder två I2C LCD-displayer:
+### Automatisk bevattning (01:00 dagligen)
 
-### Display 1 (20x4)
-- Auto-roterande statusdisplay
-- Visar: systemstatus, blockeringsvillkor, pumpstatus, anslutning
-- Uppdateras var 3-5:e sekund
-- Ingen användarinteraktion krävs
+#### Alternativ 1: Systemd timer (rekommenderat)
+Installera systemd timer för daglig auto-bevattning:
+```bash
+sudo cp systemd_bevattning-scheduler.timer /etc/systemd/system/
+sudo cp systemd_bevattning-scheduler.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable bevattning-scheduler.timer
+sudo systemctl start bevattning-scheduler.timer
+```
 
-### Display 2 (2x8 med 4 knappar)
-- Interaktiv manuell styrning
-- Knappar: Upp/Ner (inställningar), Vänster/Höger (vyer)
-- Vyer: översikt, zonval, tidsval
-- Välj zon (1-7) och tid (1-240 min) för manuell bevattning
+Verifiera timer-status:
+```bash
+sudo systemctl status bevattning-scheduler.timer
+sudo systemctl list-timers bevattning-scheduler.timer
+```
 
-### Auto-bevattning schema
-- Triggar bevattning automatiskt kl 01:00 (konfigurerbart)
-- Kontrollerar villkor före start (regn, fukt, temperatur)
-- Endast en trigger per dag
+#### Alternativ 2: Cron
+Alternativt kan du använda cron. Se `crontab.example` för konfiguration:
+```bash
+crontab -e
+# Lägg till följande rad:
+0 1 * * * /home/pi/fotbollsplan-bevattning/.venv/bin/python3 /home/pi/fotbollsplan-bevattning/bevattning_scheduler.py --run-now --auto-start >> /home/pi/bevattning_scheduler.log 2>&1
+```
 
-Se [DISPLAY_MANAGER.md](DISPLAY_MANAGER.md) för fullständig dokumentation om installation, konfiguration och användning.
+Scheduler kontrollerar automatiskt block-villkor (MW73 BlockReason) innan auto-bevattning startar:
+- BlockReason=0: OK, bevattning körs
+- BlockReason=1: Regn över tröskel, bevattning blockerad
+- BlockReason=2: Markfukt över tröskel, bevattning blockerad  
+- BlockReason=3: Anti-kollision/pump upptagen, bevattning blockerad
+- BlockReason=4: E-stop aktiv, bevattning blockerad
 
 ## Viktigt
 - Vattenslag: ventiler öppnas före pumpstart; pump stängs av före ventilstängning och vid zonbyten används CloseDelay + PauseDelay.

@@ -1,0 +1,12 @@
+[Unit]
+Description=Bevattning Auto-Watering Timer
+Documentation=https://github.com/erikohliv/fotbollsplan-bevattning
+
+[Timer]
+# Run daily at 01:00
+OnCalendar=*-*-* 01:00:00
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
