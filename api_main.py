@@ -49,6 +49,18 @@ def require_key(x_api_key: Optional[str]):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+def validate_zone(value: int) -> int:
+    if value < 1 or value > 7:
+        raise HTTPException(status_code=400, detail="zone must be 1..7")
+    return value
+
+
+def validate_minutes(value: int) -> int:
+    if value < 1 or value > 240:
+        raise HTTPException(status_code=400, detail="minutes must be 1..240")
+    return value
+
+
 def mb_client():
     if ModbusTcpClient is None:
         raise HTTPException(status_code=500, detail="pymodbus not installed")
@@ -134,10 +146,9 @@ def start_auto(x_api_key: Optional[str] = Header(None), pulse_seconds: float = 1
 @app.post("/command/manual")
 def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
-    if cmd.zone < 1 or cmd.zone > 7:
-        raise HTTPException(status_code=400, detail="zone must be 1..7")
+    validate_zone(cmd.zone)
     if cmd.minutes is not None:
-        write_reg(MW_MANUAL_TIME, max(1, min(240, cmd.minutes)))
+        write_reg(MW_MANUAL_TIME, validate_minutes(cmd.minutes))
     write_reg(MW_SET_SELECTED, cmd.zone)
     # Puls manual start
     write_reg(MW_MANUAL_START, 1)
@@ -147,19 +158,17 @@ def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
 @app.post("/command/set-zone")
 def set_zone(cmd: SetZone, x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
-    if cmd.zone < 1 or cmd.zone > 7:
-        raise HTTPException(status_code=400, detail="zone must be 1..7")
-    write_reg(MW_SET_SELECTED, cmd.zone)
-    return {"ok": True, "zone": cmd.zone}
+    zone = validate_zone(cmd.zone)
+    write_reg(MW_SET_SELECTED, zone)
+    return {"ok": True, "zone": zone}
 
 
 @app.post("/command/set-manual-time")
 def set_manual_time(cmd: SetManualTime, x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
-    if cmd.minutes < 1 or cmd.minutes > 240:
-        raise HTTPException(status_code=400, detail="minutes must be 1..240")
-    write_reg(MW_MANUAL_TIME, cmd.minutes)
-    return {"ok": True, "minutes": cmd.minutes}
+    minutes = validate_minutes(cmd.minutes)
+    write_reg(MW_MANUAL_TIME, minutes)
+    return {"ok": True, "minutes": minutes}
 
 
 @app.post("/command/stop")

@@ -41,11 +41,14 @@ def send_mail(subject: str, body: str) -> None:
     msg.set_content(body)
 
     context = ssl.create_default_context()
-    with smtplib.SMTP(host, port, timeout=10) as server:
-        server.starttls(context=context)
-        if user and pwd:
-            server.login(user, pwd)
-        server.send_message(msg)
+    try:
+        with smtplib.SMTP(host, port, timeout=10) as server:
+            server.starttls(context=context)
+            if user and pwd:
+                server.login(user, pwd)
+            server.send_message(msg)
+    except Exception as e:
+        print(f"[healthcheck] email send failed: {e}", file=sys.stderr)
 
 
 def main() -> int:
@@ -65,7 +68,13 @@ def main() -> int:
     try:
         resp = requests.get(api_url, headers={"X-API-Key": api_key}, timeout=5)
         ok = resp.status_code == 200
-        payload = resp.json() if ok else {}
+        if ok:
+            try:
+                payload = resp.json()
+            except ValueError:
+                payload = {"error": "invalid json", "text": resp.text}
+        else:
+            payload = {}
     except RequestException as e:
         ok = False
         payload = {"error": str(e)}
