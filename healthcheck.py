@@ -16,8 +16,10 @@ from datetime import datetime
 
 try:
     import requests
-except Exception:
+    from requests import RequestException
+except ImportError:
     requests = None
+    RequestException = Exception
 
 
 def send_mail(subject: str, body: str) -> None:
@@ -48,7 +50,12 @@ def send_mail(subject: str, body: str) -> None:
 
 def main() -> int:
     api_url = os.getenv("API_URL", "http://127.0.0.1:8000/status")
-    api_key = os.getenv("API_KEY", "change-me")
+    api_key = os.getenv("API_KEY")
+    if not api_key:
+        msg = "[healthcheck] API_KEY is required"
+        send_mail("Healthcheck failed", msg)
+        print(msg, file=sys.stderr)
+        return 1
     host = socket.gethostname()
     if requests is None:
         msg = f"[healthcheck] requests not installed on {host}"
@@ -59,7 +66,7 @@ def main() -> int:
         resp = requests.get(api_url, headers={"X-API-Key": api_key}, timeout=5)
         ok = resp.status_code == 200
         payload = resp.json() if ok else {}
-    except Exception as e:
+    except RequestException as e:
         ok = False
         payload = {"error": str(e)}
 
