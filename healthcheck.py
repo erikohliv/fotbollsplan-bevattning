@@ -73,7 +73,7 @@ def main() -> int:
             try:
                 payload = resp.json()
             except json.JSONDecodeError:
-                payload = {"error": "invalid json", "text": resp.text}
+                payload = {"error": "invalid json", "text": resp.text[:500]}
         else:
             payload = {}
     except RequestException as e:
