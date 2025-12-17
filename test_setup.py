@@ -108,7 +108,7 @@ def test_pip_check():
     
     # This should work in our test environment
     result = setup.check_pip()
-    assert result == True
+    assert result is True
     print("✓ pip check works")
 
 
