@@ -205,8 +205,8 @@ def start_auto(x_api_key: Optional[str] = Header(None), pulse_seconds: float = 1
 @app.post("/command/manual")
 def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
     """
-    Start manual irrigation from selected zone.
-    Manual mode now runs a full sequence from the selected zone to zone 7,
+    Start manual irrigation for selected zone.
+    Manual mode runs only the selected zone (not a full sequence),
     using the same times as auto mode (Set_Tid_Center for zones 1-3, Set_Tid_Horn for zones 4-7).
     """
     require_key(x_api_key)
@@ -220,7 +220,7 @@ def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
         rr = client.write_register(MW_MANUAL_START, 1, unit=MODBUS_UNIT)
         if rr is None or (hasattr(rr, "isError") and rr.isError()):
             raise HTTPException(status_code=502, detail="Modbus write error")
-    return {"ok": True, "zone": zone, "note": "Manual mode runs full sequence using auto times"}
+    return {"ok": True, "zone": zone, "note": "Manual mode runs only the selected zone using auto times"}
 
 
 @app.post("/command/set-zone")

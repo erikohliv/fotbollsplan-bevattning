@@ -228,7 +228,7 @@ After confirmation, the selected zone is written to Modbus (MW63) and will be us
 2. Select desired zone using UP/DOWN buttons
 3. Hold UP or DOWN for 3 seconds to confirm (display shows "Zone OK")
 4. Press the physical **Start** button on the control panel
-5. Manual sequence runs from selected zone to zone 7, using auto mode times (Set_Tid_Center for zones 1-3, Set_Tid_Horn for zones 4-7)
+5. Manual sequence runs **only the selected zone**, using auto mode times (Set_Tid_Center for zones 1-3, Set_Tid_Horn for zones 4-7)
 
 Note: Time selection has been removed. Manual mode now uses the same irrigation times as auto mode.
 

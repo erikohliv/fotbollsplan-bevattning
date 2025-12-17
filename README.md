@@ -100,7 +100,7 @@ sudo systemctl start bevattning-api
 
 ## Sekvens & anti-vattenslag
 - **Start (auto):** Ventil för zon öppnas, OpenDelay löper, därefter pump på och kör-timer. Auto-läge kör alla zoner 1-7.
-- **Start (manual):** Välj zon med display-knappar (Button 1 ökar, Button 2 minskar, håll 3s för att bekräfta). Tryck fysisk Start-knapp. Manual-läge kör full sekvens från vald zon till zon 7, med samma tider som auto-läge.
+- **Start (manual):** Välj zon med display-knappar (Button 1 ökar, Button 2 minskar, håll 3s för att bekräfta). Tryck fysisk Start-knapp. Manual-läge kör **endast den valda zonen**, med samma tider som auto-läge.
 - **Zonbyte:** När körtid är slut: pump av först, CloseDelay, stäng ventiler, PauseDelay, nästa zon, OpenDelay, pump på.
 - **Stop/E-stop:** Pump av direkt, CloseDelay, stäng ventiler. E-stop nollar sekvens och blockreason=4.
 - **LED-indikatorer:** BORTTAGNA - aktiv zon och återstående tid visas på system-display istället.

@@ -8,7 +8,7 @@
   - ManualRunTime REMOVED: Manual mode nu använder samma tider som auto mode (Set_Tid_Center/Set_Tid_Horn).
   - LED outputs REMOVED: Aktiv zon och återstående tid visas på display istället.
   - Display Button 1/2: Öka/minska zon, håll 3s för att bekräfta.
-  - Manual mode: Kör full sekvens från vald zon till zon 7 (precis som auto mode).
+  - Manual mode: Kör endast den valda zonen (inte full sekvens som auto mode).
   - 21:00 auto mode transition: Hanteras av Python display_manager, inte PLC.
   - Anti-kollision: Om sekvens redan kör/pump aktiv blockeras ny start (sätter bit3/code 3).
   - Next-knapp: DEPRECATED, använd display-knappar istället.
@@ -423,14 +423,17 @@ PROGRAM Fotbollsplan_Master
     30: (* Paus mellan zoner, pump är av *)
       IF Tmr_Pause.Q THEN
         Tmr_Pause(IN := FALSE, PT := PauseDelayTIME);
-        IF Nuvarande_Zon < 7 THEN
-          Nuvarande_Zon := Nuvarande_Zon + 1;
-          Steg := 10;
-        ELSE
+        (* Manual mode: stoppa efter en zon. Auto mode: fortsätt till nästa zon *)
+        IF (System_Mode = 2) OR (Nuvarande_Zon >= 7) THEN
+          (* Manual mode (System_Mode=2) eller sista zonen i auto mode *)
           System_Mode := 1;
           Steg := 0;
           Remote_Command := 0;
           Nuvarande_Zon := 0;
+        ELSE
+          (* Auto mode: fortsätt till nästa zon *)
+          Nuvarande_Zon := Nuvarande_Zon + 1;
+          Steg := 10;
         END_IF;
       END_IF;
 
