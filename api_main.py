@@ -136,7 +136,8 @@ def write_regs_bulk(start_address, values):
 
 class ManualCommand(BaseModel):
     zone: int
-    # minutes parameter removed - manual mode now uses auto mode times (Set_Tid_Center/Set_Tid_Horn)
+    # Note: minutes parameter removed - manual mode now uses auto mode times 
+    # (Set_Tid_Center for zones 1-3 [MW20], Set_Tid_Horn for zones 4-7 [MW21])
     pulse_seconds: float = 1.0
 
 class SetZone(BaseModel):

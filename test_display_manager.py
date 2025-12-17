@@ -227,7 +227,7 @@ def test_display2_buttons():
         display.zone_confirmed = False
         display.handle_button_press('up', is_held=True)
         logger.info(f"Zone confirmed: {display.zone_confirmed}")
-        assert display.zone_confirmed == True
+        assert display.zone_confirmed, "Zone should be confirmed after holding button"
         
         # Test RIGHT button (navigate back to overview - only 2 views now)
         logger.info("\nSimulating RIGHT button press...")
@@ -351,7 +351,7 @@ def test_display_rendering():
         d2.selected_zone = 3
         d2.zone_confirmed = False
         d2.handle_button_press('up', is_held=True)
-        assert d2.zone_confirmed == True, "Zone should be confirmed after holding button"
+        assert d2.zone_confirmed, "Zone should be confirmed after holding button"
         
         logger.info("\nDisplay rendering test completed successfully!")
 

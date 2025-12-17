@@ -717,7 +717,7 @@ class Display2Manager:
                         button_hold_timers[name] = time.time()
                     elif pressed and last_buttons[name]:
                         # Button is being held
-                        if button_hold_timers[name] and (name == 'up' or name == 'down'):
+                        if button_hold_timers[name] and name in {'up', 'down'}:
                             hold_time = time.time() - button_hold_timers[name]
                             if hold_time >= self.hold_duration:
                                 # Button held for required duration
@@ -773,6 +773,11 @@ class AutoModeTransitionScheduler:
     If a sequence is running, waits until it completes.
     """
     
+    # Constants
+    MAX_WAIT_HOURS = 4
+    CHECK_INTERVAL_SECONDS = 30
+    LOG_INTERVAL_CYCLES = 10  # Log every 5 minutes (10 * 30 seconds)
+    
     def __init__(self, modbus_host: str = "127.0.0.1", modbus_port: int = 502,
                  transition_hour: int = 21, transition_minute: int = 0):
         """
@@ -806,14 +811,14 @@ class AutoModeTransitionScheduler:
         # Check if sequence is running
         if self.is_sequence_running():
             logger.info("Sequence currently running, waiting for completion before transitioning...")
-            # Wait for sequence to complete (check every 30 seconds, max 4 hours)
-            max_wait_cycles = 480  # 4 hours worth of 30-second checks
+            # Wait for sequence to complete (check every 30 seconds, max wait time based on MAX_WAIT_HOURS)
+            max_wait_cycles = (self.MAX_WAIT_HOURS * 60 * 60) // self.CHECK_INTERVAL_SECONDS
             for i in range(max_wait_cycles):
-                time.sleep(30)
+                time.sleep(self.CHECK_INTERVAL_SECONDS)
                 if not self.is_sequence_running():
                     logger.info("Sequence completed, now transitioning to auto mode")
                     break
-                if i % 10 == 0:  # Log every 5 minutes
+                if i % self.LOG_INTERVAL_CYCLES == 0:  # Log every 5 minutes
                     logger.debug("Still waiting for sequence to complete...")
         
         # Set mode to auto (MW60 = 1)
@@ -841,8 +846,8 @@ class AutoModeTransitionScheduler:
                     self.transition_to_auto_mode()
                     self.last_transition_date = current_date
                 
-                # Sleep for 30 seconds before next check
-                time.sleep(30)
+                # Sleep for check interval before next check
+                time.sleep(self.CHECK_INTERVAL_SECONDS)
             except Exception as e:
                 logger.error(f"Error in auto mode transition scheduler loop: {e}")
                 time.sleep(60)
