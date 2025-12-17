@@ -231,28 +231,46 @@ def stop(x_api_key: Optional[str] = Header(None)):
 @app.post("/config")
 def config(cfg: ConfigUpdate, x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
-    # Reuse connection for multiple writes
+    # Reuse connection for multiple writes - connection already optimized
     with get_modbus_connection() as client:
-        if cfg.tid_center is not None:
-            rr = client.write_register(MW_TID_CENTER, max(0, min(240, cfg.tid_center)), unit=MODBUS_UNIT)
+        # Optimize: Use bulk write for consecutive registers MW20-21 when both provided
+        if cfg.tid_center is not None and cfg.tid_horn is not None:
+            values = [max(0, min(240, cfg.tid_center)), max(0, min(240, cfg.tid_horn))]
+            rr = client.write_registers(MW_TID_CENTER, values, unit=MODBUS_UNIT)
             if rr is None or (hasattr(rr, "isError") and rr.isError()):
                 raise HTTPException(status_code=502, detail="Modbus write error")
-        if cfg.tid_horn is not None:
-            rr = client.write_register(MW_TID_HORN, max(0, min(240, cfg.tid_horn)), unit=MODBUS_UNIT)
+        else:
+            if cfg.tid_center is not None:
+                rr = client.write_register(MW_TID_CENTER, max(0, min(240, cfg.tid_center)), unit=MODBUS_UNIT)
+                if rr is None or (hasattr(rr, "isError") and rr.isError()):
+                    raise HTTPException(status_code=502, detail="Modbus write error")
+            if cfg.tid_horn is not None:
+                rr = client.write_register(MW_TID_HORN, max(0, min(240, cfg.tid_horn)), unit=MODBUS_UNIT)
+                if rr is None or (hasattr(rr, "isError") and rr.isError()):
+                    raise HTTPException(status_code=502, detail="Modbus write error")
+        
+        # Optimize: Use bulk write for consecutive registers MW30-32 when all three provided
+        if cfg.markfukt is not None and cfg.regen24 is not None and cfg.temp_c is not None:
+            values = [max(0, min(100, cfg.markfukt)), 
+                     max(0, min(500, cfg.regen24)), 
+                     max(-30, min(50, cfg.temp_c))]
+            rr = client.write_registers(MW_MARKFUKT, values, unit=MODBUS_UNIT)
             if rr is None or (hasattr(rr, "isError") and rr.isError()):
                 raise HTTPException(status_code=502, detail="Modbus write error")
-        if cfg.markfukt is not None:
-            rr = client.write_register(MW_MARKFUKT, max(0, min(100, cfg.markfukt)), unit=MODBUS_UNIT)
-            if rr is None or (hasattr(rr, "isError") and rr.isError()):
-                raise HTTPException(status_code=502, detail="Modbus write error")
-        if cfg.regen24 is not None:
-            rr = client.write_register(MW_REGEN24, max(0, min(500, cfg.regen24)), unit=MODBUS_UNIT)
-            if rr is None or (hasattr(rr, "isError") and rr.isError()):
-                raise HTTPException(status_code=502, detail="Modbus write error")
-        if cfg.temp_c is not None:
-            rr = client.write_register(MW_TEMP, max(-30, min(50, cfg.temp_c)), unit=MODBUS_UNIT)
-            if rr is None or (hasattr(rr, "isError") and rr.isError()):
-                raise HTTPException(status_code=502, detail="Modbus write error")
+        else:
+            if cfg.markfukt is not None:
+                rr = client.write_register(MW_MARKFUKT, max(0, min(100, cfg.markfukt)), unit=MODBUS_UNIT)
+                if rr is None or (hasattr(rr, "isError") and rr.isError()):
+                    raise HTTPException(status_code=502, detail="Modbus write error")
+            if cfg.regen24 is not None:
+                rr = client.write_register(MW_REGEN24, max(0, min(500, cfg.regen24)), unit=MODBUS_UNIT)
+                if rr is None or (hasattr(rr, "isError") and rr.isError()):
+                    raise HTTPException(status_code=502, detail="Modbus write error")
+            if cfg.temp_c is not None:
+                rr = client.write_register(MW_TEMP, max(-30, min(50, cfg.temp_c)), unit=MODBUS_UNIT)
+                if rr is None or (hasattr(rr, "isError") and rr.isError()):
+                    raise HTTPException(status_code=502, detail="Modbus write error")
+        
         if cfg.manual_time is not None:
             rr = client.write_register(MW_MANUAL_TIME, max(1, min(240, cfg.manual_time)), unit=MODBUS_UNIT)
             if rr is None or (hasattr(rr, "isError") and rr.isError()):

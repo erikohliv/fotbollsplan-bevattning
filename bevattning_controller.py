@@ -234,7 +234,7 @@ def pulse_remote_command(host, port, unit, cmd_reg=MW_REMOTE_CMD, cmd_value=50, 
 
 def main_once(args):
     logger.info("Startar bevattningsscript")
-    temp, regn = hamta_vader_openmeteo(args.lat, args.lon)
+    temp, regn = hamta_vader(args.lat, args.lon)
     if temp is None:
         temp = 15.0
         regn = 0.0
