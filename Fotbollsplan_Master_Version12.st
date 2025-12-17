@@ -113,7 +113,7 @@ PROGRAM Fotbollsplan_Master
     HeartbeatToggle : BOOL := FALSE;
     Tmr_Heartbeat : TON;
     HeartbeatCounter : INT := 0;
-    PrevSelectedZoneManual : INT := 1;
+    PrevSelectedZoneManual : INT := 0;
 
     EventMask : INT := 0;
     BlockReason : INT := 0;
@@ -227,12 +227,12 @@ PROGRAM Fotbollsplan_Master
   END_IF;
 
   SelectedZoneReg := SelectedZone;
-  IF (NOT ModeIsAuto) AND (Steg = 0) THEN
-    IF SelectedZone <> PrevSelectedZoneManual THEN
+  IF NOT ModeIsAuto THEN
+    IF (Steg = 0) AND (SelectedZone <> PrevSelectedZoneManual) THEN
       Start_Request := TRUE;
     END_IF;
+    PrevSelectedZoneManual := SelectedZone;
   END_IF;
-  PrevSelectedZoneManual := SelectedZone;
 
   (* Anti-kollision: blockera start om sekvens aktiv *)
   AntiCollisionBlock := (Steg <> 0);
