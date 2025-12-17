@@ -21,6 +21,25 @@ cp api_.env.example api_.env
 # sätt API_KEY i api_.env
 ```
 
+### Konfigurera SMTP (E-postmeddelanden)
+För att aktivera e-postmeddelanden vid healthcheck-problem, använd det interaktiva installationsskriptet:
+```bash
+python3 install.py
+```
+
+Scriptet guidar dig genom:
+- SMTP-server och port (t.ex. smtp.gmail.com:587)
+- E-postadress och lösenord
+- Two-factor authentication (2FA) inställningar
+- Mottagare för notifieringar
+- Testning av konfigurationen med ett test-mejl
+
+Alternativt kan du manuellt redigera `api_.env` och ställa in:
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`
+- `SMTP_FROM`, `SMTP_TO` (kommaseparerade mottagare)
+
+**OBS för Gmail-användare med 2FA:** Generera ett "App Password" på https://myaccount.google.com/apppasswords
+
 ### Starta API manuellt
 ```bash
 source .venv/bin/activate
