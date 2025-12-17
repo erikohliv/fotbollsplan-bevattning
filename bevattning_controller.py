@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
 Bevattning_controller.py (uppdaterad)
-- Hämtar SMHI, valfritt markfukt via Modbus.
+- Hämtar väder från Open-Meteo, valfritt markfukt via Modbus.
 - Skriver temp/regn/markfukt/tider till PLC via Modbus.
 - Pulserar Remote_Command (MW10) vid behov.
 - Fallback och begränsning av rimliga värden.
 - Kan köras en gång eller i loop.
 """
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 import os
 import csv
@@ -62,39 +62,49 @@ def open_modbus_client(host, port, timeout=5):
     return client
 
 
-def hamta_vader_smhi(lat, lon, timeout=10):
+def hamta_vader_openmeteo(lat, lon, timeout=10):
+    """
+    Hämtar temperatur (nuvarande) och summerat regn för kommande 24h
+    från Open-Meteo. Faller tillbaka till None vid fel.
+    """
     try:
-        url = f"https://opendata-download-metfcst.smhi.se/api/category/pmp3g/version/2/geotype/point/lon/{lon}/lat/{lat}/data.json"
-        headers = {"User-Agent": "BevattningController/1.1"}
-        r = requests.get(url, timeout=timeout, headers=headers)
+        latitude = float(lat)
+        longitude = float(lon)
+    except Exception:
+        latitude = lat
+        longitude = lon
+
+    try:
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "hourly": "temperature_2m,rain",
+            "current_weather": True,
+            "wind_speed_unit": "ms",
+            "models": "dmi_harmonie_arome_europe",
+        }
+        r = requests.get(url, params=params, timeout=timeout)
         r.raise_for_status()
         data = r.json()
 
-        now = datetime.utcnow()
-        end_time = now + timedelta(hours=24)
-        total_regn = 0.0
-        temp_nu = None
+        hourly = data.get("hourly", {})
+        rain_list = hourly.get("rain") or hourly.get("precipitation") or []
+        temp_list = hourly.get("temperature_2m") or []
 
-        for ts in data.get("timeSeries", []):
-            valid_time = datetime.strptime(ts["validTime"], "%Y-%m-%dT%H:%M:%SZ")
-            if temp_nu is None and valid_time >= now - timedelta(minutes=60):
-                for p in ts.get("parameters", []):
-                    if p.get("name") == "t":
-                        temp_nu = float(p.get("values", [None])[0])
-            if now < valid_time <= end_time:
-                for p in ts.get("parameters", []):
-                    if p.get("name") == "pmean":
-                        total_regn += float(p.get("values", [0])[0] or 0.0)
+        total_regn = sum(float(x or 0.0) for x in rain_list[:24])
 
+        temp_nu = data.get("current_weather", {}).get("temperature")
+        if temp_nu is None and temp_list:
+            temp_nu = float(temp_list[0])
         if temp_nu is None:
             temp_nu = 15.0
 
-        # rimliga gränser
-        temp_nu = max(-30.0, min(50.0, temp_nu))
-        total_regn = max(0.0, min(500.0, total_regn))
+        temp_nu = max(-30.0, min(50.0, float(temp_nu)))
+        total_regn = max(0.0, min(500.0, float(total_regn)))
         return temp_nu, total_regn
     except Exception as e:
-        logger.warning("Kunde inte hämta väder från SMHI: %s", e)
+        logger.warning("Kunde inte hämta väder från Open-Meteo: %s", e)
         return None, None
 
 
@@ -164,7 +174,7 @@ def pulse_remote_command(host, port, unit, cmd_reg=MW_REMOTE_CMD, cmd_value=50, 
 
 def main_once(args):
     logger.info("Startar bevattningsscript")
-    temp, regn = hamta_vader_smhi(args.lat, args.lon)
+    temp, regn = hamta_vader_openmeteo(args.lat, args.lon)
     if temp is None:
         temp = 15.0
         regn = 0.0

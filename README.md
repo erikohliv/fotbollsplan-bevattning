@@ -2,7 +2,7 @@
 
 ## Arkitektur
 - **PLC (ST):** Säker/sekvenslogik, anti-vattenslag, E-stop, zonbyte.
-- **Python controller:** Hämtar SMHI, markfukt (valfritt), skriver Modbus-register, pulserar start.
+- **Python controller:** Hämtar Open-Meteo, markfukt (valfritt), skriver Modbus-register, pulserar start.
 - **FastAPI-backend:** API/Webb-UI + Modbus-brygga. Skyddas med API-nyckel.
 - **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump_enable styr Siemens LOGO → VFD (mjukstart).
 
@@ -77,7 +77,7 @@ sudo systemctl start bevattning-api
 - **Stop/E-stop:** Pump av direkt, CloseDelay, stäng ventiler. E-stop nollar sekvens och blockreason=4.
 - **Next-knapp:** Roterar SelectedZone 1→7→1. Vid omstart initieras SelectedZone=1.
 
-## Python SMHI-controller
+## Python Open-Meteo-controller
 - Fil: `bevattning_controller.py`
 - Typisk körning (en gång):
   ```bash
