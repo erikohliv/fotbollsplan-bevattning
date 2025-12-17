@@ -146,13 +146,14 @@ def start_auto(x_api_key: Optional[str] = Header(None), pulse_seconds: float = 1
 @app.post("/command/manual")
 def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
-    validate_zone(cmd.zone)
+    zone = validate_zone(cmd.zone)
     if cmd.minutes is not None:
-        write_reg(MW_MANUAL_TIME, validate_minutes(cmd.minutes))
-    write_reg(MW_SET_SELECTED, cmd.zone)
+        minutes = validate_minutes(cmd.minutes)
+        write_reg(MW_MANUAL_TIME, minutes)
+    write_reg(MW_SET_SELECTED, zone)
     # Puls manual start
     write_reg(MW_MANUAL_START, 1)
-    return {"ok": True, "zone": cmd.zone, "minutes": cmd.minutes}
+    return {"ok": True, "zone": zone, "minutes": cmd.minutes}
 
 
 @app.post("/command/set-zone")

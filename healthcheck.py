@@ -11,6 +11,7 @@ import smtplib
 import socket
 import ssl
 import sys
+import json
 from email.message import EmailMessage
 from datetime import datetime
 
@@ -71,7 +72,7 @@ def main() -> int:
         if ok:
             try:
                 payload = resp.json()
-            except ValueError:
+            except json.JSONDecodeError:
                 payload = {"error": "invalid json", "text": resp.text}
         else:
             payload = {}
