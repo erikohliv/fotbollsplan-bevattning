@@ -30,6 +30,7 @@ DEFAULT_MODBUS_UNIT = 1
 LOG_FIL = os.path.join(os.path.expanduser("~"), "bevattning_log.csv")
 DEFAULT_LATITUDE = "56.10"
 DEFAULT_LONGITUDE = "14.45"
+FORECAST_HOURS = 24
 
 BASE_TID_CENTER = 60   # minuter per center-zon
 BASE_TID_HORN = 25     # minuter per hörn-zon
@@ -81,15 +82,43 @@ def hamta_vader(lat, lon, timeout=10, use_cache=True):
             return _weather_cache["data"]
     
     try:
-        # Open-Meteo API - gratis, inget API-nyckel behövs
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m&hourly=precipitation&timezone=auto&forecast_days=2"
-        headers = {"User-Agent": "BevattningController/1.2"}
-        r = requests.get(url, timeout=timeout, headers=headers)
+        latitude = float(lat)
+        longitude = float(lon)
+    except (TypeError, ValueError):
+        logger.warning("Ogiltiga koordinater lat=%s lon=%s", lat, lon)
+        return None, None
+
+    try:
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "hourly": "temperature_2m,rain",
+            "current_weather": True,
+            "timezone": "auto",
+        }
+        r = requests.get(url, params=params, timeout=timeout)
         r.raise_for_status()
         data = r.json()
 
-        # Hämta aktuell temperatur
-        temp_nu = data.get("current", {}).get("temperature_2m")
+        hourly = data.get("hourly", {})
+        rain_list = hourly.get("rain") or []
+        temp_list = hourly.get("temperature_2m") or []
+
+        if not rain_list:
+            logger.warning("Open-Meteo saknar regndata i svar, kan inte beräkna regn.")
+            return None, None
+        if len(rain_list) < FORECAST_HOURS:
+            logger.warning("Open-Meteo gav endast %d timmar regndata, avbryter.", len(rain_list))
+            return None, None
+
+        timmar_att_summera = min(len(rain_list), FORECAST_HOURS)
+        total_regn = sum(float(x or 0.0) for x in rain_list[:timmar_att_summera])
+
+        temp_nu = data.get("current_weather", {}).get("temperature")
+        if temp_nu is None and len(temp_list) > 0 and temp_list[0] is not None:
+            # Använd första timprognosen som rimlig fallback om current_weather saknas.
+            temp_nu = float(temp_list[0])
         if temp_nu is None:
             temp_nu = 15.0
         else:
@@ -204,7 +233,7 @@ def pulse_remote_command(host, port, unit, cmd_reg=MW_REMOTE_CMD, cmd_value=50, 
 
 def main_once(args):
     logger.info("Startar bevattningsscript")
-    temp, regn = hamta_vader(args.lat, args.lon)
+    temp, regn = hamta_vader_openmeteo(args.lat, args.lon)
     if temp is None:
         temp = 15.0
         regn = 0.0

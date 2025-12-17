@@ -2,7 +2,7 @@
 
 ## Arkitektur
 - **PLC (ST):** Säker/sekvenslogik, anti-vattenslag, E-stop, zonbyte.
-- **Python controller:** Hämtar väder från Open-Meteo, markfukt (valfritt), skriver Modbus-register, pulserar start.
+- **Python controller:** Hämtar Open-Meteo, markfukt (valfritt), skriver Modbus-register, pulserar start.
 - **FastAPI-backend:** API/Webb-UI + Modbus-brygga. Skyddas med API-nyckel.
 - **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump_enable styr Siemens LOGO → VFD (mjukstart).
 
@@ -78,11 +78,7 @@ sudo systemctl start bevattning-api
 - **Next-knapp:** Roterar SelectedZone 1→7→1. Vid omstart initieras SelectedZone=1.
 - **Manuell start:** Välj zon (rotationsknapp/display), ställ tid, och bekräfta med fysiska startknappen.
 
-## Displayer
-- **D1 (20x4):** Rullar status/fel/info var ~3s. Prioritet på fel (E-stop/blockreason). Kan visa IP/SSH-info.
-- **D2 (8x1/8x2 + 4 knappar):** Byter vyer och väljer zon/tid i manuellt läge. Använd API-endpoints `/command/set-zone` och `/command/set-manual-time` för att uppdatera PLC-register. Start bekräftas via fysiska startknappen. D2 ersätter tidigare LED-indikering.
-
-## Python väder-controller
+## Python Open-Meteo-controller
 - Fil: `bevattning_controller.py`
 - Hämtar väderdata från Open-Meteo (gratis, inget API-nyckel behövs)
 - Typisk körning (en gång):
