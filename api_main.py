@@ -24,9 +24,6 @@ MODBUS_PORT = int(os.getenv("MODBUS_PORT", "502"))
 MODBUS_UNIT = int(os.getenv("MODBUS_UNIT", "1"))
 MODBUS_TIMEOUT = int(os.getenv("MODBUS_TIMEOUT", "3"))
 
-# Connection pool to reuse connections
-_modbus_client_pool = None
-
 MW_REMOTE_CMD = 10
 MW_TID_CENTER = 20
 MW_TID_HORN = 21
@@ -137,19 +134,26 @@ class ConfigUpdate(BaseModel):
 @app.get("/status")
 def status(x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
-    # Read all needed registers in one call for better performance
-    # Read MW50-53 (status zone, pump, steg, selected) and MW70-73 (heartbeat data)
-    # Total: 24 registers from MW50 to MW73
-    regs = read_regs(MW_STATUS_ZONE, 24)
+    # Read registers in two groups to avoid reading undefined intermediate registers
+    # Group 1: MW50-53 (zone, pump, steg, selected_zone)
+    # Group 2: MW70-73 (heartbeat data)
+    with get_modbus_connection() as client:
+        rr1 = client.read_holding_registers(MW_STATUS_ZONE, 4, unit=MODBUS_UNIT)
+        if rr1 is None or (hasattr(rr1, "isError") and rr1.isError()):
+            raise HTTPException(status_code=502, detail="Modbus read error")
+        rr2 = client.read_holding_registers(MW_HEARTBEAT, 4, unit=MODBUS_UNIT)
+        if rr2 is None or (hasattr(rr2, "isError") and rr2.isError()):
+            raise HTTPException(status_code=502, detail="Modbus read error")
+    
     return {
-        "zone": regs[0],  # MW50
-        "pump_on": regs[1] == 1,  # MW51
-        "steg": regs[2],  # MW52
-        "selected_zone": regs[3],  # MW53
-        "heartbeat_bit": regs[20],  # MW70 (50+20)
-        "heartbeat_count": regs[21],  # MW71
-        "eventmask": regs[22],  # MW72
-        "block_reason": regs[23],  # MW73
+        "zone": rr1.registers[0],
+        "pump_on": rr1.registers[1] == 1,
+        "steg": rr1.registers[2],
+        "selected_zone": rr1.registers[3],
+        "heartbeat_bit": rr2.registers[0],
+        "heartbeat_count": rr2.registers[1],
+        "eventmask": rr2.registers[2],
+        "block_reason": rr2.registers[3],
         "timestamp": int(time.time())
     }
 

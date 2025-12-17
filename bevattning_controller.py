@@ -244,12 +244,10 @@ def main_once(args):
             client = open_modbus_client(args.host, args.port)
             try:
                 if client.connect():
-                    # Use bulk write for better performance - write 5 consecutive registers (MW30-MW34)
-                    # MW30=markfukt, MW31=regen, MW32=temp, MW33=tid_center (non-standard but efficient)
-                    # Actually MW20=tid_center, MW21=tid_horn, so we'll do two bulk writes
-                    # First: MW20-21 (tider)
+                    # Use bulk write for better performance - write registers in two groups
+                    # Group 1: MW20-21 (tid_center, tid_horn)
                     ok1 = write_registers_bulk(client, MW_TID_CENTER, [int(tid_center), int(tid_horn)], unit=args.unit)
-                    # Second: MW30-32 (markfukt, regen, temp)
+                    # Group 2: MW30-32 (markfukt, regen, temp)
                     ok2 = write_registers_bulk(client, MW_MARKFUKT, 
                                               [int(markfukt), int(regn if regn is not None else 0), int(temp)], 
                                               unit=args.unit)
@@ -342,7 +340,7 @@ def main():
                 try:
                     result = main_once(args)
                     # Reset failure count on success
-                    if result and result.get("wrote"):
+                    if result and isinstance(result, dict) and result.get("wrote"):
                         consecutive_failures = 0
                     else:
                         consecutive_failures += 1
