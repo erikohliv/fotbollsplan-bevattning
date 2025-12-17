@@ -258,15 +258,27 @@ class LCD_I2C:
 
 
 class ModbusReader:
-    """Helper class to read Modbus registers"""
+    """Helper class to read Modbus registers with caching"""
     
-    def __init__(self, host: str = "127.0.0.1", port: int = 502, unit: int = 1):
+    def __init__(self, host: str = "127.0.0.1", port: int = 502, unit: int = 1, cache_duration: float = 0.5):
         self.host = host
         self.port = port
         self.unit = unit
+        self.cache_duration = cache_duration  # Cache duration in seconds
+        self._cache = {}  # {(address, count): (data, timestamp)}
     
-    def read_registers(self, address: int, count: int = 1) -> Optional[list]:
-        """Read holding registers from Modbus"""
+    def read_registers(self, address: int, count: int = 1, use_cache: bool = True) -> Optional[list]:
+        """Read holding registers from Modbus with optional caching"""
+        cache_key = (address, count)
+        
+        # Check cache if enabled
+        if use_cache and cache_key in self._cache:
+            cached_data, timestamp = self._cache[cache_key]
+            age = time.time() - timestamp
+            if age < self.cache_duration:
+                logger.debug(f"Using cached Modbus data for addr {address} (age: {age:.3f}s)")
+                return cached_data
+        
         if ModbusTcpClient is None:
             logger.warning("pymodbus not available")
             return None
@@ -284,7 +296,13 @@ class ModbusReader:
                 logger.debug(f"Modbus read error at {address}")
                 return None
             
-            return result.registers
+            data = result.registers
+            
+            # Update cache
+            if use_cache:
+                self._cache[cache_key] = (data, time.time())
+            
+            return data
         except Exception as e:
             logger.debug(f"Modbus exception: {e}")
             try:
@@ -292,6 +310,10 @@ class ModbusReader:
             except Exception:
                 pass
             return None
+    
+    def clear_cache(self):
+        """Clear the Modbus cache"""
+        self._cache.clear()
     
     def write_register(self, address: int, value: int) -> bool:
         """Write single holding register to Modbus"""
@@ -311,6 +333,11 @@ class ModbusReader:
             if result is None or (hasattr(result, 'isError') and result.isError()):
                 logger.debug(f"Modbus write error at {address}")
                 return False
+            
+            # Invalidate cache for this register
+            keys_to_remove = [k for k in self._cache.keys() if k[0] <= address <= k[0] + k[1] - 1]
+            for key in keys_to_remove:
+                del self._cache[key]
             
             return True
         except Exception as e:
@@ -661,6 +688,8 @@ class Display2Manager:
     def _update_loop(self):
         """Background thread for button handling and display updates"""
         last_buttons = {'up': False, 'down': False, 'left': False, 'right': False}
+        update_counter = 0
+        display_update_interval = 10  # Update display every 10 cycles (1 second)
         
         while self.running:
             try:
@@ -668,16 +697,21 @@ class Display2Manager:
                 buttons = self.read_buttons()
                 
                 # Detect button press (edge detection: was off, now on)
+                button_pressed = False
                 for name, pressed in buttons.items():
                     if pressed and not last_buttons[name]:
                         self.handle_button_press(name)
+                        button_pressed = True
                 
                 last_buttons = buttons.copy()
                 
-                # Update display periodically
-                self.update_display()
+                # Update display only periodically or when button pressed
+                update_counter += 1
+                if button_pressed or update_counter >= display_update_interval:
+                    self.update_display()
+                    update_counter = 0
                 
-                time.sleep(0.1)  # 100ms polling rate
+                time.sleep(0.1)  # 100ms polling rate for responsive button handling
             except Exception as e:
                 logger.error(f"Error in Display 2 update loop: {e}")
                 time.sleep(1)
