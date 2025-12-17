@@ -4,28 +4,36 @@
 - **PLC (ST):** Säker/sekvenslogik, anti-vattenslag, E-stop, zonbyte.
 - **Python controller:** Hämtar Open-Meteo, markfukt (valfritt), skriver Modbus-register, pulserar start.
 - **FastAPI-backend:** API/Webb-UI + Modbus-brygga. Skyddas med API-nyckel.
+- **Display Manager:** Hanterar två I2C LCD-displayer för status och manuell styrning.
 - **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump_enable styr Siemens LOGO → VFD (mjukstart).
 
 ## Bygg & kör på Raspberry Pi
 ```bash
 sudo apt update
-sudo apt install -y python3-venv python3-pip
+sudo apt install -y python3-venv python3-pip i2c-tools python3-smbus
 git clone https://github.com/IKKAMP/fotbollsplan-bevattning.git
 cd fotbollsplan-bevattning
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r api/requirements.txt
-cp api/.env.example api/.env
-# sätt API_KEY i api/.env
+pip install -r api_requirements.txt
+pip install -r display_requirements.txt  # För display-stöd
+cp api_.env.example api_.env
+# sätt API_KEY i api_.env
 ```
 
 ### Starta API manuellt
 ```bash
-cd api
-source ../.venv/bin/activate
-uvicorn main:app --host 0.0.0.0 --port 8000
+source .venv/bin/activate
+uvicorn api_main:app --host 0.0.0.0 --port 8000
 ```
 Test: `curl -H "X-API-Key: <nyckel>" http://localhost:8000/status`
+
+### Starta Display Manager
+```bash
+source .venv/bin/activate
+python3 display_manager.py --enable-scheduler
+```
+Se [DISPLAY_MANAGER.md](DISPLAY_MANAGER.md) för fullständig dokumentation.
 
 ### systemd (service)
 Kopiera `systemd/bevattning-api.service` till `/etc/systemd/system/`, justera sökvägar/användare vid behov.
@@ -129,7 +137,30 @@ curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
 - PLC kör ST-programmet (task 100 ms).
 - Python väder-controller körs t.ex. via cron eller systemd timer för periodiska uppdateringar av väder/markfukt.
 - FastAPI kör som systemd-tjänst för app/webb-styrning.
+- Display Manager körs som systemd-tjänst för lokal styrning och övervakning.
 - Se till att Siemens LOGO/VFD hanterar mjukstart; pumpstyrningen sker via `Signal_Pump` (på/av), men rampning sköts av VFD.
+
+## Display-system
+Systemet stöder två I2C LCD-displayer:
+
+### Display 1 (20x4)
+- Auto-roterande statusdisplay
+- Visar: systemstatus, blockeringsvillkor, pumpstatus, anslutning
+- Uppdateras var 3-5:e sekund
+- Ingen användarinteraktion krävs
+
+### Display 2 (2x8 med 4 knappar)
+- Interaktiv manuell styrning
+- Knappar: Upp/Ner (inställningar), Vänster/Höger (vyer)
+- Vyer: översikt, zonval, tidsval
+- Välj zon (1-7) och tid (1-240 min) för manuell bevattning
+
+### Auto-bevattning schema
+- Triggar bevattning automatiskt kl 01:00 (konfigurerbart)
+- Kontrollerar villkor före start (regn, fukt, temperatur)
+- Endast en trigger per dag
+
+Se [DISPLAY_MANAGER.md](DISPLAY_MANAGER.md) för fullständig dokumentation om installation, konfiguration och användning.
 
 ## Viktigt
 - Vattenslag: ventiler öppnas före pumpstart; pump stängs av före ventilstängning och vid zonbyten används CloseDelay + PauseDelay.
