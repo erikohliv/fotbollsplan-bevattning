@@ -7,7 +7,7 @@ Bevattning_controller.py (uppdaterad)
 - Fallback och begränsning av rimliga värden.
 - Kan köras en gång eller i loop.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import os
 import csv
@@ -30,6 +30,7 @@ DEFAULT_MODBUS_UNIT = 1
 LOG_FIL = os.path.join(os.path.expanduser("~"), "bevattning_log.csv")
 DEFAULT_LATITUDE = "56.10"
 DEFAULT_LONGITUDE = "14.45"
+FORECAST_HOURS = 24
 
 BASE_TID_CENTER = 60   # minuter per center-zon
 BASE_TID_HORN = 25     # minuter per hörn-zon
@@ -70,9 +71,9 @@ def hamta_vader_openmeteo(lat, lon, timeout=10):
     try:
         latitude = float(lat)
         longitude = float(lon)
-    except Exception:
-        latitude = lat
-        longitude = lon
+    except (TypeError, ValueError):
+        logger.warning("Ogiltiga koordinater lat=%s lon=%s", lat, lon)
+        return None, None
 
     try:
         url = "https://api.open-meteo.com/v1/forecast"
@@ -81,21 +82,29 @@ def hamta_vader_openmeteo(lat, lon, timeout=10):
             "longitude": longitude,
             "hourly": "temperature_2m,rain",
             "current_weather": True,
-            "wind_speed_unit": "ms",
-            "models": "dmi_harmonie_arome_europe",
+            "timezone": "auto",
         }
         r = requests.get(url, params=params, timeout=timeout)
         r.raise_for_status()
         data = r.json()
 
         hourly = data.get("hourly", {})
-        rain_list = hourly.get("rain") or hourly.get("precipitation") or []
+        rain_list = hourly.get("rain") or []
         temp_list = hourly.get("temperature_2m") or []
 
-        total_regn = sum(float(x or 0.0) for x in rain_list[:24])
+        if not rain_list:
+            logger.warning("Open-Meteo saknar regndata i svar, kan inte beräkna regn.")
+            return None, None
+        if len(rain_list) < FORECAST_HOURS:
+            logger.warning("Open-Meteo gav endast %d timmar regndata, avbryter.", len(rain_list))
+            return None, None
+
+        timmar_att_summera = min(len(rain_list), FORECAST_HOURS)
+        total_regn = sum(float(x or 0.0) for x in rain_list[:timmar_att_summera])
 
         temp_nu = data.get("current_weather", {}).get("temperature")
-        if temp_nu is None and temp_list:
+        if temp_nu is None and len(temp_list) > 0 and temp_list[0] is not None:
+            # Använd första timprognosen som rimlig fallback om current_weather saknas.
             temp_nu = float(temp_list[0])
         if temp_nu is None:
             temp_nu = 15.0
