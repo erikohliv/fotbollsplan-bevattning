@@ -111,7 +111,7 @@ sudo systemctl start bevattning-api
 - **MW60** ModeRegister (1=Auto, 0=Manual override)
 - **MW61** ManualStartReg (skriv 1 för manuell start, PLC nollar)
 - **MW63** SetSelectedZoneReg (skriv 1..7, PLC nollar)
-- **MW64** ManualRunTimeReg (min, 1..240, default 5)
+- **MW64** ManualRunTimeReg (DEPRECATED - manuellt läge använder nu auto-tider)
 - **MW70** HeartbeatReg (bit0 togglar varje ~1s)
 - **MW71** HeartbeatCountReg (0..65535, ++ varje ~1s)
 - **MW72** EventMaskReg (bitmask)
@@ -128,11 +128,13 @@ sudo systemctl start bevattning-api
   - 4=E-stop
 
 ## Sekvens & anti-vattenslag
-- **Start (auto/manual):** Ventil för zon öppnas, OpenDelay löper, därefter pump på och kör-timer.
+- **Start (auto):** Ventil för zon öppnas, OpenDelay löper, därefter pump på och kör-timer. Auto-läge kör alla zoner 1-7.
+- **Start (manual):** Välj zon med display-knappar (Button 1 ökar, Button 2 minskar, håll 3s för att bekräfta). Tryck fysisk Start-knapp. Manual-läge kör **endast den valda zonen**, med samma tider som auto-läge.
 - **Zonbyte:** När körtid är slut: pump av först, CloseDelay, stäng ventiler, PauseDelay, nästa zon, OpenDelay, pump på.
 - **Stop/E-stop:** Pump av direkt, CloseDelay, stäng ventiler. E-stop nollar sekvens och blockreason=4.
-- **Next-knapp:** Roterar SelectedZone 1→7→1. Vid omstart initieras SelectedZone=1.
-- **Manuell start:** Välj zon (rotationsknapp/display), ställ tid, och bekräfta med fysiska startknappen.
+- **LED-indikatorer:** BORTTAGNA - aktiv zon och återstående tid visas på system-display istället.
+- **Display-knappar:** Button 1 (öka zon), Button 2 (minska zon). Håll knapp i 3 sekunder för att bekräfta val.
+- **21:00 auto-läge övergång:** Systemet övergår passivt till auto-läge kl 21:00 dagligen. Om en sekvens körs fortsätter den utan avbrott och övergången sker efteråt.
 
 ## Python Open-Meteo-controller
 - Fil: `bevattning_controller.py`
@@ -174,12 +176,11 @@ sudo systemctl start bevattning-api
   - `GET /status`
   - `GET /` (Webb-UI för styrning och övervakning)
   - `POST /command/start-auto` (pulserar MW10=50->0)
-  - `POST /command/start-night-program` (startar natt-program som kör alla zoner)
-  - `POST /command/manual` `{ "zone": 1..7, "minutes": <valfritt, default 5> }` (skriver MW64 med angiven eller default körtid, skriver MW63 och pulsar MW61)
+  - `POST /command/manual` `{ "zone": 1..7 }` (skriver MW63 och pulsar MW61, kör full sekvens med auto-tider)
   - `POST /command/set-zone` `{ "zone": 1..7 }` (sätter MW63 utan att starta)
-  - `POST /command/set-manual-time` `{ "minutes": 1..240 }` (sätter MW64 utan att starta)
+  - `POST /command/set-manual-time` **DEPRECATED** (behålls för bakåtkompatibilitet, gör ingenting)
   - `POST /command/stop` (sätter Remote_Command=0 och ModeOverride=0 för att stoppa auto)
-  - `POST /config` (tider, trösklar, markfukt, regen, temp, manual_time, mode_override)
+  - `POST /config` (tider, trösklar, markfukt, regen, temp, mode_override)
 
 ## Healthcheck
 - Script: `python healthcheck.py`
@@ -194,8 +195,17 @@ sudo systemctl start bevattning-api
 ## I/O-mappning (UNIPI 1.1, förslag)
 - Ventil_1..7: `%QX0.0`..`%QX0.6`
 - Pump_enable (till LOGO/VFD): `%QX0.7`
-- LED_1..7: `%QX1.0`..`%QX1.6`
-- Ingångar: Stop `%IX0.0`, Start `%IX0.1`, Auto/Man `%IX0.2`, Next `%IX0.3`, Test `%IX0.5`, Blow `%IX0.6`, E-Stop NC `%IX0.7`
+- LED_1..7: **BORTTAGNA** (aktiv zon visas på display istället)
+- Ingångar: 
+  - Stop `%IX0.0`
+  - Start `%IX0.1`
+  - Auto/Man `%IX0.2`
+  - Next `%IX0.3` (deprecated)
+  - Display_Button_1 `%IX0.4` (öka zon)
+  - Test `%IX0.5`
+  - Blow `%IX0.6`
+  - E-Stop NC `%IX0.7`
+  - Display_Button_2 `%IX1.0` (minska zon)
 
 ## Snabbtest av API
 ```bash
@@ -214,10 +224,7 @@ curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
 
 # Starta manuell körning - zon 2, 10 minuter
 curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
-  -d '{"zone":2,"minutes":10}' http://localhost:8000/command/manual
-
-# Stoppa all bevattning
-curl -X POST -H "X-API-Key: <din-nyckel>" http://localhost:8000/command/stop
+  -d '{"zone":2}' http://localhost:8000/command/manual
 ```
 
 ## Rekommenderad drift

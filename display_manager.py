@@ -79,7 +79,7 @@ class Display2View(IntEnum):
     """Views for Display 2 (2x8)"""
     OVERVIEW = 0
     ZONE_SELECTION = 1
-    TIME_SELECTION = 2
+    # TIME_SELECTION removed - manual mode now uses auto times
 
 
 class LCD_I2C:
@@ -556,11 +556,16 @@ class Display2Manager:
         self.modbus = ModbusReader(modbus_host, modbus_port)
         self.current_view = Display2View.OVERVIEW
         self.selected_zone = 1
-        self.selected_time = 5  # Default: 5 minutes (standard värde för manuell körning)
+        # selected_time removed - manual mode uses auto times
         self.running = False
         self.thread = None
         self.button_pins = button_pins or {'up': 17, 'down': 27, 'left': 22, 'right': 23}
         self.gpio_available = False
+        
+        # Hold-to-confirm for zone selection
+        self.button_hold_start = None
+        self.hold_duration = 3.0  # 3 seconds
+        self.zone_confirmed = False
         
         # Try to initialize GPIO for buttons
         try:
@@ -590,30 +595,46 @@ class Display2Manager:
         
         return buttons
     
-    def handle_button_press(self, button: str):
+    def handle_button_press(self, button: str, is_held: bool = False):
         """Handle button press event"""
-        logger.debug(f"Button pressed: {button}")
+        logger.debug(f"Button {'held' if is_held else 'pressed'}: {button}")
         
         if button == 'left':
-            # Navigate to previous view
-            self.current_view = Display2View((self.current_view - 1) % 3)
+            # Navigate to previous view (only 2 views now)
+            self.current_view = Display2View((self.current_view - 1) % 2)
+            self.button_hold_start = None
+            self.zone_confirmed = False
         elif button == 'right':
-            # Navigate to next view
-            self.current_view = Display2View((self.current_view + 1) % 3)
+            # Navigate to next view (only 2 views now)
+            self.current_view = Display2View((self.current_view + 1) % 2)
+            self.button_hold_start = None
+            self.zone_confirmed = False
         elif button == 'up':
             if self.current_view == Display2View.ZONE_SELECTION:
-                # Increment zone (1-7)
-                self.selected_zone = (self.selected_zone % 7) + 1
-            elif self.current_view == Display2View.TIME_SELECTION:
-                # Increment time by 1 minute
-                self.selected_time = min(240, self.selected_time + 1)
+                if is_held:
+                    # Confirm zone selection after 3 second hold
+                    if not self.zone_confirmed:
+                        logger.info(f"Zone {self.selected_zone} confirmed by holding UP button")
+                        self.zone_confirmed = True
+                        # Write selected zone to Modbus
+                        self.modbus.write_register(MW_SET_SELECTED, self.selected_zone)
+                else:
+                    # Increment zone (1-7)
+                    self.selected_zone = (self.selected_zone % 7) + 1
+                    self.zone_confirmed = False
         elif button == 'down':
             if self.current_view == Display2View.ZONE_SELECTION:
-                # Decrement zone (1-7)
-                self.selected_zone = ((self.selected_zone - 2) % 7) + 1
-            elif self.current_view == Display2View.TIME_SELECTION:
-                # Decrement time by 1 minute
-                self.selected_time = max(1, self.selected_time - 1)
+                if is_held:
+                    # Confirm zone selection after 3 second hold
+                    if not self.zone_confirmed:
+                        logger.info(f"Zone {self.selected_zone} confirmed by holding DOWN button")
+                        self.zone_confirmed = True
+                        # Write selected zone to Modbus
+                        self.modbus.write_register(MW_SET_SELECTED, self.selected_zone)
+                else:
+                    # Decrement zone (1-7)
+                    self.selected_zone = ((self.selected_zone - 2) % 7) + 1
+                    self.zone_confirmed = False
         
         # Update display immediately
         self.update_display()
@@ -637,21 +658,14 @@ class Display2Manager:
         self.lcd.write_line(1, line1)
     
     def _render_zone_selection(self):
-        """Render zone selection view"""
-        # Line 0: Label
-        line0 = "Zone"
+        """Render zone selection view with hold-to-confirm indicator"""
+        # Line 0: Label and confirmation indicator
+        if self.zone_confirmed:
+            line0 = "Zone OK"
+        else:
+            line0 = "Zone"
         # Line 1: Selected zone
         line1 = f"  {self.selected_zone}"
-        
-        self.lcd.write_line(0, line0, align='center')
-        self.lcd.write_line(1, line1)
-    
-    def _render_time_selection(self):
-        """Render time selection view"""
-        # Line 0: Label
-        line0 = "Time"
-        # Line 1: Selected time
-        line1 = f" {self.selected_time:3}min"
         
         self.lcd.write_line(0, line0, align='center')
         self.lcd.write_line(1, line1)
@@ -663,17 +677,12 @@ class Display2Manager:
                 self._render_overview()
             elif self.current_view == Display2View.ZONE_SELECTION:
                 self._render_zone_selection()
-            elif self.current_view == Display2View.TIME_SELECTION:
-                self._render_time_selection()
         except Exception as e:
             logger.error(f"Error updating Display 2: {e}")
     
     def start_manual_irrigation(self):
-        """Start manual irrigation with selected zone and time"""
-        logger.info(f"Starting manual irrigation: Zone {self.selected_zone}, Time {self.selected_time} min")
-        
-        # Write time if needed
-        self.modbus.write_register(MW_MANUAL_TIME, self.selected_time)
+        """Start manual irrigation with selected zone (time determined by auto mode settings)"""
+        logger.info(f"Starting manual irrigation: Zone {self.selected_zone}")
         
         # Write selected zone
         self.modbus.write_register(MW_SET_SELECTED, self.selected_zone)
@@ -688,6 +697,7 @@ class Display2Manager:
     def _update_loop(self):
         """Background thread for button handling and display updates"""
         last_buttons = {'up': False, 'down': False, 'left': False, 'right': False}
+        button_hold_timers = {'up': None, 'down': None, 'left': None, 'right': None}
         update_counter = 0
         display_update_interval = 10  # Update display every 10 cycles (1 second)
         
@@ -696,12 +706,27 @@ class Display2Manager:
                 # Read buttons
                 buttons = self.read_buttons()
                 
-                # Detect button press (edge detection: was off, now on)
+                # Handle button state changes and hold detection
                 button_pressed = False
                 for name, pressed in buttons.items():
+                    # Detect button press (edge detection: was off, now on)
                     if pressed and not last_buttons[name]:
-                        self.handle_button_press(name)
+                        # Button just pressed
+                        self.handle_button_press(name, is_held=False)
                         button_pressed = True
+                        button_hold_timers[name] = time.time()
+                    elif pressed and last_buttons[name]:
+                        # Button is being held
+                        if button_hold_timers[name] and name in {'up', 'down'}:
+                            hold_time = time.time() - button_hold_timers[name]
+                            if hold_time >= self.hold_duration:
+                                # Button held for required duration
+                                self.handle_button_press(name, is_held=True)
+                                button_hold_timers[name] = None  # Prevent repeated triggers
+                                button_pressed = True
+                    elif not pressed and last_buttons[name]:
+                        # Button released
+                        button_hold_timers[name] = None
                 
                 last_buttons = buttons.copy()
                 
@@ -739,6 +764,109 @@ class Display2Manager:
                     self.GPIO.cleanup()
                 except Exception:
                     pass
+
+
+class AutoModeTransitionScheduler:
+    """
+    Scheduler for transitioning to auto mode at 21:00 daily.
+    Does NOT trigger watering - only sets mode to auto passively.
+    If a sequence is running, waits until it completes.
+    """
+    
+    # Constants
+    MAX_WAIT_HOURS = 4
+    CHECK_INTERVAL_SECONDS = 30
+    LOG_INTERVAL_CYCLES = 10  # Log every 5 minutes (10 * 30 seconds)
+    
+    def __init__(self, modbus_host: str = "127.0.0.1", modbus_port: int = 502,
+                 transition_hour: int = 21, transition_minute: int = 0):
+        """
+        Initialize Auto Mode Transition Scheduler
+        
+        Args:
+            modbus_host: Modbus TCP host
+            modbus_port: Modbus TCP port
+            transition_hour: Hour to transition (0-23), default 21 for 21:00
+            transition_minute: Minute to transition (0-59)
+        """
+        self.modbus = ModbusReader(modbus_host, modbus_port)
+        self.transition_hour = transition_hour
+        self.transition_minute = transition_minute
+        self.running = False
+        self.thread = None
+        self.last_transition_date = None
+    
+    def is_sequence_running(self) -> bool:
+        """Check if a sequence is currently running"""
+        # Read Status_Steg (MW52) - if non-zero, sequence is running
+        steg_regs = self.modbus.read_registers(MW_STATUS_STEG, 1)
+        if steg_regs:
+            return steg_regs[0] != 0
+        return False
+    
+    def transition_to_auto_mode(self):
+        """Passively transition to auto mode without triggering watering"""
+        logger.info("Transitioning to auto mode (passive, no watering trigger)")
+        
+        # Check if sequence is running
+        if self.is_sequence_running():
+            logger.info("Sequence currently running, waiting for completion before transitioning...")
+            # Wait for sequence to complete (check every 30 seconds, max wait time based on MAX_WAIT_HOURS)
+            max_wait_cycles = (self.MAX_WAIT_HOURS * 60 * 60) // self.CHECK_INTERVAL_SECONDS
+            for i in range(max_wait_cycles):
+                time.sleep(self.CHECK_INTERVAL_SECONDS)
+                if not self.is_sequence_running():
+                    logger.info("Sequence completed, now transitioning to auto mode")
+                    break
+                if i % self.LOG_INTERVAL_CYCLES == 0:  # Log every 5 minutes
+                    logger.debug("Still waiting for sequence to complete...")
+        
+        # Set mode to auto (MW60 = 1)
+        success = self.modbus.write_register(MW_MODE_OVERRIDE, 1)
+        if success:
+            logger.info("Successfully transitioned to auto mode at 21:00")
+        else:
+            logger.error("Failed to write auto mode to Modbus")
+    
+    def _scheduler_loop(self):
+        """Background scheduler loop for 21:00 transition"""
+        while self.running:
+            try:
+                now = datetime.now()
+                current_date = now.date()
+                current_hour = now.hour
+                current_minute = now.minute
+                
+                # Check if it's time to transition and we haven't transitioned today
+                if (current_hour == self.transition_hour and 
+                    current_minute == self.transition_minute and
+                    current_date != self.last_transition_date):
+                    
+                    logger.info(f"Auto mode transition time reached: {self.transition_hour:02d}:{self.transition_minute:02d}")
+                    self.transition_to_auto_mode()
+                    self.last_transition_date = current_date
+                
+                # Sleep for check interval before next check
+                time.sleep(self.CHECK_INTERVAL_SECONDS)
+            except Exception as e:
+                logger.error(f"Error in auto mode transition scheduler loop: {e}")
+                time.sleep(60)
+    
+    def start(self):
+        """Start the auto mode transition scheduler"""
+        if not self.running:
+            logger.info(f"Starting auto mode transition scheduler (transition at {self.transition_hour:02d}:{self.transition_minute:02d})")
+            self.running = True
+            self.thread = threading.Thread(target=self._scheduler_loop, daemon=True)
+            self.thread.start()
+    
+    def stop(self):
+        """Stop the auto mode transition scheduler"""
+        if self.running:
+            logger.info("Stopping auto mode transition scheduler")
+            self.running = False
+            if self.thread:
+                self.thread.join(timeout=2)
 
 
 class AutoScheduler:
@@ -877,6 +1005,12 @@ def main():
                         help="Hour for auto-watering (0-23)")
     parser.add_argument("--schedule-minute", type=int, default=0,
                         help="Minute for auto-watering (0-59)")
+    parser.add_argument("--enable-auto-mode-transition", action="store_true",
+                        help="Enable 21:00 auto mode transition")
+    parser.add_argument("--transition-hour", type=int, default=21,
+                        help="Hour for auto mode transition (0-23, default: 21)")
+    parser.add_argument("--transition-minute", type=int, default=0,
+                        help="Minute for auto mode transition (0-59)")
     parser.add_argument("--simulate", action="store_true",
                         help="Simulate without I2C hardware")
     
@@ -885,6 +1019,7 @@ def main():
     display1 = None
     display2 = None
     scheduler = None
+    auto_mode_scheduler = None
     
     try:
         if not args.simulate:
@@ -920,6 +1055,17 @@ def main():
             )
             scheduler.start()
         
+        # Initialize auto mode transition scheduler if enabled
+        if args.enable_auto_mode_transition:
+            logger.info("Initializing auto mode transition scheduler (21:00)...")
+            auto_mode_scheduler = AutoModeTransitionScheduler(
+                modbus_host=args.modbus_host,
+                modbus_port=args.modbus_port,
+                transition_hour=args.transition_hour,
+                transition_minute=args.transition_minute
+            )
+            auto_mode_scheduler.start()
+        
         logger.info("Display manager running. Press Ctrl+C to exit.")
         
         # Keep running
@@ -937,6 +1083,8 @@ def main():
             display2.stop()
         if scheduler:
             scheduler.stop()
+        if auto_mode_scheduler:
+            auto_mode_scheduler.stop()
 
 
 if __name__ == "__main__":

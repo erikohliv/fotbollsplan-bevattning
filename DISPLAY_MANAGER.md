@@ -210,22 +210,27 @@ Shows:
   Zone
    2
 ```
+Or when confirmed:
+```
+ Zone OK
+   2
+```
 Select irrigation zone (1-7):
 - **UP button**: Increment zone (wraps 7→1)
 - **DOWN button**: Decrement zone (wraps 1→7)
+- **Hold UP or DOWN for 3 seconds**: Confirm zone selection
 
-### View 3: TIME SELECTION
-```
-  Time
-  5min
-```
-Select irrigation duration (1-240 minutes):
-- **UP button**: Increment time (+1 min)
-- **DOWN button**: Decrement time (-1 min)
+After confirmation, the selected zone is written to Modbus (MW63) and will be used when manual start is triggered via the physical Start button.
 
 ### Starting Manual Irrigation
 
-After selecting zone and time, the system automatically applies settings when manual start is triggered via the API or PLC.
+1. Navigate to ZONE SELECTION view (use LEFT/RIGHT buttons)
+2. Select desired zone using UP/DOWN buttons
+3. Hold UP or DOWN for 3 seconds to confirm (display shows "Zone OK")
+4. Press the physical **Start** button on the control panel
+5. Manual sequence runs **only the selected zone**, using auto mode times (Set_Tid_Center for zones 1-3, Set_Tid_Horn for zones 4-7)
+
+Note: Time selection has been removed. Manual mode now uses the same irrigation times as auto mode.
 
 ## Auto-Watering Scheduler
 
@@ -236,6 +241,25 @@ The scheduler triggers automatic watering at a configured time (default: 01:00).
 - Only triggers once per day
 - Respects environmental thresholds (rain, moisture, temperature)
 - Logs all trigger attempts
+
+### Auto Mode Transition at 21:00
+
+A separate scheduler can be enabled to passively transition the system to auto mode at 21:00 daily.
+
+### Features
+- Transitions to auto mode without triggering watering
+- If a sequence is running at 21:00, waits for completion before transitioning
+- Ensures system is in auto mode for the next scheduled watering (01:00)
+- Only performs mode transition once per day
+
+### Configuration
+```bash
+# Enable auto mode transition at 21:00
+python3 display_manager.py --enable-auto-mode-transition
+
+# Set custom transition time (e.g., 22:30)
+python3 display_manager.py --enable-auto-mode-transition --transition-hour 22 --transition-minute 30
+```
 
 ### Block Reasons
 The scheduler checks for these conditions:
@@ -266,7 +290,7 @@ The Display Manager integrates with the existing irrigation system via Modbus re
 - MW60: Mode override (1=Auto, 0=Manual)
 - MW61: Manual start pulse
 - MW63: Set selected zone
-- MW64: Manual run time (minutes)
+- MW64: Manual run time (DEPRECATED - manual mode now uses auto times)
 
 ## Testing
 
