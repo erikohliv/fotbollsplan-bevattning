@@ -282,7 +282,7 @@ class ModbusReader:
             try:
                 self._client.close()
             except OSError as e:
-                # Expected if socket already closed by remote end
+                # Expected if socket already closed by remote end (e.g., EBADF/ENOTCONN)
                 logger.debug(f"OSError closing Modbus client: {e}")
             except Exception as e:
                 logger.warning(f"Unexpected error closing Modbus client: {e}")
@@ -335,9 +335,9 @@ class ModbusReader:
     def _invalidate_cache_for_address(self, address: int):
         """Remove cached entries covering a given register address"""
         # k[0] = start address, k[1] = count; remove any cache entry whose range overlaps the target address
-        keys_to_remove = [k for k in self._cache.keys() if k[0] <= address <= k[0] + k[1] - 1]
-        for key in keys_to_remove:
-            del self._cache[key]
+        for key in list(self._cache.keys()):
+            if key[0] <= address <= key[0] + key[1] - 1:
+                del self._cache[key]
     
     def read_registers(self, address: int, count: int = 1, use_cache: bool = True) -> Optional[list]:
         """Read holding registers from Modbus with optional caching"""
