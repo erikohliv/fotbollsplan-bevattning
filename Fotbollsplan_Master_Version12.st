@@ -12,6 +12,7 @@
   - 21:00 auto mode transition: Hanteras av Python display_manager, inte PLC.
   - Anti-kollision: Om sekvens redan kör/pump aktiv blockeras ny start (sätter bit3/code 3).
   - Next-knapp: DEPRECATED, använd display-knappar istället.
+  - Mode Switch (MW100): 0=Neutral, 1=Lokalt läge, 2=Fjärrläge. Fysisk 1-0-2 switch och API.
 *)
 
 PROGRAM Fotbollsplan_Master
@@ -65,6 +66,8 @@ PROGRAM Fotbollsplan_Master
 
     EventMaskReg       : INT; (* %MW72 - bitmask enligt ovan *)
     BlockReasonReg     : INT; (* %MW73 - block reason code *)
+    
+    ModeSwitchReg      : INT; (* %MW100 - 0=Neutral, 1=Lokalt läge, 2=Fjärrläge *)
   END_VAR
 
   VAR
@@ -130,6 +133,12 @@ PROGRAM Fotbollsplan_Master
     BlockReason : INT := 0;
 
     AntiCollisionBlock : BOOL := FALSE;
+    
+    (* Mode switch state tracking *)
+    CurrentModeSwitch : INT := 0;  (* Aktuellt läge: 0=Neutral, 1=Lokalt, 2=Fjärr *)
+    PrevModeSwitchReg : INT := 0;  (* Tidigare värde av ModeSwitchReg för edge-detection *)
+    LocalModeActive : BOOL := FALSE;  (* TRUE när lokalt läge är aktivt *)
+    RemoteModeActive : BOOL := FALSE; (* TRUE när fjärrläge är aktivt *)
   END_VAR
 
   (* Init defaults *)
@@ -184,6 +193,27 @@ PROGRAM Fotbollsplan_Master
   ELSE
     ModeIsAuto := Mode_AutoManual;
   END_IF;
+
+  (* Mode Switch Logic - Lokal/Fjärr styrning *)
+  (* Detektera när ModeSwitchReg ändras (edge detection) *)
+  IF ModeSwitchReg <> PrevModeSwitchReg THEN
+    IF ModeSwitchReg = 1 THEN
+      (* Lokalt läge valt *)
+      LocalModeActive := TRUE;
+      RemoteModeActive := FALSE;
+      CurrentModeSwitch := 1;
+    ELSIF ModeSwitchReg = 2 THEN
+      (* Fjärrläge valt *)
+      LocalModeActive := FALSE;
+      RemoteModeActive := TRUE;
+      CurrentModeSwitch := 2;
+    (* ELSIF ModeSwitchReg = 0: Neutral - behåller nuvarande läge utan ändring *)
+    END_IF;
+    PrevModeSwitchReg := ModeSwitchReg;
+  END_IF;
+  
+  (* Uppdatera ModeSwitchReg med aktuellt läge för status-visning *)
+  ModeSwitchReg := CurrentModeSwitch;
 
   (* Hantera skrivningar från Modbus *)
   IF (SetSelectedZoneReg >= 1) AND (SetSelectedZoneReg <= 7) THEN
@@ -569,6 +599,8 @@ CONFIGURATION Config0
     HeartbeatCountReg AT %MW71 : INT;
     EventMaskReg AT %MW72 : INT;
     BlockReasonReg AT %MW73 : INT;
+    
+    ModeSwitchReg AT %MW100 : INT;
   END_VAR
 
   RESOURCE Res0 ON PLC

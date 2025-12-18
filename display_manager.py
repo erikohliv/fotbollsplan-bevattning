@@ -48,6 +48,7 @@ MW_BLOCK_REASON = 73
 MW_MARKFUKT = 30
 MW_REGEN24 = 31
 MW_TEMP = 32
+MW_MODE = 100  # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
 
 
 logger = logging.getLogger("display_manager")
@@ -73,6 +74,7 @@ class Display1View(IntEnum):
     BLOCK_CONDITIONS = 1
     PUMP_STATE = 2
     CONNECTIVITY = 3
+    MODE_STATUS = 4
 
 
 class Display2View(IntEnum):
@@ -382,6 +384,8 @@ class Display1Manager:
             'steg': 0,
             'selected_zone': 0,
             'mode': 'Manual',
+            'switch_mode': 0,
+            'switch_mode_text': 'Inget läge valt',
             'heartbeat': 0,
             'heartbeat_cnt': 0,
             'eventmask': 0,
@@ -406,6 +410,18 @@ class Display1Manager:
         mode_reg = self.modbus.read_registers(MW_MODE_OVERRIDE, 1)
         if mode_reg:
             status['mode'] = 'Auto' if mode_reg[0] == 1 else 'Manual'
+        
+        # Read switch mode (MW100)
+        switch_mode_reg = self.modbus.read_registers(MW_MODE, 1)
+        if switch_mode_reg:
+            mode_val = switch_mode_reg[0]
+            status['switch_mode'] = mode_val
+            if mode_val == 1:
+                status['switch_mode_text'] = 'Lokalt läge aktivt'
+            elif mode_val == 2:
+                status['switch_mode_text'] = 'Fjärrläge aktivt'
+            else:
+                status['switch_mode_text'] = 'Inget läge valt'
         
         # Read heartbeat and event info
         hb_regs = self.modbus.read_registers(MW_HEARTBEAT, 4)
@@ -484,6 +500,13 @@ class Display1Manager:
         now = status['timestamp'].strftime("%H:%M:%S")
         self.lcd.write_line(3, f"Time: {now}")
     
+    def _render_mode_status_view(self, status: Dict[str, Any]):
+        """Render mode status view (Lokal/Fjärr-styrning)"""
+        self.lcd.write_line(0, "STYRNINGSLÄGE", align='center')
+        self.lcd.write_line(1, "", align='center')
+        self.lcd.write_line(2, status['switch_mode_text'], align='center')
+        self.lcd.write_line(3, "", align='center')
+    
     def update_display(self):
         """Update display with current view"""
         try:
@@ -497,6 +520,8 @@ class Display1Manager:
                 self._render_pump_state_view(status)
             elif self.current_view == Display1View.CONNECTIVITY:
                 self._render_connectivity_view(status)
+            elif self.current_view == Display1View.MODE_STATUS:
+                self._render_mode_status_view(status)
             
             self.last_data = status
         except Exception as e:
@@ -504,7 +529,7 @@ class Display1Manager:
     
     def _rotation_loop(self):
         """Background thread for auto-rotating views"""
-        view_count = 4
+        view_count = 5  # Updated to include MODE_STATUS view
         while self.running:
             try:
                 self.update_display()

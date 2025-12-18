@@ -315,5 +315,69 @@ def test_reset_error(client, mock_modbus):
     assert "new_block_reason" in data
 
 
+def test_set_mode_local(client, mock_modbus):
+    """Test setting local mode (1)"""
+    response = client.post(
+        "/set-mode/1",
+        headers={"X-API-Key": API_KEY}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["mode"] == 1
+    assert "Lokalt läge" in data["mode_text"]
+
+
+def test_set_mode_remote(client, mock_modbus):
+    """Test setting remote mode (2)"""
+    response = client.post(
+        "/set-mode/2",
+        headers={"X-API-Key": API_KEY}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["mode"] == 2
+    assert "Fjärrläge" in data["mode_text"]
+
+
+def test_set_mode_neutral(client, mock_modbus):
+    """Test setting neutral mode (0)"""
+    response = client.post(
+        "/set-mode/0",
+        headers={"X-API-Key": API_KEY}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["mode"] == 0
+    assert "Neutral" in data["mode_text"]
+
+
+def test_set_mode_invalid(client, mock_modbus):
+    """Test setting invalid mode value"""
+    response = client.post(
+        "/set-mode/3",
+        headers={"X-API-Key": API_KEY}
+    )
+    assert response.status_code == 400
+    assert "mode must be" in response.json()["detail"]
+
+
+def test_set_mode_unauthorized(client):
+    """Test set mode without API key"""
+    response = client.post("/set-mode/1")
+    assert response.status_code == 401
+
+
+def test_status_includes_mode(client, mock_modbus):
+    """Test that status endpoint includes mode information"""
+    response = client.get("/status", headers={"X-API-Key": API_KEY})
+    assert response.status_code == 200
+    data = response.json()
+    assert "mode" in data
+    assert "mode_text" in data
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

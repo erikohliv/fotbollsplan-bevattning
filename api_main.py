@@ -65,6 +65,7 @@ MW_TEST_MODE = 80          # Test mode aktivering (1=aktiv, 0=inaktiv)
 MW_TEST_ZONE_RESULT = 81   # Test resultat för aktuell zon (bitmask för zoner 1-7)
 MW_ERROR_RESET = 82        # Error reset trigger (skriv 1 för att nollställa fel)
 MW_AUTO_OVERRIDE = 33      # AutoOverride från befintlig mappning
+MW_MODE = 100              # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
 
 # Zone constants
 MIN_ZONE = 1
@@ -232,11 +233,21 @@ def status(x_api_key: Optional[str] = Header(None)):
     # side-effect registers while still being more efficient than the original implementation.
     # Group 1: MW50-53 (zone, pump, steg, selected_zone)
     # Group 2: MW70-73 (heartbeat data)
+    # Group 3: MW_MODE (mode switch status)
     with get_modbus_connection() as client:
         rr1 = client.read_holding_registers(MW_STATUS_ZONE, 4, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr1, "read status registers MW50-53")
         rr2 = client.read_holding_registers(MW_HEARTBEAT, 4, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr2, "read heartbeat registers MW70-73")
+        rr3 = client.read_holding_registers(MW_MODE, 1, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr3, f"read mode register MW{MW_MODE}")
+    
+    mode_value = rr3.registers[0]
+    mode_text = {
+        0: "Inget läge valt",
+        1: "Lokalt läge aktivt",
+        2: "Fjärrläge aktivt"
+    }
     
     return {
         "zone": rr1.registers[0],
@@ -247,6 +258,8 @@ def status(x_api_key: Optional[str] = Header(None)):
         "heartbeat_count": rr2.registers[1],
         "eventmask": rr2.registers[2],
         "block_reason": rr2.registers[3],
+        "mode": mode_value,
+        "mode_text": mode_text.get(mode_value, f"Okänt läge {mode_value}"),
         "timestamp": int(time.time())
     }
 
@@ -586,6 +599,42 @@ def reset_error(x_api_key: Optional[str] = Header(None)):
     }
 
 
+@app.post("/set-mode/{mode}")
+def set_mode(mode: int, x_api_key: Optional[str] = Header(None)):
+    """
+    Ställ in läge via fjärrstyrning eller fysisk switch.
+    Mode-värden:
+      1 = Lokalt läge
+      2 = Fjärrläge
+      0 = Neutral (behåll nuvarande läge)
+    
+    Fysisk switch skriver värdet och återgår automatiskt till 0.
+    API kan också användas för att ställa läget.
+    """
+    require_key(x_api_key)
+    
+    if mode not in [0, 1, 2]:
+        raise HTTPException(
+            status_code=400, 
+            detail="mode must be 0 (Neutral), 1 (Lokalt läge), or 2 (Fjärrläge)"
+        )
+    
+    logger.info(f"Ställer läge till {mode} (0=Neutral, 1=Lokalt, 2=Fjärr)")
+    write_reg(MW_MODE, mode)
+    
+    mode_text = {
+        0: "Neutral (ingen ändring)",
+        1: "Lokalt läge aktivt",
+        2: "Fjärrläge aktivt"
+    }
+    
+    return {
+        "ok": True,
+        "mode": mode,
+        "mode_text": mode_text[mode]
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 def ui():
     return """
@@ -709,6 +758,18 @@ label { font-weight: bold; margin-right: 5px; }
     </div>
     
     <div style="margin-bottom: 15px;">
+      <h4 style="margin: 10px 0 5px 0; color: #666;">Lokal/Fjärr-styrning</h4>
+      <div class="controls">
+        <button onclick="setSwitchMode(1)">Lokalt läge</button>
+        <button onclick="setSwitchMode(2)">Fjärrläge</button>
+        <button onclick="setSwitchMode(0)">Neutral</button>
+      </div>
+      <p style="font-size: 12px; color: #666; margin-top: 5px;">
+        Växla mellan lokalt (fysisk styrning) och fjärrstyrning. Neutral behåller nuvarande läge.
+      </p>
+    </div>
+    
+    <div style="margin-bottom: 15px;">
       <h4 style="margin: 10px 0 5px 0; color: #666;">Felsökning</h4>
       <div class="controls">
         <button onclick="showTroubleshooting()">Visa Felstatus</button>
@@ -764,6 +825,7 @@ async function loadStatus() {
       `Pump: ${d.pump_on ? 'PÅ' : 'AV'}\\n` +
       `Steg: ${d.steg}\\n` +
       `Vald zon: ${d.selected_zone}\\n` +
+      `Läge: ${d.mode_text || 'Okänd'}\\n` +
       `Block status: ${blockReason}\\n` +
       `Heartbeat: ${d.heartbeat_count}\\n` +
       `Tid: ${new Date().toLocaleTimeString('sv-SE')}`;
@@ -953,6 +1015,34 @@ async function setMode(mode) {
     
     const result = await r.json();
     showMessage(`Läge ändrat till: ${result.mode}`);
+    setTimeout(loadStatus, 500);
+  } catch (err) {
+    showMessage('Nätverksfel: ' + err.message, true);
+  }
+}
+
+async function setSwitchMode(mode) {
+  const modeNames = {0: 'Neutral', 1: 'Lokalt läge', 2: 'Fjärrläge'};
+  const modeName = modeNames[mode] || 'Okänt';
+  
+  if (!confirm(`Växla till ${modeName}?`)) {
+    return;
+  }
+  
+  try {
+    const r = await fetch(`/set-mode/${mode}`, {
+      method: 'POST',
+      headers: {'X-API-Key': key}
+    });
+    
+    if (!r.ok) {
+      const err = await r.json();
+      showMessage('Fel: ' + (err.detail || 'Okänt fel'), true);
+      return;
+    }
+    
+    const result = await r.json();
+    showMessage(result.mode_text);
     setTimeout(loadStatus, 500);
   } catch (err) {
     showMessage('Nätverksfel: ' + err.message, true);
