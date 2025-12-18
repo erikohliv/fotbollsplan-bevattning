@@ -282,7 +282,7 @@ class ModbusReader:
             try:
                 self._client.close()
             except OSError as e:
-                logger.debug(f"Error closing Modbus client: {e}")
+                logger.debug(f"OSError closing Modbus client: {e}")
             except Exception as e:
                 logger.warning(f"Unexpected error closing Modbus client: {e}")
         self._client = None
@@ -324,6 +324,24 @@ class ModbusReader:
             logger.warning(f"Unexpected {context} exception: {exc}")
         self._reset_client()
     
+    def _validate_result(self, result, address: int, context: str) -> bool:
+        """Validate Modbus result and reset connection on errors"""
+        if result is None:
+            logger.debug(f"{context} error at {address}")
+            self._reset_client()
+            return False
+        if hasattr(result, 'isError') and result.isError():
+            logger.debug(f"{context} error at {address}")
+            self._reset_client()
+            return False
+        return True
+    
+    def _invalidate_cache_for_address(self, address: int):
+        """Remove cached entries covering a given register address"""
+        keys_to_remove = [k for k in self._cache.keys() if k[0] <= address <= k[0] + k[1] - 1]
+        for key in keys_to_remove:
+            del self._cache[key]
+    
     def read_registers(self, address: int, count: int = 1, use_cache: bool = True) -> Optional[list]:
         """Read holding registers from Modbus with optional caching"""
         cache_key = (address, count)
@@ -342,13 +360,7 @@ class ModbusReader:
         try:
             result = client.read_holding_registers(address, count, unit=self.unit)
             
-            if result is None:
-                logger.debug(f"Modbus read error at {address}")
-                self._reset_client()
-                return None
-            if hasattr(result, 'isError') and result.isError():
-                logger.debug(f"Modbus read error at {address}")
-                self._reset_client()
+            if not self._validate_result(result, address, "Modbus read"):
                 return None
             
             data = result.registers
@@ -374,19 +386,11 @@ class ModbusReader:
         try:
             result = client.write_register(address, int(value), unit=self.unit)
             
-            if result is None:
-                logger.debug(f"Modbus write error at {address}")
-                self._reset_client()
-                return False
-            if hasattr(result, 'isError') and result.isError():
-                logger.debug(f"Modbus write error at {address}")
-                self._reset_client()
+            if not self._validate_result(result, address, "Modbus write"):
                 return False
             
             # Invalidate cache for this register
-            keys_to_remove = [k for k in self._cache.keys() if k[0] <= address <= k[0] + k[1] - 1]
-            for key in keys_to_remove:
-                del self._cache[key]
+            self._invalidate_cache_for_address(address)
             
             return True
         except Exception as e:
