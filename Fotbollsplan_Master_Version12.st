@@ -13,6 +13,9 @@
   - Anti-kollision: Om sekvens redan kör/pump aktiv blockeras ny start (sätter bit3/code 3).
   - Next-knapp: DEPRECATED, använd display-knappar istället.
   - Mode Switch (MW100): 0=Neutral, 1=Lokalt läge, 2=Fjärrläge. Fysisk 1-0-2 switch och API.
+  - Test Mode (MW80): 1=Test mode active för försäsongskontroll.
+  - ErrorReset (MW82): Skriv 1 för att återställa fel (PLC nollar automatiskt).
+  - Markfuktgivare: Analog input %IW0 (0-10V) skalas till MW30 (0-100%).
 *)
 
 PROGRAM Fotbollsplan_Master
@@ -32,6 +35,9 @@ PROGRAM Fotbollsplan_Master
     Blow_Button      : BOOL; (* %IX0.6 *)
     EStop_NC         : BOOL; (* %IX0.7 *)
     Display_Button_2 : BOOL; (* %IX1.0 - Display decrease zone *)
+
+    (* ANALOG INPUTS *)
+    Analog_Markfukt_Raw : INT; (* %IW0 - 0-10V analog input from soil moisture sensor *)
 
     (* MODBUS / HOLDING REGISTER *)
     Remote_Command : INT; (* %MW10 *)
@@ -67,6 +73,10 @@ PROGRAM Fotbollsplan_Master
     EventMaskReg       : INT; (* %MW72 - bitmask enligt ovan *)
     BlockReasonReg     : INT; (* %MW73 - block reason code *)
     
+    TestModeReg        : INT; (* %MW80 - 1=test mode active, 0=normal *)
+    TestZoneResultReg  : INT; (* %MW81 - bitmask of tested zones *)
+    ErrorResetReg      : INT; (* %MW82 - write 1 to reset errors, PLC clears *)
+    
     ModeSwitchReg      : INT; (* %MW100 - 0=Neutral, 1=Lokalt läge, 2=Fjärrläge *)
   END_VAR
 
@@ -79,6 +89,10 @@ PROGRAM Fotbollsplan_Master
     ManualRun : BOOL := FALSE;
     ManualRunZone : INT := 0;
     (* Manual mode now uses same times as auto mode, no separate ManualRunTime *)
+
+    (* UNIPI 1.1 Analog Input Constants *)
+    ANALOG_INPUT_MAX : INT := 27648; (* 0-10V range for UNIPI 1.1 *)
+    MOISTURE_PERCENT_MAX : INT := 100; (* Scale to 0-100% *)
 
     (* Display button hold detection for zone confirmation *)
     DisplayBtn1_HoldTimer : TON;
@@ -169,6 +183,46 @@ PROGRAM Fotbollsplan_Master
   HeartbeatReg := 0;
   IF HeartbeatToggle THEN HeartbeatReg := HeartbeatReg OR 1; END_IF;
   HeartbeatCountReg := HeartbeatCounter;
+
+  (* MARKFUKTGIVARE: Scale analog input 0-10V (0-27648) to 0-100% *)
+  (* UNIPI 1.1 analog input range is 0-27648 for 0-10V *)
+  (* NOTE: Python controller can override this by writing directly to MW30 *)
+  (* Python writes take precedence - last write wins *)
+  IF Analog_Markfukt_Raw < 0 THEN
+    Markfukt := 0;
+  ELSIF Analog_Markfukt_Raw > ANALOG_INPUT_MAX THEN
+    Markfukt := MOISTURE_PERCENT_MAX;
+  ELSE
+    (* Scale: (Raw / ANALOG_INPUT_MAX) * 100 = (Raw * 100) / ANALOG_INPUT_MAX *)
+    Markfukt := (Analog_Markfukt_Raw * MOISTURE_PERCENT_MAX) / ANALOG_INPUT_MAX;
+  END_IF;
+  (* Clamp to valid range *)
+  IF Markfukt > MOISTURE_PERCENT_MAX THEN Markfukt := MOISTURE_PERCENT_MAX; END_IF;
+  IF Markfukt < 0 THEN Markfukt := 0; END_IF;
+
+  (* ERROR RESET: Handle reset pulse from Modbus or physical button *)
+  IF ErrorResetReg = 1 THEN
+    (* Clear block reason if not E-stop (E-stop must be physically cleared) *)
+    IF BlockReason <> 4 THEN
+      BlockReason := 0;
+    END_IF;
+    
+    (* Reset sequence if stuck (no pump but sequence active) *)
+    IF Steg <> 0 AND NOT Signal_Pump THEN
+      Steg := 0;
+      Nuvarande_Zon := 0;
+      System_Mode := 1;
+      ManualRun := FALSE;
+    END_IF;
+    
+    (* Clear anti-collision if no actual sequence running *)
+    IF Steg = 0 THEN
+      AntiCollisionBlock := FALSE;
+    END_IF;
+    
+    (* PLC auto-clears the reset register *)
+    ErrorResetReg := 0;
+  END_IF;
 
   (* E-STOP (NC) *)
   IF NOT EStop_NC THEN
@@ -567,6 +621,9 @@ CONFIGURATION Config0
     EStop_NC AT %IX0.7 : BOOL;
     Display_Button_2 AT %IX1.0 : BOOL;
 
+    (* ANALOG INPUTS *)
+    Analog_Markfukt_Raw AT %IW0 : INT;  (* 0-10V soil moisture sensor *)
+
     Remote_Command AT %MW10 : INT;
     Set_Tid_Center AT %MW20 : INT;
     Set_Tid_Horn   AT %MW21 : INT;
@@ -599,6 +656,10 @@ CONFIGURATION Config0
     HeartbeatCountReg AT %MW71 : INT;
     EventMaskReg AT %MW72 : INT;
     BlockReasonReg AT %MW73 : INT;
+    
+    TestModeReg AT %MW80 : INT;
+    TestZoneResultReg AT %MW81 : INT;
+    ErrorResetReg AT %MW82 : INT;
     
     ModeSwitchReg AT %MW100 : INT;
   END_VAR
