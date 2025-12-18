@@ -337,13 +337,38 @@ def configure_wifi(ssid: str, password: str) -> bool:
     print_warning("NetworkManager connection failed, trying wpa_supplicant...")
     
     # Fallback to wpa_supplicant configuration
-    wpa_config = f"""
+    # Use wpa_passphrase for secure password handling
+    try:
+        # Generate proper PSK using wpa_passphrase
+        result = subprocess.run(
+            ['wpa_passphrase', ssid, password],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode != 0:
+            print_error("Failed to generate wpa_supplicant configuration")
+            return False
+        
+        # Extract the generated configuration (wpa_passphrase output)
+        wpa_config = result.stdout
+        
+    except FileNotFoundError:
+        # wpa_passphrase not available, manual config with escaping
+        print_warning("wpa_passphrase not found, using manual configuration")
+        # Escape special characters in password
+        escaped_password = password.replace('\\', '\\\\').replace('"', '\\"')
+        wpa_config = f"""
 network={{
     ssid="{ssid}"
-    psk="{password}"
+    psk="{escaped_password}"
     key_mgmt=WPA-PSK
 }}
 """
+    except Exception as e:
+        print_error(f"Failed to generate WiFi configuration: {e}")
+        return False
     
     wpa_conf_path = '/etc/wpa_supplicant/wpa_supplicant.conf'
     
@@ -360,11 +385,18 @@ network={{
         run_command(['systemctl', 'restart', 'networking'], check=False, timeout=20)
         time.sleep(5)
         
-        # Check if connected
+        # Check if connected - specifically check wireless interface
         success, stdout, _ = run_command(['ip', 'addr', 'show'], check=False)
-        if success and 'inet ' in stdout:
-            print_success(f"Successfully configured WiFi for '{ssid}'")
-            return True
+        if success:
+            # Look for wireless interface with IP address
+            lines = stdout.split('\n')
+            for i, line in enumerate(lines):
+                if ('wlan' in line or 'wlp' in line) and 'state UP' in line:
+                    # Check following lines for inet address
+                    for j in range(i, min(i+10, len(lines))):
+                        if 'inet ' in lines[j] and '127.0.0.1' not in lines[j]:
+                            print_success(f"Successfully configured WiFi for '{ssid}'")
+                            return True
         
     except Exception as e:
         print_error(f"Failed to configure WiFi: {e}")
@@ -384,15 +416,20 @@ def setup_wifi() -> bool:
     """
     print_header("WiFi Network Configuration")
     
-    # Check if already connected
+    # Check if already connected to WiFi
     success, stdout, _ = run_command(['ip', 'addr', 'show'], check=False)
     if success:
-        # Look for wireless interface with IP
-        for line in stdout.split('\n'):
-            if ('wlan' in line or 'wlp' in line) and 'inet ' in line:
-                print_success("Already connected to WiFi")
-                if not get_yes_no("Do you want to configure a different network?", default=False):
-                    return True
+        # Look for wireless interface with IP - check properly for interface and IP on different lines
+        lines = stdout.split('\n')
+        for i, line in enumerate(lines):
+            if ('wlan' in line or 'wlp' in line) and 'state UP' in line:
+                # Check following lines for inet address
+                for j in range(i, min(i+10, len(lines))):
+                    if 'inet ' in lines[j] and '127.0.0.1' not in lines[j]:
+                        print_success("Already connected to WiFi")
+                        if not get_yes_no("Do you want to configure a different network?", default=False):
+                            return True
+                        break
                 break
     
     # Scan for networks
@@ -785,18 +822,64 @@ def setup_tailscale() -> bool:
     else:
         # Install Tailscale
         print_info("Installing Tailscale...")
-        print_info("Downloading installation script from tailscale.com...")
+        print_warning("This will download and execute the official Tailscale installation script")
+        print_info("Script source: https://tailscale.com/install.sh")
         
-        success, _, stderr = run_command(
-            ['sh', '-c', 'curl -fsSL https://tailscale.com/install.sh | sh'],
-            timeout=180
+        if not get_yes_no("Download and verify Tailscale installation script?", default=True):
+            print_info("Tailscale installation cancelled")
+            return True
+        
+        # Download script first
+        print_info("Downloading installation script...")
+        success, script_content, stderr = run_command(
+            ['curl', '-fsSL', 'https://tailscale.com/install.sh'],
+            timeout=60
         )
         
         if not success:
-            print_error(f"Failed to install Tailscale: {stderr}")
+            print_error(f"Failed to download Tailscale script: {stderr}")
             return False
         
-        print_success("Tailscale installed successfully")
+        # Save to temporary file
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as f:
+            f.write(script_content)
+            script_path = f.name
+        
+        try:
+            # Show script size and first lines for verification
+            print_info(f"Script downloaded ({len(script_content)} bytes)")
+            print_info("First lines of script:")
+            for line in script_content.split('\n')[:5]:
+                if line.strip():
+                    print(f"  {line}")
+            
+            if not get_yes_no("Execute this script to install Tailscale?", default=True):
+                os.unlink(script_path)
+                print_info("Tailscale installation cancelled")
+                return True
+            
+            # Execute the script
+            print_info("Installing Tailscale...")
+            success, _, stderr = run_command(
+                ['sh', script_path],
+                timeout=180
+            )
+            
+            # Clean up
+            os.unlink(script_path)
+            
+            if not success:
+                print_error(f"Failed to install Tailscale: {stderr}")
+                return False
+            
+            print_success("Tailscale installed successfully")
+        
+        except Exception as e:
+            if os.path.exists(script_path):
+                os.unlink(script_path)
+            print_error(f"Error during Tailscale installation: {e}")
+            return False
     
     # Configure Tailscale
     print_info("Configuring Tailscale with SSH enabled...")
