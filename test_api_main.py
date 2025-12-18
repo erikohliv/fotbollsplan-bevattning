@@ -67,7 +67,7 @@ def test_status_authorized(client, mock_modbus):
 
 
 def test_manual_command_default_time(client, mock_modbus):
-    """Test manual command - now uses auto times instead of custom duration"""
+    """Test manual command validates zone and uses auto times"""
     response = client.post(
         "/command/manual",
         json={"zone": 2},
@@ -81,7 +81,7 @@ def test_manual_command_default_time(client, mock_modbus):
 
 
 def test_manual_command_custom_time(client, mock_modbus):
-    """Test manual command - minutes parameter is now ignored"""
+    """Test manual command ignores custom duration parameter"""
     response = client.post(
         "/command/manual",
         json={"zone": 3, "minutes": 10},
@@ -204,10 +204,10 @@ def test_test_bevattning_single_zone(client, mock_modbus):
 
 
 def test_test_bevattning_all_zones(client, mock_modbus):
-    """Test zone testing endpoint for all zones"""
+    """Test zone testing endpoint for all zones with confirmation"""
     response = client.post(
         "/menu/test-bevattning",
-        json={"duration_seconds": 1},
+        json={"duration_seconds": 1, "all_zones_confirmed": True},
         headers={"X-API-Key": API_KEY}
     )
     assert response.status_code == 200
@@ -215,6 +215,19 @@ def test_test_bevattning_all_zones(client, mock_modbus):
     assert data["ok"] is True
     assert "test_results" in data
     assert len(data["zones_tested"]) == 7  # All 7 zones
+
+
+def test_test_bevattning_all_zones_without_confirmation(client, mock_modbus):
+    """Test zone testing endpoint for all zones requires confirmation"""
+    response = client.post(
+        "/menu/test-bevattning",
+        json={"duration_seconds": 1},
+        headers={"X-API-Key": API_KEY}
+    )
+    # Should fail without confirmation
+    assert response.status_code == 400
+    data = response.json()
+    assert "all_zones_confirmed" in data["detail"]
 
 
 def test_lagesval_auto_mode(client, mock_modbus):

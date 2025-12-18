@@ -47,6 +47,10 @@ MW_TEST_ZONE_RESULT = 81   # Test resultat för aktuell zon (bitmask för zoner 
 MW_ERROR_RESET = 82        # Error reset trigger (skriv 1 för att nollställa fel)
 MW_AUTO_OVERRIDE = 33      # AutoOverride från befintlig mappning
 
+# Zone constants
+MIN_ZONE = 1
+MAX_ZONE = 7
+
 app = FastAPI(title="Bevattning API", version="0.3")
 
 
@@ -162,9 +166,14 @@ class ConfigUpdate(BaseModel):
 
 
 class TestZoneCommand(BaseModel):
-    """Command för att testa en specifik zon eller alla zoner"""
+    """
+    Command för att testa en specifik zon eller alla zoner.
+    OBSERVERA: Test av alla zoner tar flera minuter och blockerar API under tiden.
+    Rekommenderas att köras när systemet inte används aktivt.
+    """
     zone: Optional[int] = None  # Om None, testa alla zoner sekventiellt
     duration_seconds: int = 60  # Testlängd per zon (default 60 sekunder)
+    all_zones_confirmed: bool = False  # Säkerhetskontroll för test av alla zoner
 
 
 @app.get("/status")
@@ -342,10 +351,21 @@ def test_bevattning(cmd: TestZoneCommand, x_api_key: Optional[str] = Header(None
     """
     Test Bevattning - Pre-season zone check.
     Testar varje zon i 1 minut (eller angivet antal sekunder) för att verifiera funktion.
+    
+    VARNING: Denna operation blockerar API under testperioden.
+    Test av alla zoner kräver all_zones_confirmed=true som säkerhetskontroll.
     """
     require_key(x_api_key)
     
-    zones_to_test = [cmd.zone] if cmd.zone is not None else list(range(1, 8))
+    zones_to_test = [cmd.zone] if cmd.zone is not None else list(range(MIN_ZONE, MAX_ZONE + 1))
+    
+    # Säkerhetskontroll för test av alla zoner
+    if cmd.zone is None and not cmd.all_zones_confirmed:
+        raise HTTPException(
+            status_code=400,
+            detail="Test av alla zoner kräver all_zones_confirmed=true (detta tar flera minuter)"
+        )
+    
     test_results = {}
     
     with get_modbus_connection() as client:
@@ -355,7 +375,7 @@ def test_bevattning(cmd: TestZoneCommand, x_api_key: Optional[str] = Header(None
             raise HTTPException(status_code=502, detail="Modbus write error")
         
         for zone in zones_to_test:
-            if zone < 1 or zone > 7:
+            if zone < MIN_ZONE or zone > MAX_ZONE:
                 continue
                 
             # Välj zon
@@ -371,6 +391,8 @@ def test_bevattning(cmd: TestZoneCommand, x_api_key: Optional[str] = Header(None
                 continue
             
             # Vänta för testperioden
+            # NOTE: This blocks the API thread. Consider running tests via separate process/service
+            # for production use to avoid blocking concurrent API requests.
             time.sleep(cmd.duration_seconds)
             
             # Stoppa
@@ -388,8 +410,9 @@ def test_bevattning(cmd: TestZoneCommand, x_api_key: Optional[str] = Header(None
             else:
                 test_results[f"zone_{zone}"] = "failed_log"
             
-            # Kort paus mellan zoner
-            time.sleep(2)
+            # Kort paus mellan zoner för att undvika att överbelasta systemet
+            if len(zones_to_test) > 1:
+                time.sleep(2)
         
         # Avaktivera test mode
         client.write_register(MW_TEST_MODE, 0, unit=MODBUS_UNIT)
@@ -501,6 +524,7 @@ def reset_error(x_api_key: Optional[str] = Header(None)):
         if rr is None or (hasattr(rr, "isError") and rr.isError()):
             raise HTTPException(status_code=502, detail="Modbus write error")
         
+        # Kort paus för att PLC ska hinna processa reset
         time.sleep(0.5)
         
         rr = client.write_register(MW_ERROR_RESET, 0, unit=MODBUS_UNIT)
@@ -807,7 +831,7 @@ async function stopAll() {
 }
 
 async function testAllZones() {
-  if (!confirm('Starta test av alla zoner? Detta tar ca 7-8 minuter (1 min per zon).')) {
+  if (!confirm('Starta test av alla zoner? Detta tar ca 7-8 minuter (1 min per zon) och blockerar API under tiden.')) {
     return;
   }
   
@@ -817,7 +841,7 @@ async function testAllZones() {
     const r = await fetch('/menu/test-bevattning', {
       method: 'POST',
       headers: {'X-API-Key': key, 'Content-Type': 'application/json'},
-      body: JSON.stringify({duration_seconds: 60})
+      body: JSON.stringify({duration_seconds: 60, all_zones_confirmed: true})
     });
     
     if (!r.ok) {
