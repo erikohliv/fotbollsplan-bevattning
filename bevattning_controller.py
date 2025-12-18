@@ -342,7 +342,7 @@ def main_once(args):
     else:
         logger.debug("Ingen auto-start (auto_start=%s, tider %d/%d)", args.auto_start, tid_center, tid_horn)
         if tid_center == 0 and tid_horn == 0:
-            logger.info("=== BEVATTNING BLOCKERAD: Tider satta till 0 ===\")
+            logger.info("=== BEVATTNING BLOCKERAD: Tider satta till 0 ===")
 
     return {
         "temp": temp,
