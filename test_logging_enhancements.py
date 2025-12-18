@@ -241,7 +241,7 @@ class TestProcessViewErrorDetails:
         
         # Block reason 0 should be OK and not blocked
         assert block_status['code'] == 0
-        assert block_status['blocked'] == False
+        assert block_status['blocked'] is False
         assert 'OK' in block_status['text']
     
     def test_process_view_error_severity_levels(self, client):
@@ -285,7 +285,7 @@ class TestProcessViewErrorDetails:
             data = response.json()
             
             # E-stop should be critical severity
-            assert data['error_details']['e_stop']['active'] == True
+            assert data['error_details']['e_stop']['active'] is True
             assert data['error_details']['e_stop']['severity'] == 'critical'
 
 

@@ -443,14 +443,14 @@ def update_critical_error_banner(process_json):
                 
                 return html.Div(
                     error_items,
+                    id='critical-error-banner-content',
                     style={
                         'backgroundColor': '#d32f2f',
                         'color': 'white',
                         'padding': '20px',
                         'margin': '0 20px 20px 20px',
                         'borderRadius': '8px',
-                        'boxShadow': '0 4px 8px rgba(0,0,0,0.3)',
-                        'animation': 'pulse 2s infinite'
+                        'boxShadow': '0 4px 8px rgba(0,0,0,0.3)'
                     }
                 )
     except Exception as e:
