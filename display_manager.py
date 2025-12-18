@@ -315,6 +315,14 @@ class ModbusReader:
                 return None
 
         return self._client
+
+    def _handle_modbus_exception(self, exc: Exception, context: str):
+        """Shared Modbus exception handler with reset"""
+        if isinstance(exc, (ConnectionException, ModbusIOException)):
+            logger.debug(f"{context} exception: {exc}")
+        else:
+            logger.warning(f"Unexpected {context} exception: {exc}")
+        self._reset_client()
     
     def read_registers(self, address: int, count: int = 1, use_cache: bool = True) -> Optional[list]:
         """Read holding registers from Modbus with optional caching"""
@@ -340,6 +348,7 @@ class ModbusReader:
                 return None
             if hasattr(result, 'isError') and result.isError():
                 logger.debug(f"Modbus read error at {address}")
+                self._reset_client()
                 return None
             
             data = result.registers
@@ -349,13 +358,8 @@ class ModbusReader:
                 self._cache[cache_key] = (data, time.time())
             
             return data
-        except (ConnectionException, ModbusIOException) as e:
-            logger.debug(f"Modbus exception: {e}")
-            self._reset_client()
-            return None
         except Exception as e:
-            logger.warning(f"Unexpected Modbus exception: {e}")
-            self._reset_client()
+            self._handle_modbus_exception(e, "Modbus read")
             return None
     
     def clear_cache(self):
@@ -376,6 +380,7 @@ class ModbusReader:
                 return False
             if hasattr(result, 'isError') and result.isError():
                 logger.debug(f"Modbus write error at {address}")
+                self._reset_client()
                 return False
             
             # Invalidate cache for this register
@@ -384,13 +389,8 @@ class ModbusReader:
                 del self._cache[key]
             
             return True
-        except (ConnectionException, ModbusIOException) as e:
-            logger.debug(f"Modbus write exception: {e}")
-            self._reset_client()
-            return False
         except Exception as e:
-            logger.warning(f"Unexpected Modbus write exception: {e}")
-            self._reset_client()
+            self._handle_modbus_exception(e, "Modbus write")
             return False
 
 
