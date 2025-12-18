@@ -33,7 +33,7 @@ except ImportError:
 
 try:
     from pymodbus.exceptions import ModbusIOException, ConnectionException
-except Exception:
+except ImportError:
     ModbusIOException = ConnectionException = Exception
 
 
@@ -281,8 +281,10 @@ class ModbusReader:
         if self._client:
             try:
                 self._client.close()
-            except Exception as e:
+            except OSError as e:
                 logger.debug(f"Error closing Modbus client: {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error closing Modbus client: {e}")
         self._client = None
         self._client_connected = False
 
@@ -332,9 +334,12 @@ class ModbusReader:
         try:
             result = client.read_holding_registers(address, count, unit=self.unit)
             
-            if result is None or (hasattr(result, 'isError') and result.isError()):
+            if result is None:
                 logger.debug(f"Modbus read error at {address}")
                 self._reset_client()
+                return None
+            if hasattr(result, 'isError') and result.isError():
+                logger.debug(f"Modbus read error at {address}")
                 return None
             
             data = result.registers
@@ -365,9 +370,12 @@ class ModbusReader:
         try:
             result = client.write_register(address, int(value), unit=self.unit)
             
-            if result is None or (hasattr(result, 'isError') and result.isError()):
+            if result is None:
                 logger.debug(f"Modbus write error at {address}")
                 self._reset_client()
+                return False
+            if hasattr(result, 'isError') and result.isError():
+                logger.debug(f"Modbus write error at {address}")
                 return False
             
             # Invalidate cache for this register
