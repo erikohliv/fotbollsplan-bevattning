@@ -268,6 +268,42 @@ class ModbusReader:
         self.unit = unit
         self.cache_duration = cache_duration  # Cache duration in seconds
         self._cache = {}  # {(address, count): (data, timestamp)}
+        self._client = None
+        self._client_connected = False
+
+    def _reset_client(self):
+        """Close and reset Modbus client"""
+        if self._client:
+            try:
+                self._client.close()
+            except Exception:
+                pass
+        self._client = None
+        self._client_connected = False
+
+    def _get_client(self):
+        """Get or create a persistent Modbus client connection"""
+        if ModbusTcpClient is None:
+            logger.warning("pymodbus not available")
+            return None
+
+        if self._client is None:
+            self._client = ModbusTcpClient(self.host, port=self.port, timeout=2)
+            self._client_connected = False
+
+        if not self._client_connected:
+            try:
+                if not self._client.connect():
+                    logger.debug("Modbus connection failed")
+                    self._reset_client()
+                    return None
+                self._client_connected = True
+            except Exception as e:
+                logger.debug(f"Modbus connection exception: {e}")
+                self._reset_client()
+                return None
+
+        return self._client
     
     def read_registers(self, address: int, count: int = 1, use_cache: bool = True) -> Optional[list]:
         """Read holding registers from Modbus with optional caching"""
@@ -281,21 +317,15 @@ class ModbusReader:
                 logger.debug(f"Using cached Modbus data for addr {address} (age: {age:.3f}s)")
                 return cached_data
         
-        if ModbusTcpClient is None:
-            logger.warning("pymodbus not available")
+        client = self._get_client()
+        if client is None:
             return None
-        
-        client = ModbusTcpClient(self.host, port=self.port, timeout=2)
         try:
-            if not client.connect():
-                logger.debug("Modbus connection failed")
-                return None
-            
             result = client.read_holding_registers(address, count, unit=self.unit)
-            client.close()
             
             if result is None or (hasattr(result, 'isError') and result.isError()):
                 logger.debug(f"Modbus read error at {address}")
+                self._reset_client()
                 return None
             
             data = result.registers
@@ -307,10 +337,7 @@ class ModbusReader:
             return data
         except Exception as e:
             logger.debug(f"Modbus exception: {e}")
-            try:
-                client.close()
-            except Exception:
-                pass
+            self._reset_client()
             return None
     
     def clear_cache(self):
@@ -319,21 +346,15 @@ class ModbusReader:
     
     def write_register(self, address: int, value: int) -> bool:
         """Write single holding register to Modbus"""
-        if ModbusTcpClient is None:
-            logger.warning("pymodbus not available")
+        client = self._get_client()
+        if client is None:
             return False
-        
-        client = ModbusTcpClient(self.host, port=self.port, timeout=2)
         try:
-            if not client.connect():
-                logger.debug("Modbus connection failed")
-                return False
-            
             result = client.write_register(address, int(value), unit=self.unit)
-            client.close()
             
             if result is None or (hasattr(result, 'isError') and result.isError()):
                 logger.debug(f"Modbus write error at {address}")
+                self._reset_client()
                 return False
             
             # Invalidate cache for this register
@@ -344,10 +365,7 @@ class ModbusReader:
             return True
         except Exception as e:
             logger.debug(f"Modbus write exception: {e}")
-            try:
-                client.close()
-            except Exception:
-                pass
+            self._reset_client()
             return False
 
 

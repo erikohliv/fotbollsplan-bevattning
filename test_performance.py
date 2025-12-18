@@ -33,17 +33,20 @@ class TestModbusCaching(unittest.TestCase):
         result1 = reader.read_registers(50, 3)
         self.assertEqual(result1, [1, 2, 3])
         self.assertEqual(mock_client.connect.call_count, 1)
+        self.assertEqual(mock_client.read_holding_registers.call_count, 1)
         
         # Second read within cache window - should use cache
         result2 = reader.read_registers(50, 3)
         self.assertEqual(result2, [1, 2, 3])
         self.assertEqual(mock_client.connect.call_count, 1)  # No new connection
+        self.assertEqual(mock_client.read_holding_registers.call_count, 1)  # Still cached
         
         # Third read after cache expires - should hit Modbus again
         time.sleep(1.1)
         result3 = reader.read_registers(50, 3)
         self.assertEqual(result3, [1, 2, 3])
-        self.assertEqual(mock_client.connect.call_count, 2)  # New connection
+        self.assertEqual(mock_client.connect.call_count, 1)  # Reuses persistent connection
+        self.assertEqual(mock_client.read_holding_registers.call_count, 2)  # New Modbus read
     
     @patch('display_manager.ModbusTcpClient')
     def test_cache_invalidation_on_write(self, mock_client_class):
@@ -66,14 +69,17 @@ class TestModbusCaching(unittest.TestCase):
         result1 = reader.read_registers(50, 1)
         self.assertEqual(result1, [100])
         self.assertEqual(mock_client.connect.call_count, 1)
+        self.assertEqual(mock_client.read_holding_registers.call_count, 1)
         
         # Write to same register - should invalidate cache
         reader.write_register(50, 200)
+        self.assertEqual(mock_client.write_register.call_count, 1)
         
         # Read again - should hit Modbus since cache was invalidated
         result2 = reader.read_registers(50, 1)
         self.assertEqual(result2, [100])
-        self.assertEqual(mock_client.connect.call_count, 3)  # 1 read + 1 write + 1 read
+        self.assertEqual(mock_client.connect.call_count, 1)  # Persistent connection reused
+        self.assertEqual(mock_client.read_holding_registers.call_count, 2)
     
     @patch('display_manager.ModbusTcpClient')
     def test_no_cache_when_disabled(self, mock_client_class):
@@ -93,11 +99,13 @@ class TestModbusCaching(unittest.TestCase):
         result1 = reader.read_registers(50, 1, use_cache=False)
         self.assertEqual(result1, [42])
         self.assertEqual(mock_client.connect.call_count, 1)
+        self.assertEqual(mock_client.read_holding_registers.call_count, 1)
         
         # Read again without cache - should hit Modbus again
         result2 = reader.read_registers(50, 1, use_cache=False)
         self.assertEqual(result2, [42])
-        self.assertEqual(mock_client.connect.call_count, 2)
+        self.assertEqual(mock_client.connect.call_count, 1)  # Connection reused
+        self.assertEqual(mock_client.read_holding_registers.call_count, 2)  # Still performs read calls
 
 
 class TestWeatherCaching(unittest.TestCase):
