@@ -339,6 +339,10 @@ class ModbusReader:
             if key[0] <= address <= key[0] + key[1] - 1:
                 del self._cache[key]
     
+    def close(self):
+        """Public close to release persistent Modbus connection"""
+        self._reset_client()
+    
     def read_registers(self, address: int, count: int = 1, use_cache: bool = True) -> Optional[list]:
         """Read holding registers from Modbus with optional caching"""
         cache_key = (address, count)
@@ -602,6 +606,7 @@ class Display1Manager:
                 self.thread.join(timeout=2)
             self.lcd.clear()
             self.lcd.close()
+            self.modbus.close()
 
 
 class Display2Manager:
@@ -827,6 +832,7 @@ class Display2Manager:
                 self.thread.join(timeout=2)
             self.lcd.clear()
             self.lcd.close()
+            self.modbus.close()
             
             if self.gpio_available and self.GPIO:
                 try:
