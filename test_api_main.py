@@ -4,6 +4,7 @@ Test suite for api_main.py endpoints
 """
 
 import pytest
+import logging
 from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch, MagicMock
 import sys
@@ -17,7 +18,7 @@ mock_modbus_client = MagicMock()
 sys.modules['pymodbus'] = MagicMock()
 sys.modules['pymodbus.client'] = MagicMock()
 
-from api_main import app, API_KEY
+from api_main import app, API_KEY, USER_MODBUS_ERROR
 
 
 @pytest.fixture
@@ -64,6 +65,27 @@ def test_status_authorized(client, mock_modbus):
     assert "zone" in data
     assert "pump_on" in data
     assert "block_reason" in data
+
+
+def test_status_modbus_failure_is_sanitized(client, caplog):
+    """Ensure Modbusfel loggas men användaren får ett generellt felmeddelande"""
+    error_result = MagicMock()
+    error_result.isError.return_value = True
+    error_result.registers = []
+
+    with patch('api_main.mb_client') as mock:
+        mock_client_instance = MagicMock()
+        mock_client_instance.connect.return_value = True
+        mock_client_instance.close.return_value = None
+        mock_client_instance.read_holding_registers.return_value = error_result
+        mock.return_value = mock_client_instance
+
+        with caplog.at_level(logging.WARNING, logger="bevattning.api"):
+            response = client.get("/status", headers={"X-API-Key": API_KEY})
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == USER_MODBUS_ERROR
+    assert any("read status registers MW50-53" in message for message in caplog.messages)
 
 
 def test_manual_command_default_time(client, mock_modbus):

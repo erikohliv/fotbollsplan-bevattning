@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from typing import Optional
@@ -17,6 +18,15 @@ except Exception:
         ModbusTcpClient = None
 
 load_dotenv()
+
+logger = logging.getLogger("bevattning.api")
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+USER_MODBUS_ERROR = "PLC-kommunikation misslyckades. Försök igen eller kontakta drift."
 
 API_KEY = os.getenv("API_KEY", "change-me")
 MODBUS_HOST = os.getenv("MODBUS_HOST", "127.0.0.1")
@@ -96,6 +106,26 @@ def clamp_temp(value: int) -> int:
     return max(-30, min(50, value))
 
 
+def _modbus_failed(rr) -> bool:
+    return rr is None or (hasattr(rr, "isError") and rr.isError())
+
+
+def _raise_modbus_error(context: str):
+    logger.warning(
+        "Modbusfel: %s (host=%s port=%s unit=%s)",
+        context,
+        MODBUS_HOST,
+        MODBUS_PORT,
+        MODBUS_UNIT,
+    )
+    raise HTTPException(status_code=502, detail=USER_MODBUS_ERROR)
+
+
+def _ensure_modbus_ok(rr, context: str):
+    if _modbus_failed(rr):
+        _raise_modbus_error(context)
+
+
 def mb_client():
     if ModbusTcpClient is None:
         raise HTTPException(status_code=500, detail="pymodbus not installed")
@@ -108,8 +138,14 @@ def get_modbus_connection():
     client = mb_client()
     try:
         if not client.connect():
-            raise HTTPException(status_code=502, detail="Modbus connect failed")
+            _raise_modbus_error("connect")
+        logger.debug("Modbusanslutning etablerad")
         yield client
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Modbus-undantag: %s", exc)
+        raise HTTPException(status_code=502, detail=USER_MODBUS_ERROR)
     finally:
         try:
             client.close()
@@ -120,16 +156,16 @@ def get_modbus_connection():
 def read_regs(address, count=1):
     with get_modbus_connection() as client:
         rr = client.read_holding_registers(address, count, unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus read error")
+        _ensure_modbus_ok(rr, f"read_holding_registers addr={address} count={count}")
+        logger.debug("Modbus read addr=%s count=%s -> %s", address, count, getattr(rr, "registers", []))
         return rr.registers
 
 
 def write_reg(address, value):
     with get_modbus_connection() as client:
         rr = client.write_register(address, int(value), unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus write error")
+        _ensure_modbus_ok(rr, f"write_register addr={address} value={value}")
+        logger.debug("Modbus write addr=%s value=%s", address, value)
         return True
 
 
@@ -137,8 +173,8 @@ def write_regs_bulk(start_address, values):
     """Write multiple registers at once for better performance."""
     with get_modbus_connection() as client:
         rr = client.write_registers(start_address, [int(v) for v in values], unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus write error")
+        _ensure_modbus_ok(rr, f"write_registers start={start_address} values={values}")
+        logger.debug("Modbus bulk write start=%s values=%s", start_address, values)
         return True
 
 
@@ -187,11 +223,9 @@ def status(x_api_key: Optional[str] = Header(None)):
     # Group 2: MW70-73 (heartbeat data)
     with get_modbus_connection() as client:
         rr1 = client.read_holding_registers(MW_STATUS_ZONE, 4, unit=MODBUS_UNIT)
-        if rr1 is None or (hasattr(rr1, "isError") and rr1.isError()):
-            raise HTTPException(status_code=502, detail="Modbus read error")
+        _ensure_modbus_ok(rr1, "read status registers MW50-53")
         rr2 = client.read_holding_registers(MW_HEARTBEAT, 4, unit=MODBUS_UNIT)
-        if rr2 is None or (hasattr(rr2, "isError") and rr2.isError()):
-            raise HTTPException(status_code=502, detail="Modbus read error")
+        _ensure_modbus_ok(rr2, "read heartbeat registers MW70-73")
     
     return {
         "zone": rr1.registers[0],
@@ -210,17 +244,16 @@ def _pulse_remote_command(value: int, pulse_seconds: float = 1.0):
     """Helper function to pulse Remote_Command register"""
     with get_modbus_connection() as client:
         rr = client.write_register(MW_REMOTE_CMD, value, unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus write error")
+        _ensure_modbus_ok(rr, f"pulse start remote_command value={value}")
         time.sleep(pulse_seconds)
         rr = client.write_register(MW_REMOTE_CMD, 0, unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus write error")
+        _ensure_modbus_ok(rr, "pulse stop remote_command")
 
 
 @app.post("/command/start-auto")
 def start_auto(x_api_key: Optional[str] = Header(None), pulse_seconds: float = 1.0):
     require_key(x_api_key)
+    logger.info("Startar auto-program via API")
     _pulse_remote_command(50, pulse_seconds)
     return {"ok": True}
 
@@ -232,6 +265,7 @@ def start_night_program(x_api_key: Optional[str] = Header(None), pulse_seconds: 
     Detta tvingar fram en "natt körning" genom att aktivera auto-mode.
     """
     require_key(x_api_key)
+    logger.info("Natt-program startas via API")
     _pulse_remote_command(50, pulse_seconds)
     return {"ok": True, "message": "Natt-program startat (alla zoner)"}
 
@@ -245,15 +279,14 @@ def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
     """
     require_key(x_api_key)
     zone = validate_zone(cmd.zone)
+    logger.info("Manuell körning initieras för zon %s", zone)
     # Write selected zone and pulse manual start
     with get_modbus_connection() as client:
         rr = client.write_register(MW_SET_SELECTED, zone, unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus write error")
+        _ensure_modbus_ok(rr, f"set selected zone {zone}")
         # Pulse manual start
         rr = client.write_register(MW_MANUAL_START, 1, unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus write error")
+        _ensure_modbus_ok(rr, f"manual start for zone {zone}")
     return {"ok": True, "zone": zone, "note": "Manual mode runs only the selected zone using auto times"}
 
 
@@ -261,6 +294,7 @@ def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
 def set_zone(cmd: SetZone, x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
     zone = validate_zone(cmd.zone)
+    logger.info("Zon %s vald manuellt", zone)
     write_reg(MW_SET_SELECTED, zone)
     return {"ok": True, "zone": zone}
 
@@ -281,37 +315,34 @@ def set_manual_time(cmd: SetManualTime, x_api_key: Optional[str] = Header(None))
 @app.post("/command/stop")
 def stop(x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
+    logger.info("Stopp-kommando mottaget")
     # Reuse connection for multiple writes
     with get_modbus_connection() as client:
         rr = client.write_register(MW_REMOTE_CMD, 0, unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus write error")
+        _ensure_modbus_ok(rr, "stop remote command")
         rr = client.write_register(MW_MODE_OVERRIDE, 0, unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus write error")
+        _ensure_modbus_ok(rr, "reset mode override")
     return {"ok": True}
 
 
 @app.post("/config")
 def config(cfg: ConfigUpdate, x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
+    logger.info("Konfiguration uppdateras: %s", cfg.model_dump(exclude_none=True))
     # Reuse connection for multiple writes - connection already optimized
     with get_modbus_connection() as client:
         # Optimize: Use bulk write for consecutive registers MW20-21 when both provided
         if cfg.tid_center is not None and cfg.tid_horn is not None:
             values = [clamp_tid_center(cfg.tid_center), clamp_tid_horn(cfg.tid_horn)]
             rr = client.write_registers(MW_TID_CENTER, values, unit=MODBUS_UNIT)
-            if rr is None or (hasattr(rr, "isError") and rr.isError()):
-                raise HTTPException(status_code=502, detail="Modbus write error")
+            _ensure_modbus_ok(rr, f"write tid_center/tid_horn values={values}")
         else:
             if cfg.tid_center is not None:
                 rr = client.write_register(MW_TID_CENTER, clamp_tid_center(cfg.tid_center), unit=MODBUS_UNIT)
-                if rr is None or (hasattr(rr, "isError") and rr.isError()):
-                    raise HTTPException(status_code=502, detail="Modbus write error")
+                _ensure_modbus_ok(rr, f"write tid_center value={cfg.tid_center}")
             if cfg.tid_horn is not None:
                 rr = client.write_register(MW_TID_HORN, clamp_tid_horn(cfg.tid_horn), unit=MODBUS_UNIT)
-                if rr is None or (hasattr(rr, "isError") and rr.isError()):
-                    raise HTTPException(status_code=502, detail="Modbus write error")
+                _ensure_modbus_ok(rr, f"write tid_horn value={cfg.tid_horn}")
         
         # Optimize: Use bulk write for consecutive registers MW30-32 when all three provided
         if cfg.markfukt is not None and cfg.regen24 is not None and cfg.temp_c is not None:
@@ -319,21 +350,17 @@ def config(cfg: ConfigUpdate, x_api_key: Optional[str] = Header(None)):
                      clamp_regen(cfg.regen24), 
                      clamp_temp(cfg.temp_c)]
             rr = client.write_registers(MW_MARKFUKT, values, unit=MODBUS_UNIT)
-            if rr is None or (hasattr(rr, "isError") and rr.isError()):
-                raise HTTPException(status_code=502, detail="Modbus write error")
+            _ensure_modbus_ok(rr, f"write markfukt/regen24/temp_c values={values}")
         else:
             if cfg.markfukt is not None:
                 rr = client.write_register(MW_MARKFUKT, clamp_markfukt(cfg.markfukt), unit=MODBUS_UNIT)
-                if rr is None or (hasattr(rr, "isError") and rr.isError()):
-                    raise HTTPException(status_code=502, detail="Modbus write error")
+                _ensure_modbus_ok(rr, f"write markfukt value={cfg.markfukt}")
             if cfg.regen24 is not None:
                 rr = client.write_register(MW_REGEN24, clamp_regen(cfg.regen24), unit=MODBUS_UNIT)
-                if rr is None or (hasattr(rr, "isError") and rr.isError()):
-                    raise HTTPException(status_code=502, detail="Modbus write error")
+                _ensure_modbus_ok(rr, f"write regen24 value={cfg.regen24}")
             if cfg.temp_c is not None:
                 rr = client.write_register(MW_TEMP, clamp_temp(cfg.temp_c), unit=MODBUS_UNIT)
-                if rr is None or (hasattr(rr, "isError") and rr.isError()):
-                    raise HTTPException(status_code=502, detail="Modbus write error")
+                _ensure_modbus_ok(rr, f"write temp_c value={cfg.temp_c}")
         
         # manual_time is deprecated - kept for backward compatibility but does nothing
         if cfg.manual_time is not None:
@@ -341,8 +368,7 @@ def config(cfg: ConfigUpdate, x_api_key: Optional[str] = Header(None)):
             pass
         if cfg.mode_override is not None:
             rr = client.write_register(MW_MODE_OVERRIDE, 1 if cfg.mode_override == 1 else 0, unit=MODBUS_UNIT)
-            if rr is None or (hasattr(rr, "isError") and rr.isError()):
-                raise HTTPException(status_code=502, detail="Modbus write error")
+            _ensure_modbus_ok(rr, f"write mode_override value={cfg.mode_override}")
     return {"ok": True}
 
 
@@ -369,10 +395,10 @@ def test_bevattning(cmd: TestZoneCommand, x_api_key: Optional[str] = Header(None
     test_results = {}
     
     with get_modbus_connection() as client:
+        logger.info("Startar zontest: zones=%s duration=%ss", zones_to_test, cmd.duration_seconds)
         # Aktivera test mode
         rr = client.write_register(MW_TEST_MODE, 1, unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus write error")
+        _ensure_modbus_ok(rr, "enable test mode")
         
         for zone in zones_to_test:
             if zone < MIN_ZONE or zone > MAX_ZONE:
@@ -380,13 +406,15 @@ def test_bevattning(cmd: TestZoneCommand, x_api_key: Optional[str] = Header(None
                 
             # Välj zon
             rr = client.write_register(MW_SET_SELECTED, zone, unit=MODBUS_UNIT)
-            if rr is None or (hasattr(rr, "isError") and rr.isError()):
+            if _modbus_failed(rr):
+                logger.warning("Misslyckades välja zon %s under test", zone)
                 test_results[f"zone_{zone}"] = "failed_zone_select"
                 continue
             
             # Starta manuell körning
             rr = client.write_register(MW_MANUAL_START, 1, unit=MODBUS_UNIT)
-            if rr is None or (hasattr(rr, "isError") and rr.isError()):
+            if _modbus_failed(rr):
+                logger.warning("Misslyckades starta test för zon %s", zone)
                 test_results[f"zone_{zone}"] = "failed_start"
                 continue
             
@@ -397,13 +425,14 @@ def test_bevattning(cmd: TestZoneCommand, x_api_key: Optional[str] = Header(None
             
             # Stoppa
             rr = client.write_register(MW_REMOTE_CMD, 0, unit=MODBUS_UNIT)
-            if rr is None or (hasattr(rr, "isError") and rr.isError()):
+            if _modbus_failed(rr):
+                logger.warning("Misslyckades stoppa test för zon %s", zone)
                 test_results[f"zone_{zone}"] = "failed_stop"
                 continue
                 
             # Markera som testad (sätt bit i test result register)
             current_result = client.read_holding_registers(MW_TEST_ZONE_RESULT, 1, unit=MODBUS_UNIT)
-            if current_result is not None and not (hasattr(current_result, "isError") and current_result.isError()):
+            if current_result is not None and not _modbus_failed(current_result):
                 result_value = current_result.registers[0] | (1 << (zone - 1))
                 client.write_register(MW_TEST_ZONE_RESULT, result_value, unit=MODBUS_UNIT)
                 test_results[f"zone_{zone}"] = "success"
@@ -415,7 +444,8 @@ def test_bevattning(cmd: TestZoneCommand, x_api_key: Optional[str] = Header(None
                 time.sleep(2)
         
         # Avaktivera test mode
-        client.write_register(MW_TEST_MODE, 0, unit=MODBUS_UNIT)
+        rr = client.write_register(MW_TEST_MODE, 0, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr, "disable test mode")
     
     return {
         "ok": True,
@@ -439,8 +469,7 @@ def lagesval(mode: int, x_api_key: Optional[str] = Header(None)):
     with get_modbus_connection() as client:
         # Kontrollera block reason - vissa tillstånd kan förhindra lägesändring
         block_check = client.read_holding_registers(MW_BLOCK_REASON, 1, unit=MODBUS_UNIT)
-        if block_check is None or (hasattr(block_check, "isError") and block_check.isError()):
-            raise HTTPException(status_code=502, detail="Cannot read block status")
+        _ensure_modbus_ok(block_check, "read block status")
         
         block_reason = block_check.registers[0]
         if block_reason == 4:  # E-stop
@@ -448,9 +477,9 @@ def lagesval(mode: int, x_api_key: Optional[str] = Header(None)):
         
         # Sätt mode
         rr = client.write_register(MW_MODE_OVERRIDE, mode, unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus write error")
+        _ensure_modbus_ok(rr, f"write mode {mode}")
     
+    logger.info("Lägesval ändrat till %s", "Auto" if mode == 1 else "Manual")
     return {
         "ok": True,
         "mode": "Auto" if mode == 1 else "Manual",
@@ -470,10 +499,8 @@ def felsokning(x_api_key: Optional[str] = Header(None)):
         status_regs = client.read_holding_registers(MW_STATUS_ZONE, 4, unit=MODBUS_UNIT)
         heartbeat_regs = client.read_holding_registers(MW_HEARTBEAT, 4, unit=MODBUS_UNIT)
         
-        if status_regs is None or (hasattr(status_regs, "isError") and status_regs.isError()):
-            raise HTTPException(status_code=502, detail="Cannot read status registers")
-        if heartbeat_regs is None or (hasattr(heartbeat_regs, "isError") and heartbeat_regs.isError()):
-            raise HTTPException(status_code=502, detail="Cannot read heartbeat registers")
+        _ensure_modbus_ok(status_regs, "read felsökning status registers")
+        _ensure_modbus_ok(heartbeat_regs, "read felsökning heartbeat registers")
         
         block_reason = heartbeat_regs.registers[3]
         eventmask = heartbeat_regs.registers[2]
@@ -519,21 +546,20 @@ def reset_error(x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
     
     with get_modbus_connection() as client:
+        logger.info("Återställer felstatus via API")
         # Pulsera error reset
         rr = client.write_register(MW_ERROR_RESET, 1, unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus write error")
+        _ensure_modbus_ok(rr, "error reset on")
         
         # Kort paus för att PLC ska hinna processa reset
         time.sleep(0.5)
         
         rr = client.write_register(MW_ERROR_RESET, 0, unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus write error")
+        _ensure_modbus_ok(rr, "error reset off")
         
         # Läs status efter reset
         block_check = client.read_holding_registers(MW_BLOCK_REASON, 1, unit=MODBUS_UNIT)
-        if block_check is None or (hasattr(block_check, "isError") and block_check.isError()):
+        if _modbus_failed(block_check):
             new_block_reason = -1
         else:
             new_block_reason = block_check.registers[0]
