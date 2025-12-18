@@ -1273,7 +1273,7 @@ def get_process_view(x_api_key: Optional[str] = Header(None)):
             "selected": (selected_zone == zone_num)
         })
     
-    # Tolka fel och blockeringar
+    # Tolka fel och blockeringar med förklaringar
     errors = {
         "e_stop": bool(eventmask & 0x01),
         "moisture_block": bool(eventmask & 0x02) and block_reason == 2,
@@ -1282,13 +1282,54 @@ def get_process_view(x_api_key: Optional[str] = Header(None)):
         "sequence_active": bool(eventmask & 0x04)
     }
     
-    # Block reason text
+    error_details = {
+        "e_stop": {
+            "active": errors["e_stop"],
+            "text": "E-stop aktiv",
+            "explanation": "Nödstoppet är aktiverat. Kontrollera fysisk nödstopp-knapp och systemstatus.",
+            "severity": "critical"
+        },
+        "moisture_block": {
+            "active": errors["moisture_block"],
+            "text": "Markfukt-block",
+            "explanation": f"Markfukten ({env_regs.registers[0]}%) är över tröskelvärdet. Bevattning blockeras.",
+            "severity": "warning"
+        },
+        "rain_block": {
+            "active": errors["rain_block"],
+            "text": "Regn-block",
+            "explanation": f"Nederbörd senaste 24h ({env_regs.registers[1]} mm) är över tröskelvärdet. Bevattning blockeras.",
+            "severity": "warning"
+        },
+        "anti_collision": {
+            "active": errors["anti_collision"],
+            "text": "Anti-kollision",
+            "explanation": "Pumpen är upptagen av en annan process. Vänta tills aktuell körning är klar.",
+            "severity": "info"
+        },
+        "sequence_active": {
+            "active": errors["sequence_active"],
+            "text": "Sekvens aktiv",
+            "explanation": f"En bevattningssekvens körs (Steg {steg}, Zon {current_zone}).",
+            "severity": "info"
+        }
+    }
+    
+    # Block reason text with detailed explanations
     block_reasons = {
         0: "OK",
         1: "Regn över tröskel",
         2: "Markfukt över tröskel",
         3: "Anti-kollision/Pump upptagen",
         4: "E-stop aktiv"
+    }
+    
+    block_explanations = {
+        0: "Systemet fungerar normalt. Inga aktiva blockeringar.",
+        1: f"Nederbörd senaste 24h ({env_regs.registers[1]} mm) överstiger tröskelvärdet. Bevattning pausas automatiskt.",
+        2: f"Markfukten ({env_regs.registers[0]}%) överstiger tröskelvärdet. Bevattning pausas automatiskt.",
+        3: "En annan sekvens eller process använder pumpen. Vänta tills den är klar.",
+        4: "Nödstopp är aktiverat. Kontrollera fysisk E-stop-knapp och återställ innan körning."
     }
     
     mode_value = mode_reg.registers[0]
@@ -1311,9 +1352,11 @@ def get_process_view(x_api_key: Optional[str] = Header(None)):
             "current_zone": current_zone
         },
         "errors": errors,
+        "error_details": error_details,
         "block_status": {
             "code": block_reason,
             "text": block_reasons.get(block_reason, f"Okänd kod {block_reason}"),
+            "explanation": block_explanations.get(block_reason, f"Okänd blockeringskod: {block_reason}"),
             "blocked": block_reason != 0
         },
         "environment": {

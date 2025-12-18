@@ -97,7 +97,7 @@ def make_api_request(endpoint: str, method: str = "GET", json_data: Dict = None)
 
 
 def create_zone_figure(zones_data: List[Dict]) -> go.Figure:
-    """Skapa grafisk representation av zoner"""
+    """Skapa grafisk representation av zoner med klickbar funktionalitet"""
     fig = go.Figure()
     
     # Skapa ett rutnät med zoner
@@ -115,16 +115,19 @@ def create_zone_figure(zones_data: List[Dict]) -> go.Figure:
             color = COLORS['zone_active']
             text_color = 'white'
             size = 100
+            status_text = 'Aktiv'
         elif zone_data['selected']:
             color = COLORS['warning']
             text_color = 'white'
             size = 90
+            status_text = 'Vald'
         else:
             color = COLORS['zone_inactive']
             text_color = COLORS['text']
             size = 80
+            status_text = 'Inaktiv'
         
-        # Lägg till zon som cirkel
+        # Lägg till zon som cirkel med klickbar data
         fig.add_trace(go.Scatter(
             x=[x],
             y=[y],
@@ -134,8 +137,10 @@ def create_zone_figure(zones_data: List[Dict]) -> go.Figure:
             textposition="middle center",
             textfont=dict(size=14, color=text_color, family='Arial Black'),
             name=f"Zon {zone_num}",
+            customdata=[zone_num],  # Store zone number for click handling
             hovertemplate=f"<b>Zon {zone_num}</b><br>"
-                         f"Status: {'Aktiv' if zone_data['active'] else 'Vald' if zone_data['selected'] else 'Inaktiv'}<br>"
+                         f"Status: {status_text}<br>"
+                         f"<i>Klicka för att starta/stoppa</i><br>"
                          "<extra></extra>"
         ))
     
@@ -148,7 +153,8 @@ def create_zone_figure(zones_data: List[Dict]) -> go.Figure:
         yaxis=dict(showgrid=False, showticklabels=False, range=[-0.5, 2.5]),
         height=400,
         margin=dict(l=20, r=20, t=40, b=20),
-        title=dict(text="Zonöversikt", x=0.5, xanchor='center')
+        title=dict(text="Zonöversikt - Klicka på en zon för att starta", x=0.5, xanchor='center'),
+        clickmode='event+select'  # Enable click events
     )
     
     return fig
@@ -380,7 +386,8 @@ app.layout = html.Div([
     
     # Hidden div för att lagra data
     html.Div(id='hidden-process-data', style={'display': 'none'}),
-    html.Div(id='hidden-rain-data', style={'display': 'none'})
+    html.Div(id='hidden-rain-data', style={'display': 'none'}),
+    html.Div(id='hidden-zone-click-result', style={'display': 'none'})  # Store zone click results
 ], style={'backgroundColor': COLORS['background'], 'minHeight': '100vh'})
 
 
@@ -479,7 +486,7 @@ def update_sequence_status(process_json):
     [Input('hidden-process-data', 'children')]
 )
 def update_error_status(process_json):
-    """Uppdatera felstatus"""
+    """Uppdatera felstatus med detaljerade förklaringar"""
     
     if not process_json:
         return "Laddar..."
@@ -487,44 +494,88 @@ def update_error_status(process_json):
     try:
         data = json.loads(process_json)
         if data.get('ok'):
-            errors = data.get('errors', {})
+            error_details = data.get('error_details', {})
             block = data.get('block_status', {})
             
             error_items = []
             
-            # Kontrollera aktiva fel
-            if errors.get('e_stop'):
-                error_items.append(html.Div(
-                    [html.Span(ICONS['error'] + " "), html.Span("E-STOP AKTIV")],
-                    style={'color': COLORS['error'], 'fontWeight': 'bold', 'marginBottom': '5px'}))
+            # Visa detaljerade felmeddelanden
+            severity_order = ['critical', 'warning', 'info']
+            severity_colors = {
+                'critical': COLORS['error'],
+                'warning': COLORS['warning'],
+                'info': COLORS['info']
+            }
+            severity_bg = {
+                'critical': '#ffebee',
+                'warning': '#fff3e0',
+                'info': '#e3f2fd'
+            }
             
-            if errors.get('moisture_block'):
-                error_items.append(html.Div(
-                    [html.Span(ICONS['moisture'] + " "), html.Span("Markfukt-block")],
-                    style={'color': COLORS['warning'], 'marginBottom': '5px'}))
+            # Samla alla aktiva fel
+            active_errors = []
+            for error_key, error_info in error_details.items():
+                if error_info.get('active'):
+                    active_errors.append(error_info)
             
-            if errors.get('rain_block'):
-                error_items.append(html.Div(
-                    [html.Span(ICONS['rain'] + " "), html.Span("Regn-block")],
-                    style={'color': COLORS['warning'], 'marginBottom': '5px'}))
+            # Sortera efter allvarlighetsgrad
+            active_errors.sort(key=lambda x: severity_order.index(x.get('severity', 'info')))
             
-            if errors.get('anti_collision'):
-                error_items.append(html.Div(
-                    [html.Span(ICONS['warning'] + " "), html.Span("Anti-kollision")],
-                    style={'color': COLORS['warning'], 'marginBottom': '5px'}))
+            # Visa aktiva fel med förklaringar
+            for error_info in active_errors:
+                severity = error_info.get('severity', 'info')
+                error_items.append(html.Div([
+                    html.Div([
+                        html.Span(ICONS.get('error' if severity == 'critical' else 'warning', '⚠️') + " ", 
+                                 style={'fontSize': '18px'}),
+                        html.Span(error_info.get('text', 'Okänt fel'), 
+                                 style={'fontWeight': 'bold'})
+                    ], style={'marginBottom': '5px'}),
+                    html.Div(error_info.get('explanation', ''),
+                            style={'fontSize': '13px', 'marginLeft': '25px', 'color': '#555'})
+                ], style={
+                    'color': severity_colors.get(severity, COLORS['text']),
+                    'marginBottom': '10px',
+                    'padding': '10px',
+                    'backgroundColor': severity_bg.get(severity, '#f5f5f5'),
+                    'borderRadius': '4px',
+                    'borderLeft': f'4px solid {severity_colors.get(severity, COLORS["text"])}'
+                }))
             
-            # Block status
+            # Block status med förklaring
             if block.get('blocked'):
-                error_items.append(html.Div(
-                    f"🚫 Block: {block.get('text', 'Okänt')}",
-                    style={'color': COLORS['danger'], 'marginTop': '10px', 'padding': '10px',
-                          'backgroundColor': '#ffebee', 'borderRadius': '4px'}
-                ))
-            else:
-                error_items.append(html.Div(
-                    [html.Span(ICONS['success'] + " "), html.Span("Systemet OK - Inga aktiva fel")],
-                    style={'color': COLORS['primary'], 'fontWeight': 'bold'}
-                ))
+                error_items.append(html.Div([
+                    html.Div([
+                        html.Span("🚫 ", style={'fontSize': '18px'}),
+                        html.Span(f"Blockering: {block.get('text', 'Okänt')}",
+                                 style={'fontWeight': 'bold'})
+                    ], style={'marginBottom': '5px'}),
+                    html.Div(block.get('explanation', 'Ingen förklaring tillgänglig'),
+                            style={'fontSize': '13px', 'marginLeft': '25px', 'color': '#555'})
+                ], style={
+                    'color': COLORS['danger'],
+                    'marginTop': '15px',
+                    'padding': '10px',
+                    'backgroundColor': '#ffebee',
+                    'borderRadius': '4px',
+                    'borderLeft': f'4px solid {COLORS["danger"]}'
+                }))
+            
+            # Om inga fel finns
+            if not active_errors and not block.get('blocked'):
+                error_items.append(html.Div([
+                    html.Span(ICONS['success'] + " ", style={'fontSize': '20px'}),
+                    html.Span("Systemet OK", style={'fontWeight': 'bold', 'fontSize': '16px'}),
+                    html.Div("Inga aktiva fel eller blockeringar.",
+                            style={'fontSize': '13px', 'marginTop': '5px', 'color': '#555'})
+                ], style={
+                    'color': COLORS['primary'],
+                    'padding': '15px',
+                    'backgroundColor': '#e8f5e9',
+                    'borderRadius': '4px',
+                    'borderLeft': f'4px solid {COLORS["primary"]}'
+                }))
+            
             
             return error_items
     except Exception as e:
@@ -689,6 +740,91 @@ def handle_controls(start_clicks, stop_clicks, selected_zone):
             )
     
     return "", {'display': 'none'}
+
+
+@app.callback(
+    [Output('control-feedback', 'children', allow_duplicate=True),
+     Output('control-feedback', 'style', allow_duplicate=True)],
+    [Input('zone-graph', 'clickData')],
+    [State('hidden-process-data', 'children')],
+    prevent_initial_call=True
+)
+def handle_zone_click(clickData, process_json):
+    """Hantera klick på zoner i grafen"""
+    
+    if not clickData or not clickData.get('points'):
+        return "", {'display': 'none'}
+    
+    try:
+        # Extract zone number from clicked point
+        point = clickData['points'][0]
+        zone_num = point.get('customdata')
+        
+        if not zone_num or not isinstance(zone_num, (int, list)):
+            return "", {'display': 'none'}
+        
+        # If customdata is a list, get first element
+        if isinstance(zone_num, list):
+            zone_num = zone_num[0] if zone_num else None
+        
+        if zone_num is None:
+            return "", {'display': 'none'}
+        
+        # Check if zone is currently active
+        is_active = False
+        if process_json:
+            try:
+                data = json.loads(process_json)
+                if data.get('ok') and 'zones' in data:
+                    for zone_data in data['zones']:
+                        if zone_data['zone'] == zone_num and zone_data['active']:
+                            is_active = True
+                            break
+            except Exception as e:
+                logger.error(f"Error parsing process data for zone click: {e}")
+        
+        # If active, stop; otherwise start
+        action = "stop" if is_active else "start"
+        
+        result = make_api_request(
+            "/zone-control",
+            method="POST",
+            json_data={"zone": zone_num, "action": action}
+        )
+        
+        if result.get('ok'):
+            message = f"Zon {zone_num} stoppad" if action == "stop" else f"Zon {zone_num} startad"
+            return (
+                html.Div([
+                    html.Span(ICONS['success'] + " ", style={'fontSize': '18px'}),
+                    html.Span(message)
+                ]),
+                {'display': 'block', 'backgroundColor': '#d4edda', 'color': '#155724',
+                 'border': '1px solid #c3e6cb', 'marginTop': '15px', 'padding': '10px',
+                 'borderRadius': '4px'}
+            )
+        else:
+            return (
+                html.Div([
+                    html.Span(ICONS['error'] + " ", style={'fontSize': '18px'}),
+                    html.Span(f"Fel: {result.get('error', 'Okänt fel')}")
+                ]),
+                {'display': 'block', 'backgroundColor': '#f8d7da', 'color': '#721c24',
+                 'border': '1px solid #f5c6cb', 'marginTop': '15px', 'padding': '10px',
+                 'borderRadius': '4px'}
+            )
+    
+    except Exception as e:
+        logger.error(f"Error handling zone click: {e}")
+        return (
+            html.Div([
+                html.Span(ICONS['error'] + " ", style={'fontSize': '18px'}),
+                html.Span(f"Fel vid zonklick: {str(e)}")
+            ]),
+            {'display': 'block', 'backgroundColor': '#f8d7da', 'color': '#721c24',
+             'border': '1px solid #f5c6cb', 'marginTop': '15px', 'padding': '10px',
+             'borderRadius': '4px'}
+        )
 
 
 if __name__ == '__main__':
