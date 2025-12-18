@@ -201,18 +201,39 @@ def start_auto(x_api_key: Optional[str] = Header(None), pulse_seconds: float = 1
     return {"ok": True}
 
 
+@app.post("/command/start-night-program")
+def start_night_program(x_api_key: Optional[str] = Header(None), pulse_seconds: float = 1.0):
+    """
+    Starta natt-program (kör alla zoner som auto-mode).
+    Detta tvingar fram en "natt körning" genom att aktivera auto-mode.
+    """
+    require_key(x_api_key)
+    # Använd samma logik som start-auto - pulsera Remote_Command=50
+    # Detta startar auto-sekvensen som kör alla zoner enligt konfigurerade tider
+    with get_modbus_connection() as client:
+        rr = client.write_register(MW_REMOTE_CMD, 50, unit=MODBUS_UNIT)
+        if rr is None or (hasattr(rr, "isError") and rr.isError()):
+            raise HTTPException(status_code=502, detail="Modbus write error")
+        time.sleep(pulse_seconds)
+        rr = client.write_register(MW_REMOTE_CMD, 0, unit=MODBUS_UNIT)
+        if rr is None or (hasattr(rr, "isError") and rr.isError()):
+            raise HTTPException(status_code=502, detail="Modbus write error")
+    return {"ok": True, "message": "Natt-program startat (alla zoner)"}
+
+
 @app.post("/command/manual")
 def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
     zone = validate_zone(cmd.zone)
-    minutes = cmd.minutes
+    # Default: 5 minutes om inget anges (standard värde för manuell körning)
+    minutes = cmd.minutes if cmd.minutes is not None else 5
     # Reuse connection for multiple writes
     with get_modbus_connection() as client:
-        if cmd.minutes is not None:
-            minutes = validate_minutes(cmd.minutes)
-            rr = client.write_register(MW_MANUAL_TIME, minutes, unit=MODBUS_UNIT)
-            if rr is None or (hasattr(rr, "isError") and rr.isError()):
-                raise HTTPException(status_code=502, detail="Modbus write error")
+        # Skriver alltid körtiden, antingen angiven eller default 5 min
+        minutes = validate_minutes(minutes)
+        rr = client.write_register(MW_MANUAL_TIME, minutes, unit=MODBUS_UNIT)
+        if rr is None or (hasattr(rr, "isError") and rr.isError()):
+            raise HTTPException(status_code=502, detail="Modbus write error")
         rr = client.write_register(MW_SET_SELECTED, zone, unit=MODBUS_UNIT)
         if rr is None or (hasattr(rr, "isError") and rr.isError()):
             raise HTTPException(status_code=502, detail="Modbus write error")
@@ -312,20 +333,243 @@ def ui():
     return """
 <!doctype html>
 <html>
-<head><title>Bevattning</title></head>
+<head>
+<title>Bevattning</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+.container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+h2 { color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }
+.section { margin: 20px 0; padding: 15px; background: #f9f9f9; border-radius: 4px; }
+.section h3 { margin-top: 0; color: #555; }
+.status { background: #e8f5e9; padding: 10px; border-radius: 4px; font-family: monospace; white-space: pre-wrap; }
+.controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+button { 
+  padding: 10px 20px; 
+  background: #4CAF50; 
+  color: white; 
+  border: none; 
+  border-radius: 4px; 
+  cursor: pointer; 
+  font-size: 14px;
+}
+button:hover { background: #45a049; }
+button:disabled { background: #ccc; cursor: not-allowed; }
+button.danger { background: #f44336; }
+button.danger:hover { background: #da190b; }
+button.night { background: #2196F3; }
+button.night:hover { background: #0b7dda; }
+input, select { 
+  padding: 8px; 
+  border: 1px solid #ddd; 
+  border-radius: 4px; 
+  font-size: 14px;
+}
+label { font-weight: bold; margin-right: 5px; }
+.message { 
+  padding: 10px; 
+  margin: 10px 0; 
+  border-radius: 4px; 
+  display: none;
+}
+.message.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+.message.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+</style>
+</head>
 <body>
-<h2>Bevattning status</h2>
-<div id="out">Laddar...</div>
+<div class="container">
+  <h2>Bevattning Styrning</h2>
+  
+  <div class="section">
+    <h3>Status</h3>
+    <div id="status" class="status">Laddar...</div>
+  </div>
+  
+  <div class="section">
+    <h3>Manuell Styrning - Enskild Zon</h3>
+    <div class="controls">
+      <label>Zon:</label>
+      <select id="zone">
+        <option value="1">Zon 1</option>
+        <option value="2">Zon 2</option>
+        <option value="3">Zon 3</option>
+        <option value="4">Zon 4</option>
+        <option value="5">Zon 5</option>
+        <option value="6">Zon 6</option>
+        <option value="7">Zon 7</option>
+      </select>
+      
+      <label>Körtid:</label>
+      <input type="number" id="minutes" value="5" min="1" max="240" style="width: 80px;">
+      <span>minuter</span>
+      
+      <button onclick="startManual()">Starta Zon</button>
+    </div>
+    <p style="font-size: 12px; color: #666; margin-top: 10px;">
+      Standard körtid är 5 minuter. Justera innan start om annat önskas.
+    </p>
+  </div>
+  
+  <div class="section">
+    <h3>Natt-program (Alla Zoner)</h3>
+    <div class="controls">
+      <button class="night" onclick="startNightProgram()">Starta Natt-program</button>
+      <span style="margin-left: 10px; color: #666;">Kör alla zoner enligt konfigurerade tider</span>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h3>Auto-program</h3>
+    <div class="controls">
+      <button onclick="startAuto()">Starta Auto</button>
+      <button class="danger" onclick="stopAll()">Stoppa</button>
+    </div>
+  </div>
+  
+  <div id="message" class="message"></div>
+</div>
+
 <script>
 const key = localStorage.getItem('apiKey') || prompt("API Key:");
-localStorage.setItem('apiKey', key);
-async function load() {
-  const r = await fetch('/status', {headers: {'X-API-Key': key}});
-  if (!r.ok) { document.getElementById('out').innerText = 'Auth fail'; return; }
-  const d = await r.json();
-  document.getElementById('out').innerText = JSON.stringify(d, null, 2);
+if (!key) {
+  document.getElementById('status').innerText = 'Ingen API-nyckel angiven';
+} else {
+  localStorage.setItem('apiKey', key);
+  loadStatus();
+  // Auto-refresh status every 5 seconds
+  setInterval(loadStatus, 5000);
 }
-load();
+
+function showMessage(msg, isError = false) {
+  const msgEl = document.getElementById('message');
+  msgEl.className = 'message ' + (isError ? 'error' : 'success');
+  msgEl.innerText = msg;
+  msgEl.style.display = 'block';
+  setTimeout(() => { msgEl.style.display = 'none'; }, 5000);
+}
+
+async function loadStatus() {
+  try {
+    const r = await fetch('/status', {headers: {'X-API-Key': key}});
+    if (!r.ok) {
+      document.getElementById('status').innerText = 'Auth fel - kontrollera API-nyckel';
+      return;
+    }
+    const d = await r.json();
+    
+    // Format status nicely
+    const blockReasons = ['OK', 'Regn > tröskel', 'Markfukt > tröskel', 'Anti-kollision', 'E-stop'];
+    const blockReason = blockReasons[d.block_reason] || `Kod ${d.block_reason}`;
+    
+    document.getElementById('status').innerText = 
+      `Aktiv zon: ${d.zone}\\n` +
+      `Pump: ${d.pump_on ? 'PÅ' : 'AV'}\\n` +
+      `Steg: ${d.steg}\\n` +
+      `Vald zon: ${d.selected_zone}\\n` +
+      `Block status: ${blockReason}\\n` +
+      `Heartbeat: ${d.heartbeat_count}\\n` +
+      `Tid: ${new Date().toLocaleTimeString('sv-SE')}`;
+  } catch (err) {
+    document.getElementById('status').innerText = 'Fel vid status-hämtning: ' + err.message;
+  }
+}
+
+async function startManual() {
+  const zone = parseInt(document.getElementById('zone').value);
+  const minutes = parseInt(document.getElementById('minutes').value);
+  
+  if (minutes < 1 || minutes > 240) {
+    showMessage('Körtid måste vara 1-240 minuter', true);
+    return;
+  }
+  
+  try {
+    const r = await fetch('/command/manual', {
+      method: 'POST',
+      headers: {'X-API-Key': key, 'Content-Type': 'application/json'},
+      body: JSON.stringify({zone, minutes})
+    });
+    
+    if (!r.ok) {
+      const err = await r.json();
+      showMessage('Fel: ' + (err.detail || 'Okänt fel'), true);
+      return;
+    }
+    
+    showMessage(`Zon ${zone} startad för ${minutes} minuter`);
+    setTimeout(loadStatus, 500);
+  } catch (err) {
+    showMessage('Nätverksfel: ' + err.message, true);
+  }
+}
+
+async function startNightProgram() {
+  if (!confirm('Starta natt-program? Detta kör alla zoner enligt konfigurerade tider.')) {
+    return;
+  }
+  
+  try {
+    const r = await fetch('/command/start-night-program', {
+      method: 'POST',
+      headers: {'X-API-Key': key}
+    });
+    
+    if (!r.ok) {
+      const err = await r.json();
+      showMessage('Fel: ' + (err.detail || 'Okänt fel'), true);
+      return;
+    }
+    
+    const result = await r.json();
+    showMessage(result.message || 'Natt-program startat');
+    setTimeout(loadStatus, 500);
+  } catch (err) {
+    showMessage('Nätverksfel: ' + err.message, true);
+  }
+}
+
+async function startAuto() {
+  try {
+    const r = await fetch('/command/start-auto', {
+      method: 'POST',
+      headers: {'X-API-Key': key}
+    });
+    
+    if (!r.ok) {
+      const err = await r.json();
+      showMessage('Fel: ' + (err.detail || 'Okänt fel'), true);
+      return;
+    }
+    
+    showMessage('Auto-program startat');
+    setTimeout(loadStatus, 500);
+  } catch (err) {
+    showMessage('Nätverksfel: ' + err.message, true);
+  }
+}
+
+async function stopAll() {
+  if (!confirm('Stoppa all bevattning?')) {
+    return;
+  }
+  
+  try {
+    const r = await fetch('/command/stop', {
+      method: 'POST',
+      headers: {'X-API-Key': key}
+    });
+    
+    if (!r.ok) {
+      const err = await r.json();
+      showMessage('Fel: ' + (err.detail || 'Okänt fel'), true);
+      return;
+    }
+    
+    showMessage('Bevattning stoppad');
+    setTimeout(loadStatus, 500);
+  } catch (err) {
+    showMessage('Nätverksfel: ' + err.message, true);
+  }
+}
 </script>
 </body>
 </html>
