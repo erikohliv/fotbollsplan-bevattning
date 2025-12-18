@@ -98,9 +98,9 @@ def hamta_vader(lat, lon, timeout=10, use_cache=True):
             "current_weather": True,
             "timezone": "auto",
         }
-        r = requests.get(url, params=params, timeout=timeout)
-        r.raise_for_status()
-        data = r.json()
+        response = requests.get(url, params=params, timeout=timeout)
+        response.raise_for_status()
+        data = response.json()
 
         hourly = data.get("hourly", {})
         rain_list = hourly.get("rain") or []
@@ -248,9 +248,11 @@ def main_once(args):
     markfukt = args.simulate_markfukt_value if args.simulate else 30
     if args.read_markfukt and not args.simulate:
         logger.info("Läser markfukt från Modbus register %d...", MK_REG_ADDR)
-        mf = read_markfukt_from_modbus(MK_REG_ADDR, host=args.host, port=args.port, unit=args.unit)
-        if mf is not None:
-            markfukt = mf
+        markfukt_sensor_value = read_markfukt_from_modbus(
+            MK_REG_ADDR, host=args.host, port=args.port, unit=args.unit
+        )
+        if markfukt_sensor_value is not None:
+            markfukt = markfukt_sensor_value
             logger.info("Markfukt läst från sensor: %d%%", markfukt)
         else:
             logger.info("Använder simulerad markfukt pga läsfel")

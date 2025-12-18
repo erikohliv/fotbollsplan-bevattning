@@ -636,7 +636,7 @@ def set_mode(mode: int, x_api_key: Optional[str] = Header(None)):
 
 
 @app.get("/", response_class=HTMLResponse)
-def ui():
+def render_control_panel_ui():
     return """
 <!doctype html>
 <html>
