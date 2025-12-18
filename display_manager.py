@@ -31,6 +31,11 @@ except ImportError:
     except ImportError:
         ModbusTcpClient = None
 
+try:
+    from pymodbus.exceptions import ModbusIOException, ConnectionException
+except Exception:
+    ModbusIOException = ConnectionException = Exception
+
 
 # Modbus register addresses (from existing system)
 MW_STATUS_ZONE = 50
@@ -276,8 +281,8 @@ class ModbusReader:
         if self._client:
             try:
                 self._client.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Error closing Modbus client: {e}")
         self._client = None
         self._client_connected = False
 
@@ -298,8 +303,12 @@ class ModbusReader:
                     self._reset_client()
                     return None
                 self._client_connected = True
-            except Exception as e:
+            except (ConnectionException, ModbusIOException) as e:
                 logger.debug(f"Modbus connection exception: {e}")
+                self._reset_client()
+                return None
+            except Exception as e:
+                logger.warning(f"Unexpected Modbus connection exception: {e}")
                 self._reset_client()
                 return None
 
@@ -335,8 +344,12 @@ class ModbusReader:
                 self._cache[cache_key] = (data, time.time())
             
             return data
-        except Exception as e:
+        except (ConnectionException, ModbusIOException) as e:
             logger.debug(f"Modbus exception: {e}")
+            self._reset_client()
+            return None
+        except Exception as e:
+            logger.warning(f"Unexpected Modbus exception: {e}")
             self._reset_client()
             return None
     
@@ -363,8 +376,12 @@ class ModbusReader:
                 del self._cache[key]
             
             return True
-        except Exception as e:
+        except (ConnectionException, ModbusIOException) as e:
             logger.debug(f"Modbus write exception: {e}")
+            self._reset_client()
+            return False
+        except Exception as e:
+            logger.warning(f"Unexpected Modbus write exception: {e}")
             self._reset_client()
             return False
 
