@@ -1,0 +1,17 @@
+[Unit]
+Description=Bevattning Dash Process View
+After=network.target bevattning-api.service
+Wants=bevattning-api.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/fotbollsplan-bevattning
+Environment="PATH=/home/pi/fotbollsplan-bevattning/.venv/bin"
+EnvironmentFile=/home/pi/fotbollsplan-bevattning/api_.env
+ExecStart=/home/pi/fotbollsplan-bevattning/.venv/bin/python3 /home/pi/fotbollsplan-bevattning/dash_app.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

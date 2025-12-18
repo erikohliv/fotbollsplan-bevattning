@@ -167,7 +167,17 @@ def save_env_file(env_file: Path, env_vars: dict) -> None:
         
         # Group related variables
         f.write("# API Configuration\n")
-        for key in ['API_KEY', 'MODBUS_HOST', 'MODBUS_PORT', 'MODBUS_UNIT']:
+        for key in ['API_KEY', 'API_URL', 'MODBUS_HOST', 'MODBUS_PORT', 'MODBUS_UNIT']:
+            if key in env_vars:
+                f.write(f"{key}={env_vars[key]}\n")
+        
+        f.write("\n# Dash Process View Configuration\n")
+        for key in ['DASH_HOST', 'DASH_PORT']:
+            if key in env_vars:
+                f.write(f"{key}={env_vars[key]}\n")
+        
+        f.write("\n# Weather Data Location (for Open-Meteo API)\n")
+        for key in ['LATITUDE', 'LONGITUDE']:
             if key in env_vars:
                 f.write(f"{key}={env_vars[key]}\n")
         
@@ -186,7 +196,8 @@ def save_env_file(env_file: Path, env_vars: dict) -> None:
                 f.write(f"{key}={env_vars[key]}\n")
         
         # Add any other remaining variables
-        written_keys = set(['API_KEY', 'MODBUS_HOST', 'MODBUS_PORT', 'MODBUS_UNIT'] + 
+        written_keys = set(['API_KEY', 'API_URL', 'MODBUS_HOST', 'MODBUS_PORT', 'MODBUS_UNIT',
+                           'DASH_HOST', 'DASH_PORT', 'LATITUDE', 'LONGITUDE'] + 
                           smtp_keys + healthcheck_keys)
         other_vars = {k: v for k, v in env_vars.items() if k not in written_keys}
         if other_vars:
@@ -526,6 +537,62 @@ def main() -> int:
             existing_vars['HEALTHCHECK_TIMEOUT'] = DEFAULT_HEALTHCHECK_TIMEOUT
         if 'HEALTHCHECK_RETRIES' not in existing_vars:
             existing_vars['HEALTHCHECK_RETRIES'] = DEFAULT_HEALTHCHECK_RETRIES
+        
+        # Set default Dash and location values if not present
+        if 'DASH_PORT' not in existing_vars:
+            existing_vars['DASH_PORT'] = '8050'
+        if 'DASH_HOST' not in existing_vars:
+            existing_vars['DASH_HOST'] = '0.0.0.0'
+        if 'API_URL' not in existing_vars:
+            existing_vars['API_URL'] = 'http://127.0.0.1:8000'
+        if 'LATITUDE' not in existing_vars:
+            existing_vars['LATITUDE'] = '55.6050'  # Malmö
+        if 'LONGITUDE' not in existing_vars:
+            existing_vars['LONGITUDE'] = '13.0038'  # Malmö
+    
+    # Ask about Dash Process View configuration
+    print_header("Dash Process View Configuration (Valfritt)")
+    print("Dash Process View är en grafisk webbapp för realtidsövervakning.")
+    print("Den kan köras parallellt med FastAPI på en annan port.\n")
+    
+    if get_yes_no("Vill du konfigurera Dash Process View?", default=True):
+        # Dash configuration
+        default_dash_port = existing_vars.get('DASH_PORT', '8050')
+        dash_port = get_input("Dash Process View port", default=default_dash_port, 
+                             validator=validate_port)
+        existing_vars['DASH_PORT'] = dash_port
+        
+        default_api_url = existing_vars.get('API_URL', 'http://127.0.0.1:8000')
+        api_url = get_input("FastAPI URL (för Dash att ansluta till)", 
+                           default=default_api_url)
+        existing_vars['API_URL'] = api_url
+        
+        # Location for weather data
+        if get_yes_no("Vill du konfigurera plats för väderdata?", default=True):
+            print("\nAnge koordinater för väderprognos (Open-Meteo):")
+            print("Standard är Malmö (55.6050, 13.0038)")
+            
+            default_lat = existing_vars.get('LATITUDE', '55.6050')
+            latitude = get_input("Latitud (grader)", default=default_lat)
+            existing_vars['LATITUDE'] = latitude
+            
+            default_lon = existing_vars.get('LONGITUDE', '13.0038')
+            longitude = get_input("Longitud (grader)", default=default_lon)
+            existing_vars['LONGITUDE'] = longitude
+            
+            print_success(f"Väderdata kommer hämtas för koordinater: {latitude}, {longitude}")
+    
+    else:
+        # Set defaults even if user skips configuration
+        if 'DASH_PORT' not in existing_vars:
+            existing_vars['DASH_PORT'] = '8050'
+        if 'API_URL' not in existing_vars:
+            existing_vars['API_URL'] = 'http://127.0.0.1:8000'
+        if 'LATITUDE' not in existing_vars:
+            existing_vars['LATITUDE'] = '55.6050'
+        if 'LONGITUDE' not in existing_vars:
+            existing_vars['LONGITUDE'] = '13.0038'
+        print_info("Standardvärden sätts för Dash Process View")
     
     # Save configuration
     try:
@@ -569,13 +636,22 @@ def main() -> int:
     print("Next steps:")
     print("  1. Review and update api_.env if needed")
     print("  2. Configure SMTP for email notifications: python3 install.py")
-    print("  3. Test the API: uvicorn api_main:app --host 0.0.0.0 --port 8000")
-    print("  4. See README.md for more information\n")
+    print("  3. Start FastAPI: uvicorn api_main:app --host 0.0.0.0 --port 8000")
+    print("  4. Start Dash Process View: python3 dash_app.py")
+    print("  5. Access web interfaces:")
+    print(f"     - FastAPI UI: http://localhost:8000")
+    print(f"     - Dash Process View: http://localhost:{existing_vars.get('DASH_PORT', '8050')}")
+    print("  6. See README.md for more information\n")
     
     if is_tailscale_installed():
         print("Tailscale is installed. To check status:")
         print("  sudo tailscale status")
         print("  sudo tailscale ip\n")
+    
+    print("För produktionsmiljö, överväg att sätta upp systemd services:")
+    print("  - systemd_bevattning-api.service (FastAPI)")
+    print("  - systemd_dash-process-view.service (Dash Process View)")
+    print("  Se README.md för instruktioner.\n")
     
     return 0
 
