@@ -19,12 +19,21 @@ except Exception:
 
 load_dotenv()
 
-logger = logging.getLogger("bevattning.api")
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
-    logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+API_LOGGER_NAME = "bevattning.api"
+
+
+def _setup_logger() -> logging.Logger:
+    log = logging.getLogger(API_LOGGER_NAME)
+    root_logger = logging.getLogger()
+    if not log.handlers and not root_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
+        log.addHandler(handler)
+        log.setLevel(logging.INFO)
+    return log
+
+
+logger = _setup_logger()
 
 USER_MODBUS_ERROR = "PLC-kommunikation misslyckades. Försök igen eller kontakta drift."
 
@@ -60,6 +69,8 @@ MW_AUTO_OVERRIDE = 33      # AutoOverride från befintlig mappning
 # Zone constants
 MIN_ZONE = 1
 MAX_ZONE = 7
+# Indicates that block_reason could not be read after reset
+BLOCK_REASON_UNKNOWN = -1
 
 app = FastAPI(title="Bevattning API", version="0.3")
 
@@ -106,7 +117,7 @@ def clamp_temp(value: int) -> int:
     return max(-30, min(50, value))
 
 
-def _modbus_failed(rr) -> bool:
+def _modbus_has_error(rr) -> bool:
     return rr is None or (hasattr(rr, "isError") and rr.isError())
 
 
@@ -122,7 +133,7 @@ def _raise_modbus_error(context: str):
 
 
 def _ensure_modbus_ok(rr, context: str):
-    if _modbus_failed(rr):
+    if _modbus_has_error(rr):
         _raise_modbus_error(context)
 
 
@@ -380,6 +391,7 @@ def test_bevattning(cmd: TestZoneCommand, x_api_key: Optional[str] = Header(None
     
     VARNING: Denna operation blockerar API under testperioden.
     Test av alla zoner kräver all_zones_confirmed=true som säkerhetskontroll.
+    Errors in individual zones are logged and testing continues for remaining zones to provide complete results.
     """
     require_key(x_api_key)
     
@@ -395,6 +407,7 @@ def test_bevattning(cmd: TestZoneCommand, x_api_key: Optional[str] = Header(None
     test_results = {}
     
     with get_modbus_connection() as client:
+        # Log and continue with remaining zones even if one zone fails
         logger.info("Startar zontest: zones=%s duration=%ss", zones_to_test, cmd.duration_seconds)
         # Aktivera test mode
         rr = client.write_register(MW_TEST_MODE, 1, unit=MODBUS_UNIT)
@@ -406,14 +419,15 @@ def test_bevattning(cmd: TestZoneCommand, x_api_key: Optional[str] = Header(None
                 
             # Välj zon
             rr = client.write_register(MW_SET_SELECTED, zone, unit=MODBUS_UNIT)
-            if _modbus_failed(rr):
+            # Don't abort entire test on individual failures; log and continue to next zone
+            if _modbus_has_error(rr):
                 logger.warning("Misslyckades välja zon %s under test", zone)
                 test_results[f"zone_{zone}"] = "failed_zone_select"
                 continue
             
             # Starta manuell körning
             rr = client.write_register(MW_MANUAL_START, 1, unit=MODBUS_UNIT)
-            if _modbus_failed(rr):
+            if _modbus_has_error(rr):
                 logger.warning("Misslyckades starta test för zon %s", zone)
                 test_results[f"zone_{zone}"] = "failed_start"
                 continue
@@ -425,14 +439,14 @@ def test_bevattning(cmd: TestZoneCommand, x_api_key: Optional[str] = Header(None
             
             # Stoppa
             rr = client.write_register(MW_REMOTE_CMD, 0, unit=MODBUS_UNIT)
-            if _modbus_failed(rr):
+            if _modbus_has_error(rr):
                 logger.warning("Misslyckades stoppa test för zon %s", zone)
                 test_results[f"zone_{zone}"] = "failed_stop"
                 continue
                 
             # Markera som testad (sätt bit i test result register)
             current_result = client.read_holding_registers(MW_TEST_ZONE_RESULT, 1, unit=MODBUS_UNIT)
-            if current_result is not None and not _modbus_failed(current_result):
+            if not _modbus_has_error(current_result):
                 result_value = current_result.registers[0] | (1 << (zone - 1))
                 client.write_register(MW_TEST_ZONE_RESULT, result_value, unit=MODBUS_UNIT)
                 test_results[f"zone_{zone}"] = "success"
@@ -559,8 +573,8 @@ def reset_error(x_api_key: Optional[str] = Header(None)):
         
         # Läs status efter reset
         block_check = client.read_holding_registers(MW_BLOCK_REASON, 1, unit=MODBUS_UNIT)
-        if _modbus_failed(block_check):
-            new_block_reason = -1
+        if _modbus_has_error(block_check):
+            new_block_reason = BLOCK_REASON_UNKNOWN
         else:
             new_block_reason = block_check.registers[0]
     

@@ -18,7 +18,7 @@ mock_modbus_client = MagicMock()
 sys.modules['pymodbus'] = MagicMock()
 sys.modules['pymodbus.client'] = MagicMock()
 
-from api_main import app, API_KEY, USER_MODBUS_ERROR
+from api_main import app, API_KEY, USER_MODBUS_ERROR, API_LOGGER_NAME
 
 
 @pytest.fixture
@@ -68,7 +68,7 @@ def test_status_authorized(client, mock_modbus):
 
 
 def test_status_modbus_failure_is_sanitized(client, caplog):
-    """Ensure Modbusfel loggas men användaren får ett generellt felmeddelande"""
+    """Ensure Modbus failures are logged while the user gets a generic error message"""
     error_result = MagicMock()
     error_result.isError.return_value = True
     error_result.registers = []
@@ -80,7 +80,7 @@ def test_status_modbus_failure_is_sanitized(client, caplog):
         mock_client_instance.read_holding_registers.return_value = error_result
         mock.return_value = mock_client_instance
 
-        with caplog.at_level(logging.WARNING, logger="bevattning.api"):
+        with caplog.at_level(logging.WARNING, logger=API_LOGGER_NAME):
             response = client.get("/status", headers={"X-API-Key": API_KEY})
 
     assert response.status_code == 502
