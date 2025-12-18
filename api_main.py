@@ -186,18 +186,22 @@ def status(x_api_key: Optional[str] = Header(None)):
     }
 
 
-@app.post("/command/start-auto")
-def start_auto(x_api_key: Optional[str] = Header(None), pulse_seconds: float = 1.0):
-    require_key(x_api_key)
-    # Reuse connection for pulse operation
+def _pulse_remote_command(value: int, pulse_seconds: float = 1.0):
+    """Helper function to pulse Remote_Command register"""
     with get_modbus_connection() as client:
-        rr = client.write_register(MW_REMOTE_CMD, 50, unit=MODBUS_UNIT)
+        rr = client.write_register(MW_REMOTE_CMD, value, unit=MODBUS_UNIT)
         if rr is None or (hasattr(rr, "isError") and rr.isError()):
             raise HTTPException(status_code=502, detail="Modbus write error")
         time.sleep(pulse_seconds)
         rr = client.write_register(MW_REMOTE_CMD, 0, unit=MODBUS_UNIT)
         if rr is None or (hasattr(rr, "isError") and rr.isError()):
             raise HTTPException(status_code=502, detail="Modbus write error")
+
+
+@app.post("/command/start-auto")
+def start_auto(x_api_key: Optional[str] = Header(None), pulse_seconds: float = 1.0):
+    require_key(x_api_key)
+    _pulse_remote_command(50, pulse_seconds)
     return {"ok": True}
 
 
@@ -208,16 +212,7 @@ def start_night_program(x_api_key: Optional[str] = Header(None), pulse_seconds: 
     Detta tvingar fram en "natt körning" genom att aktivera auto-mode.
     """
     require_key(x_api_key)
-    # Använd samma logik som start-auto - pulsera Remote_Command=50
-    # Detta startar auto-sekvensen som kör alla zoner enligt konfigurerade tider
-    with get_modbus_connection() as client:
-        rr = client.write_register(MW_REMOTE_CMD, 50, unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus write error")
-        time.sleep(pulse_seconds)
-        rr = client.write_register(MW_REMOTE_CMD, 0, unit=MODBUS_UNIT)
-        if rr is None or (hasattr(rr, "isError") and rr.isError()):
-            raise HTTPException(status_code=502, detail="Modbus write error")
+    _pulse_remote_command(50, pulse_seconds)
     return {"ok": True, "message": "Natt-program startat (alla zoner)"}
 
 
