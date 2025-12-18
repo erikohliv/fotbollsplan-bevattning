@@ -95,7 +95,10 @@ sudo systemctl start bevattning-api
 - **MW10** Remote_Command (50=start auto, PLC nollar ej).
 - **MW20** Set_Tid_Center (min, 0..240, default 30 via ST-fallback vid 0).
 - **MW21** Set_Tid_Horn (min, 0..240, default 15 via ST-fallback vid 0).
-- **MW30** Markfukt % (skrivs av Python/extern).
+- **MW30** Markfukt % (skrivs av Python/extern ELLER skalas från analog input %IW0 i PLC).
+  - Om analog sensor är ansluten: PLC läser %IW0 (0-10V = 0-27648) och skalar till 0-100%
+  - Om Python skriver: Python-värdet används direkt
+  - Värdeområde: 0-100%
 - **MW31** Regen_24h_mm (skrivs av Python/extern).
 - **MW32** Temp_C (skrivs av Python/extern).
 - **MW33** AutoOverride (1=forcera körning, hoppa fukt/regn-block).
@@ -129,6 +132,9 @@ sudo systemctl start bevattning-api
 - **MW80** TestMode (1=testläge aktivt, 0=inaktivt)
 - **MW81** TestZoneResult (bitmask för testade zoner 1-7)
 - **MW82** ErrorReset (skriv 1 för att nollställa fel, PLC nollar)
+  - Nollställer BlockReason (utom E-stop som måste åtgärdas fysiskt)
+  - Återställer fastnade sekvenser
+  - Rensar anti-kollision om ingen sekvens kör
 - **MW100** ModeSwitch (Lokal/Fjärr-styrning)
   - 0=Neutral (ingen ändring, default)
   - 1=Lokalt läge (fysisk styrning aktiverad, fjärrkommandon blockerade)
@@ -216,6 +222,8 @@ sudo systemctl start bevattning-api
 - Ventil_1..7: `%QX0.0`..`%QX0.6`
 - Pump_enable (till LOGO/VFD): `%QX0.7`
 - LED_1..7: **BORTTAGNA** (aktiv zon visas på display istället)
+- Analog In:
+  - Markfuktgivare: `%IW0` (0-10V analog input, skalas till 0-100% i PLC)
 - Ingångar: 
   - Stop `%IX0.0`
   - Start `%IX0.1`

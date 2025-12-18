@@ -233,7 +233,8 @@ def pulse_remote_command(host, port, unit, cmd_reg=MW_REMOTE_CMD, cmd_value=50, 
 
 
 def main_once(args):
-    logger.info("Startar bevattningsscript")
+    logger.info("=== Bevattningsscript Körning Startad ===")
+    logger.info("Hämtar väderdata från Open-Meteo...")
     temp, regn = hamta_vader(args.lat, args.lon)
     if temp is None:
         temp = 15.0
@@ -241,26 +242,36 @@ def main_once(args):
 
     markfukt = args.simulate_markfukt_value if args.simulate else 30
     if args.read_markfukt and not args.simulate:
+        logger.info("Läser markfukt från Modbus register %d...", MK_REG_ADDR)
         mf = read_markfukt_from_modbus(MK_REG_ADDR, host=args.host, port=args.port, unit=args.unit)
         if mf is not None:
             markfukt = mf
+            logger.info("Markfukt läst från sensor: %d%%", markfukt)
         else:
             logger.info("Använder simulerad markfukt pga läsfel")
+    else:
+        logger.info("Använder %s markfukt: %d%%", "simulerad" if args.simulate else "standard", markfukt)
 
     faktor = 1.0
     anledning = "Normal drift"
     if regn is not None and regn > args.rain_threshold:
         faktor = 0.0
         anledning = f"Regn {regn:.1f}mm > {args.rain_threshold}"
+        logger.warning("BEVATTNING BLOCKERAD: %s", anledning)
     elif markfukt >= args.moisture_threshold:
         faktor = 0.0
         anledning = f"Markfukt {markfukt}% >= {args.moisture_threshold}"
+        logger.warning("BEVATTNING BLOCKERAD: %s", anledning)
     elif temp < args.temp_min:
         faktor = 0.5
         anledning = f"Kallt ({temp:.1f}C)"
+        logger.info("BEVATTNING REDUCERAD: %s", anledning)
     elif regn is not None and regn > 1.0:
         faktor = 0.7
         anledning = f"Litet regn ({regn:.1f}mm)"
+        logger.info("BEVATTNING REDUCERAD: %s", anledning)
+    else:
+        logger.info("BEVATTNING KÖRNING: Normala förhållanden")
 
     tid_center = int(BASE_TID_CENTER * faktor)
     tid_horn = int(BASE_TID_HORN * faktor)
@@ -273,18 +284,29 @@ def main_once(args):
         if ModbusTcpClient is None:
             logger.warning("pymodbus saknas — hoppar Modbus-skrivning")
         else:
+            logger.info("Skriver data till PLC via Modbus...")
             client = open_modbus_client(args.host, args.port)
             try:
                 if client.connect():
+                    logger.debug("Modbus-anslutning etablerad till %s:%d", args.host, args.port)
                     # Use bulk write for better performance - write registers in two groups
                     # Group 1: MW20-21 (tid_center, tid_horn)
                     ok1 = write_registers_bulk(client, MW_TID_CENTER, [int(tid_center), int(tid_horn)], unit=args.unit)
+                    if ok1:
+                        logger.info("Bevattningstider skrivna: Center=%d min, Hörn=%d min", tid_center, tid_horn)
                     # Group 2: MW30-32 (markfukt, regen, temp)
                     ok2 = write_registers_bulk(client, MW_MARKFUKT, 
                                               [int(markfukt), int(regn if regn is not None else 0), int(temp)], 
                                               unit=args.unit)
+                    if ok2:
+                        logger.info("Miljödata skrivna: Markfukt=%d%%, Regn=%.1fmm, Temp=%.1fC", 
+                                  markfukt, (regn if regn is not None else 0.0), temp)
                     client.close()
                     wrote = ok1 and ok2
+                    if wrote:
+                        logger.info("=== Modbus-skrivning LYCKADES ===")
+                    else:
+                        logger.error("=== Modbus-skrivning MISSLYCKADES ===")
                 else:
                     logger.warning("Kunde inte ansluta till Modbus för skrivning.")
             except Exception as e:
@@ -294,7 +316,7 @@ def main_once(args):
                 except Exception:
                     pass
     else:
-        logger.info("DRY RUN - ingen Modbus-skrivning.")
+        logger.info("=== DRY RUN MODE - Ingen Modbus-skrivning utförd ===")
 
     try:
         os.makedirs(os.path.dirname(LOG_FIL), exist_ok=True)
@@ -308,16 +330,19 @@ def main_once(args):
 
     if args.auto_start and (tid_center > 0 or tid_horn > 0):
         if args.simulate:
-            logger.info("SIMULATE: Skulle pulserat Remote_Command (MW10).")
+            logger.info("=== SIMULATE MODE: Skulle pulserat Remote_Command (MW10) ===")
         else:
+            logger.info("Startar auto-bevattning via Remote_Command puls...")
             ok = pulse_remote_command(args.host, args.port, args.unit, cmd_reg=MW_REMOTE_CMD,
                                       cmd_value=50, pulse_seconds=args.pulse_seconds, dry_run=args.dry_run)
             if ok:
-                logger.info("Remote_Command pulserad.")
+                logger.info("=== AUTO-BEVATTNING STARTAD (Remote_Command pulserad) ===")
             else:
-                logger.warning("Remote_Command pulsering misslyckades.")
+                logger.error("=== AUTO-BEVATTNING MISSLYCKADES (Remote_Command pulsering fel) ===")
     else:
         logger.debug("Ingen auto-start (auto_start=%s, tider %d/%d)", args.auto_start, tid_center, tid_horn)
+        if tid_center == 0 and tid_horn == 0:
+            logger.info("=== BEVATTNING BLOCKERAD: Tider satta till 0 ===\")
 
     return {
         "temp": temp,
