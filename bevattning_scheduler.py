@@ -57,15 +57,15 @@ def check_block_conditions(args):
             client = bevattning_controller.open_modbus_client(args.host, args.port)
             if client.connect():
                 # Read MW73 (BlockReasonReg)
-                rr = client.read_holding_registers(
+                register_response = client.read_holding_registers(
                     bevattning_controller.MW_BLOCK_REASON,
                     1, 
                     unit=args.unit
                 )
                 client.close()
                 
-                if rr and hasattr(rr, 'registers') and rr.registers:
-                    block_reason = rr.registers[0]
+                if register_response and hasattr(register_response, 'registers') and register_response.registers:
+                    block_reason = register_response.registers[0]
                     if block_reason != 0:
                         reasons = {
                             1: "Rain > threshold",
