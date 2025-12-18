@@ -69,6 +69,8 @@ def test_functions_exist():
         'validate_ipv4',
         'validate_port',
         'validate_email',
+        'get_wireless_interface',
+        'is_wifi_connected',
         'scan_wifi_networks',
         'configure_wifi',
         'setup_wifi',

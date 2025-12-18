@@ -196,6 +196,47 @@ def validate_email(email: str) -> bool:
 # WiFi Configuration Functions
 # ============================================================================
 
+def get_wireless_interface() -> Optional[str]:
+    """
+    Find the wireless network interface.
+    
+    Returns:
+        Wireless interface name (e.g., 'wlan0') or None if not found
+    """
+    success, stdout, _ = run_command(['ls', '/sys/class/net'], check=False)
+    if not success:
+        return None
+    
+    interfaces = stdout.strip().split('\n')
+    for iface in interfaces:
+        if iface.startswith('wlan') or iface.startswith('wlp'):
+            return iface
+    
+    return None
+
+
+def is_wifi_connected() -> bool:
+    """
+    Check if WiFi is currently connected.
+    
+    Returns:
+        True if connected to WiFi with IP address, False otherwise
+    """
+    success, stdout, _ = run_command(['ip', 'addr', 'show'], check=False)
+    if not success:
+        return False
+    
+    lines = stdout.split('\n')
+    for i, line in enumerate(lines):
+        if ('wlan' in line or 'wlp' in line) and 'state UP' in line:
+            # Check following lines for inet address
+            for j in range(i, min(i+10, len(lines))):
+                if 'inet ' in lines[j] and '127.0.0.1' not in lines[j]:
+                    return True
+    
+    return False
+
+
 def scan_wifi_networks() -> List[Dict[str, str]]:
     """
     Scan for available WiFi networks.
@@ -205,19 +246,8 @@ def scan_wifi_networks() -> List[Dict[str, str]]:
     """
     print_info("Scanning for WiFi networks...")
     
-    # Try to find wireless interface
-    success, stdout, _ = run_command(['ls', '/sys/class/net'], check=False)
-    if not success:
-        print_error("Failed to list network interfaces")
-        return []
-    
-    interfaces = stdout.strip().split('\n')
-    wlan_interface = None
-    
-    for iface in interfaces:
-        if iface.startswith('wlan') or iface.startswith('wlp'):
-            wlan_interface = iface
-            break
+    # Find wireless interface
+    wlan_interface = get_wireless_interface()
     
     if not wlan_interface:
         print_error("No wireless interface found")
@@ -357,8 +387,14 @@ def configure_wifi(ssid: str, password: str) -> bool:
     except FileNotFoundError:
         # wpa_passphrase not available, manual config with escaping
         print_warning("wpa_passphrase not found, using manual configuration")
-        # Escape special characters in password
-        escaped_password = password.replace('\\', '\\\\').replace('"', '\\"')
+        # Escape special characters in password for shell safety
+        # Replace: backslash, double quote, single quote, backtick, dollar sign
+        escaped_password = (password
+                          .replace('\\', '\\\\')
+                          .replace('"', '\\"')
+                          .replace("'", "\\'")
+                          .replace('`', '\\`')
+                          .replace('$', '\\$'))
         wpa_config = f"""
 network={{
     ssid="{ssid}"
@@ -385,18 +421,10 @@ network={{
         run_command(['systemctl', 'restart', 'networking'], check=False, timeout=20)
         time.sleep(5)
         
-        # Check if connected - specifically check wireless interface
-        success, stdout, _ = run_command(['ip', 'addr', 'show'], check=False)
-        if success:
-            # Look for wireless interface with IP address
-            lines = stdout.split('\n')
-            for i, line in enumerate(lines):
-                if ('wlan' in line or 'wlp' in line) and 'state UP' in line:
-                    # Check following lines for inet address
-                    for j in range(i, min(i+10, len(lines))):
-                        if 'inet ' in lines[j] and '127.0.0.1' not in lines[j]:
-                            print_success(f"Successfully configured WiFi for '{ssid}'")
-                            return True
+        # Check if connected using helper function
+        if is_wifi_connected():
+            print_success(f"Successfully configured WiFi for '{ssid}'")
+            return True
         
     except Exception as e:
         print_error(f"Failed to configure WiFi: {e}")
@@ -416,21 +444,11 @@ def setup_wifi() -> bool:
     """
     print_header("WiFi Network Configuration")
     
-    # Check if already connected to WiFi
-    success, stdout, _ = run_command(['ip', 'addr', 'show'], check=False)
-    if success:
-        # Look for wireless interface with IP - check properly for interface and IP on different lines
-        lines = stdout.split('\n')
-        for i, line in enumerate(lines):
-            if ('wlan' in line or 'wlp' in line) and 'state UP' in line:
-                # Check following lines for inet address
-                for j in range(i, min(i+10, len(lines))):
-                    if 'inet ' in lines[j] and '127.0.0.1' not in lines[j]:
-                        print_success("Already connected to WiFi")
-                        if not get_yes_no("Do you want to configure a different network?", default=False):
-                            return True
-                        break
-                break
+    # Check if already connected to WiFi using helper function
+    if is_wifi_connected():
+        print_success("Already connected to WiFi")
+        if not get_yes_no("Do you want to configure a different network?", default=False):
+            return True
     
     # Scan for networks
     networks = scan_wifi_networks()
