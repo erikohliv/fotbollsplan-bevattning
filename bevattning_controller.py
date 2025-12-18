@@ -236,9 +236,14 @@ def main_once(args):
     logger.info("=== Bevattningsscript Körning Startad ===")
     logger.info("Hämtar väderdata från Open-Meteo...")
     temp, regn = hamta_vader(args.lat, args.lon)
+    
+    # Use fallback values if weather fetch failed
     if temp is None:
         temp = 15.0
         regn = 0.0
+    
+    # Safe rain value for logging (handles None)
+    regn_safe = regn if regn is not None else 0.0
 
     markfukt = args.simulate_markfukt_value if args.simulate else 30
     if args.read_markfukt and not args.simulate:
@@ -277,7 +282,7 @@ def main_once(args):
     tid_horn = int(BASE_TID_HORN * faktor)
 
     logger.info("Väder: temp=%.1fC regn24h=%.1fmm markfukt=%s%% => %s => tider %d/%d min",
-                temp, (regn if regn is not None else 0.0), markfukt, anledning, tid_center, tid_horn)
+                temp, regn_safe, markfukt, anledning, tid_center, tid_horn)
 
     wrote = False
     if not args.dry_run:
@@ -300,7 +305,7 @@ def main_once(args):
                                               unit=args.unit)
                     if ok2:
                         logger.info("Miljödata skrivna: Markfukt=%d%%, Regn=%.1fmm, Temp=%.1fC", 
-                                  markfukt, (regn if regn is not None else 0.0), temp)
+                                  markfukt, regn_safe, temp)
                     client.close()
                     wrote = ok1 and ok2
                     if wrote:
@@ -323,7 +328,7 @@ def main_once(args):
         with open(LOG_FIL, "a", newline="") as f:
             writer = csv.writer(f)
             writer.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                             f"temp={temp:.1f}", f"rain24h={(regn if regn is not None else 0.0):.1f}",
+                             f"temp={temp:.1f}", f"rain24h={regn_safe:.1f}",
                              f"moisture={markfukt}", anledning, tid_center, tid_horn, "written" if wrote else "not_written"])
     except Exception as e:
         logger.warning("Kunde inte skriva loggfil: %s", e)

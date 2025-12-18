@@ -90,6 +90,10 @@ PROGRAM Fotbollsplan_Master
     ManualRunZone : INT := 0;
     (* Manual mode now uses same times as auto mode, no separate ManualRunTime *)
 
+    (* UNIPI 1.1 Analog Input Constants *)
+    ANALOG_INPUT_MAX : INT := 27648; (* 0-10V range for UNIPI 1.1 *)
+    MOISTURE_PERCENT_MAX : INT := 100; (* Scale to 0-100% *)
+
     (* Display button hold detection for zone confirmation *)
     DisplayBtn1_HoldTimer : TON;
     DisplayBtn2_HoldTimer : TON;
@@ -182,17 +186,18 @@ PROGRAM Fotbollsplan_Master
 
   (* MARKFUKTGIVARE: Scale analog input 0-10V (0-27648) to 0-100% *)
   (* UNIPI 1.1 analog input range is 0-27648 for 0-10V *)
-  (* This logic can be overridden by Python controller writing directly to MW30 *)
+  (* NOTE: Python controller can override this by writing directly to MW30 *)
+  (* Python writes take precedence - last write wins *)
   IF Analog_Markfukt_Raw < 0 THEN
     Markfukt := 0;
-  ELSIF Analog_Markfukt_Raw > 27648 THEN
-    Markfukt := 100;
+  ELSIF Analog_Markfukt_Raw > ANALOG_INPUT_MAX THEN
+    Markfukt := MOISTURE_PERCENT_MAX;
   ELSE
-    (* Scale: (Raw / 27648) * 100 = (Raw * 100) / 27648 *)
-    Markfukt := (Analog_Markfukt_Raw * 100) / 27648;
+    (* Scale: (Raw / ANALOG_INPUT_MAX) * 100 = (Raw * 100) / ANALOG_INPUT_MAX *)
+    Markfukt := (Analog_Markfukt_Raw * MOISTURE_PERCENT_MAX) / ANALOG_INPUT_MAX;
   END_IF;
   (* Clamp to valid range *)
-  IF Markfukt > 100 THEN Markfukt := 100; END_IF;
+  IF Markfukt > MOISTURE_PERCENT_MAX THEN Markfukt := MOISTURE_PERCENT_MAX; END_IF;
   IF Markfukt < 0 THEN Markfukt := 0; END_IF;
 
   (* ERROR RESET: Handle reset pulse from Modbus or physical button *)

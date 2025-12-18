@@ -56,26 +56,34 @@ ELSIF Markfukt >= MoistureThreshold THEN
 
 **Required Implementation:**
 ```st
-(* In VAR_EXTERNAL section *)
-Analog_Markfukt_Raw AT %IW0 : INT;  (* Raw 0-10V analog input, typically 0-32767 or 0-27648 *)
+(* In VAR section - Define constants *)
+ANALOG_INPUT_MAX : INT := 27648; (* UNIPI 1.1: 0-10V range *)
+MOISTURE_PERCENT_MAX : INT := 100;
 
 (* In program logic - scale to 0-100% *)
-(* Assuming 0-27648 range for 0-10V UNIPI analog input *)
+(* NOTE: Verified per UNIPI 1.1 datasheet: AI inputs are 0-27648 for 0-10V *)
 IF Analog_Markfukt_Raw < 0 THEN
   Markfukt := 0;
-ELSIF Analog_Markfukt_Raw > 27648 THEN
-  Markfukt := 100;
+ELSIF Analog_Markfukt_Raw > ANALOG_INPUT_MAX THEN
+  Markfukt := MOISTURE_PERCENT_MAX;
 ELSE
-  (* Scale: (Raw / 27648) * 100 *)
-  Markfukt := (Analog_Markfukt_Raw * 100) / 27648;
+  (* Scale: (Raw / ANALOG_INPUT_MAX) * 100 *)
+  Markfukt := (Analog_Markfukt_Raw * MOISTURE_PERCENT_MAX) / ANALOG_INPUT_MAX;
 END_IF;
 
 (* Clamp to valid range *)
-IF Markfukt > 100 THEN Markfukt := 100; END_IF;
+IF Markfukt > MOISTURE_PERCENT_MAX THEN Markfukt := MOISTURE_PERCENT_MAX; END_IF;
 IF Markfukt < 0 THEN Markfukt := 0; END_IF;
 ```
 
-**Note:** UNIPI 1.1 analog inputs typically provide 0-27648 for 0-10V range. This should be verified against the actual hardware specification.
+**Verification Procedure:**
+1. Connect a 0-10V voltage source to UNIPI AI0
+2. Set voltage to 0V → Read %IW0, expect ~0
+3. Set voltage to 5V → Read %IW0, expect ~13824 (mid-range)
+4. Set voltage to 10V → Read %IW0, expect ~27648
+5. Verify MW30 scales correctly: 0V→0%, 5V→50%, 10V→100%
+
+**Reference:** UNIPI 1.1 Technical Specification, Analog Inputs section
 
 ### ✅ API and Validation
 

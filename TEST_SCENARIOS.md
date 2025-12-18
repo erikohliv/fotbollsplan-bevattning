@@ -152,13 +152,15 @@ tail -n 1 ~/bevattning_log.csv
 
 **PLC Test Procedure:**
 1. Set %IW0 (Analog input) to 0 → Expect MW30 = 0%
-2. Set %IW0 to 13824 (mid-range) → Expect MW30 = 50%
-3. Set %IW0 to 27648 (full scale) → Expect MW30 = 100%
+2. Set %IW0 to ANALOG_INPUT_MAX/2 (13824) → Expect MW30 = 50%
+3. Set %IW0 to ANALOG_INPUT_MAX (27648) → Expect MW30 = 100%
 4. Set %IW0 to 30000 (overflow) → Expect MW30 = 100% (clamped)
 
 **Scaling Formula in PLC:**
 ```
-MW30 = (IW0 * 100) / 27648
+ANALOG_INPUT_MAX = 27648  (UNIPI 1.1 constant)
+MOISTURE_PERCENT_MAX = 100
+MW30 = (IW0 * MOISTURE_PERCENT_MAX) / ANALOG_INPUT_MAX
 Clamped to 0-100%
 ```
 

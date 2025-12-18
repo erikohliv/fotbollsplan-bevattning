@@ -96,8 +96,11 @@ sudo systemctl start bevattning-api
 - **MW20** Set_Tid_Center (min, 0..240, default 30 via ST-fallback vid 0).
 - **MW21** Set_Tid_Horn (min, 0..240, default 15 via ST-fallback vid 0).
 - **MW30** Markfukt % (skrivs av Python/extern ELLER skalas från analog input %IW0 i PLC).
-  - Om analog sensor är ansluten: PLC läser %IW0 (0-10V = 0-27648) och skalar till 0-100%
-  - Om Python skriver: Python-värdet används direkt
+  - **Dual-mode operation:** 
+    - PLC kontinuerligt: Läser %IW0 (0-10V = 0-27648) och skalar till 0-100% varje scan-cykel
+    - Python skrivning: Skriver direkt till MW30 (överskrider PLC-skalning till nästa PLC-cykel)
+    - **OBS:** Sista skrivningen vinner - Python-skrivning är temporär, PLC skriver över vid nästa cykel om analog sensor är ansluten
+  - **Rekommendation:** Använd antingen analog sensor ELLER Python-skrivning, inte båda samtidigt
   - Värdeområde: 0-100%
 - **MW31** Regen_24h_mm (skrivs av Python/extern).
 - **MW32** Temp_C (skrivs av Python/extern).
