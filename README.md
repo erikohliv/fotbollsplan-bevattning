@@ -7,14 +7,42 @@
 - **Display Manager:** Hanterar två I2C LCD-displayer för status och manuell styrning.
 - **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump_enable styr Siemens LOGO → VFD (mjukstart).
 
-## Bygg & kör på Raspberry Pi
+## Installation på Raspberry Pi
 
-### Snabbstart med setup.py (Rekommenderat)
-För automatisk installation och konfiguration:
+### Komplett installation (Rekommenderat för nya system)
+För helt ny installation på Raspberry Pi 4 med Debian Bookworm Lite:
+
+**Steg 1: Grundläggande förberedelser**
+```bash
+sudo apt update
+sudo apt install -y python3 git
+git clone https://github.com/erikohliv/fotbollsplan-bevattning.git
+cd fotbollsplan-bevattning
+```
+
+**Steg 2: Kör komplett installation**
+```bash
+sudo python3 install_complete.py
+```
+
+Det kompletta installationsskriptet guidar dig genom:
+- **WiFi-sökning och konfiguration** - Sök och anslut till rätt nätverk
+- Systempaket-installation (Python, I2C-verktyg, nätverksverktyg)
+- I2C-aktivering för LCD-displayer
+- Python virtual environment och beroenden
+- Miljövariabel-konfiguration (API-nyckel, Modbus, SMTP)
+- Tailscale installation och konfiguration (valfritt för fjärråtkomst)
+- systemd-tjänster installation och aktivering
+- Automatisk omstart för att aktivera alla ändringar
+
+Efter installationen är systemet helt klart att använda!
+
+### Snabbstart med setup.py (För befintliga system)
+Om systemet redan har grundläggande paket installerade:
 ```bash
 sudo apt update
 sudo apt install -y python3-venv python3-pip i2c-tools python3-smbus
-git clone https://github.com/IKKAMP/fotbollsplan-bevattning.git
+git clone https://github.com/erikohliv/fotbollsplan-bevattning.git
 cd fotbollsplan-bevattning
 python3 setup.py
 ```
