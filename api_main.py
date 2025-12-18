@@ -42,8 +42,12 @@ MW_HEARTBEAT = 70
 MW_HEARTBEAT_CNT = 71
 MW_EVENTMASK = 72
 MW_BLOCK_REASON = 73
+MW_TEST_MODE = 80          # Test mode aktivering (1=aktiv, 0=inaktiv)
+MW_TEST_ZONE_RESULT = 81   # Test resultat för aktuell zon (bitmask för zoner 1-7)
+MW_ERROR_RESET = 82        # Error reset trigger (skriv 1 för att nollställa fel)
+MW_AUTO_OVERRIDE = 33      # AutoOverride från befintlig mappning
 
-app = FastAPI(title="Bevattning API", version="0.2")
+app = FastAPI(title="Bevattning API", version="0.3")
 
 
 def require_key(x_api_key: Optional[str]):
@@ -155,6 +159,12 @@ class ConfigUpdate(BaseModel):
     temp_c: Optional[int] = None
     manual_time: Optional[int] = None  # DEPRECATED - kept for backward compatibility
     mode_override: Optional[int] = None  # 1=Auto, 0=Manual
+
+
+class TestZoneCommand(BaseModel):
+    """Command för att testa en specifik zon eller alla zoner"""
+    zone: Optional[int] = None  # Om None, testa alla zoner sekventiellt
+    duration_seconds: int = 60  # Testlängd per zon (default 60 sekunder)
 
 
 @app.get("/status")
@@ -327,6 +337,191 @@ def config(cfg: ConfigUpdate, x_api_key: Optional[str] = Header(None)):
     return {"ok": True}
 
 
+@app.post("/menu/test-bevattning")
+def test_bevattning(cmd: TestZoneCommand, x_api_key: Optional[str] = Header(None)):
+    """
+    Test Bevattning - Pre-season zone check.
+    Testar varje zon i 1 minut (eller angivet antal sekunder) för att verifiera funktion.
+    """
+    require_key(x_api_key)
+    
+    zones_to_test = [cmd.zone] if cmd.zone is not None else list(range(1, 8))
+    test_results = {}
+    
+    with get_modbus_connection() as client:
+        # Aktivera test mode
+        rr = client.write_register(MW_TEST_MODE, 1, unit=MODBUS_UNIT)
+        if rr is None or (hasattr(rr, "isError") and rr.isError()):
+            raise HTTPException(status_code=502, detail="Modbus write error")
+        
+        for zone in zones_to_test:
+            if zone < 1 or zone > 7:
+                continue
+                
+            # Välj zon
+            rr = client.write_register(MW_SET_SELECTED, zone, unit=MODBUS_UNIT)
+            if rr is None or (hasattr(rr, "isError") and rr.isError()):
+                test_results[f"zone_{zone}"] = "failed_zone_select"
+                continue
+            
+            # Starta manuell körning
+            rr = client.write_register(MW_MANUAL_START, 1, unit=MODBUS_UNIT)
+            if rr is None or (hasattr(rr, "isError") and rr.isError()):
+                test_results[f"zone_{zone}"] = "failed_start"
+                continue
+            
+            # Vänta för testperioden
+            time.sleep(cmd.duration_seconds)
+            
+            # Stoppa
+            rr = client.write_register(MW_REMOTE_CMD, 0, unit=MODBUS_UNIT)
+            if rr is None or (hasattr(rr, "isError") and rr.isError()):
+                test_results[f"zone_{zone}"] = "failed_stop"
+                continue
+                
+            # Markera som testad (sätt bit i test result register)
+            current_result = client.read_holding_registers(MW_TEST_ZONE_RESULT, 1, unit=MODBUS_UNIT)
+            if current_result is not None and not (hasattr(current_result, "isError") and current_result.isError()):
+                result_value = current_result.registers[0] | (1 << (zone - 1))
+                client.write_register(MW_TEST_ZONE_RESULT, result_value, unit=MODBUS_UNIT)
+                test_results[f"zone_{zone}"] = "success"
+            else:
+                test_results[f"zone_{zone}"] = "failed_log"
+            
+            # Kort paus mellan zoner
+            time.sleep(2)
+        
+        # Avaktivera test mode
+        client.write_register(MW_TEST_MODE, 0, unit=MODBUS_UNIT)
+    
+    return {
+        "ok": True,
+        "test_results": test_results,
+        "zones_tested": zones_to_test,
+        "duration_per_zone": cmd.duration_seconds
+    }
+
+
+@app.post("/menu/lagesval")
+def lagesval(mode: int, x_api_key: Optional[str] = Header(None)):
+    """
+    Lägesval - Toggle mellan Manual och Auto mode.
+    mode: 1=Auto, 0=Manual
+    """
+    require_key(x_api_key)
+    
+    if mode not in [0, 1]:
+        raise HTTPException(status_code=400, detail="mode must be 0 (Manual) or 1 (Auto)")
+    
+    with get_modbus_connection() as client:
+        # Kontrollera block reason - vissa tillstånd kan förhindra lägesändring
+        block_check = client.read_holding_registers(MW_BLOCK_REASON, 1, unit=MODBUS_UNIT)
+        if block_check is None or (hasattr(block_check, "isError") and block_check.isError()):
+            raise HTTPException(status_code=502, detail="Cannot read block status")
+        
+        block_reason = block_check.registers[0]
+        if block_reason == 4:  # E-stop
+            raise HTTPException(status_code=400, detail="Cannot change mode: E-stop active")
+        
+        # Sätt mode
+        rr = client.write_register(MW_MODE_OVERRIDE, mode, unit=MODBUS_UNIT)
+        if rr is None or (hasattr(rr, "isError") and rr.isError()):
+            raise HTTPException(status_code=502, detail="Modbus write error")
+    
+    return {
+        "ok": True,
+        "mode": "Auto" if mode == 1 else "Manual",
+        "mode_value": mode
+    }
+
+
+@app.get("/menu/felsökning")
+def felsokning(x_api_key: Optional[str] = Header(None)):
+    """
+    Felsökning - Hämta detaljerad felstatus och loggning.
+    """
+    require_key(x_api_key)
+    
+    with get_modbus_connection() as client:
+        # Läs alla relevanta statusregister
+        status_regs = client.read_holding_registers(MW_STATUS_ZONE, 4, unit=MODBUS_UNIT)
+        heartbeat_regs = client.read_holding_registers(MW_HEARTBEAT, 4, unit=MODBUS_UNIT)
+        
+        if status_regs is None or (hasattr(status_regs, "isError") and status_regs.isError()):
+            raise HTTPException(status_code=502, detail="Cannot read status registers")
+        if heartbeat_regs is None or (hasattr(heartbeat_regs, "isError") and heartbeat_regs.isError()):
+            raise HTTPException(status_code=502, detail="Cannot read heartbeat registers")
+        
+        block_reason = heartbeat_regs.registers[3]
+        eventmask = heartbeat_regs.registers[2]
+        
+        # Tolka block reason
+        block_reasons = {
+            0: "OK - Inget fel",
+            1: "Regn över tröskel",
+            2: "Markfukt över tröskel",
+            3: "Anti-kollision / Pump upptagen",
+            4: "E-stop aktiv"
+        }
+        
+        # Tolka eventmask
+        events = {
+            "e_stop": bool(eventmask & 0x01),
+            "moisture_rain_block": bool(eventmask & 0x02),
+            "sequence_active": bool(eventmask & 0x04),
+            "anti_collision": bool(eventmask & 0x08),
+            "auto_override": bool(eventmask & 0x10)
+        }
+        
+        return {
+            "ok": True,
+            "current_zone": status_regs.registers[0],
+            "pump_on": status_regs.registers[1] == 1,
+            "steg": status_regs.registers[2],
+            "selected_zone": status_regs.registers[3],
+            "block_reason": block_reason,
+            "block_reason_text": block_reasons.get(block_reason, f"Okänd kod {block_reason}"),
+            "events": events,
+            "heartbeat_count": heartbeat_regs.registers[1],
+            "timestamp": int(time.time())
+        }
+
+
+@app.post("/menu/reset-error")
+def reset_error(x_api_key: Optional[str] = Header(None)):
+    """
+    Reset Error - Nollställ pump-fel och zonlogik.
+    Pulserar ERROR_RESET registret för att återställa PLC-fel.
+    """
+    require_key(x_api_key)
+    
+    with get_modbus_connection() as client:
+        # Pulsera error reset
+        rr = client.write_register(MW_ERROR_RESET, 1, unit=MODBUS_UNIT)
+        if rr is None or (hasattr(rr, "isError") and rr.isError()):
+            raise HTTPException(status_code=502, detail="Modbus write error")
+        
+        time.sleep(0.5)
+        
+        rr = client.write_register(MW_ERROR_RESET, 0, unit=MODBUS_UNIT)
+        if rr is None or (hasattr(rr, "isError") and rr.isError()):
+            raise HTTPException(status_code=502, detail="Modbus write error")
+        
+        # Läs status efter reset
+        block_check = client.read_holding_registers(MW_BLOCK_REASON, 1, unit=MODBUS_UNIT)
+        if block_check is None or (hasattr(block_check, "isError") and block_check.isError()):
+            new_block_reason = -1
+        else:
+            new_block_reason = block_check.registers[0]
+    
+    return {
+        "ok": True,
+        "reset_performed": True,
+        "new_block_reason": new_block_reason,
+        "message": "Error reset performed successfully"
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 def ui():
     return """
@@ -424,7 +619,48 @@ label { font-weight: bold; margin-right: 5px; }
     </div>
   </div>
   
+  <div class="section">
+    <h3>Meny-system</h3>
+    
+    <div style="margin-bottom: 15px;">
+      <h4 style="margin: 10px 0 5px 0; color: #666;">Test Bevattning (Försäsongskontroll)</h4>
+      <div class="controls">
+        <button onclick="testAllZones()">Testa Alla Zoner (1 min/zon)</button>
+        <button onclick="testSingleZone()">Testa Enskild Zon</button>
+      </div>
+      <p style="font-size: 12px; color: #666; margin-top: 5px;">
+        Testar varje zon i 1 minut för att verifiera funktion innan säsongstart.
+      </p>
+    </div>
+    
+    <div style="margin-bottom: 15px;">
+      <h4 style="margin: 10px 0 5px 0; color: #666;">Lägesval</h4>
+      <div class="controls">
+        <button onclick="setMode(1)">Auto-läge</button>
+        <button onclick="setMode(0)">Manuellt läge</button>
+      </div>
+      <p style="font-size: 12px; color: #666; margin-top: 5px;">
+        Växla mellan automatisk och manuell drift. E-stop blockerar lägesändring.
+      </p>
+    </div>
+    
+    <div style="margin-bottom: 15px;">
+      <h4 style="margin: 10px 0 5px 0; color: #666;">Felsökning</h4>
+      <div class="controls">
+        <button onclick="showTroubleshooting()">Visa Felstatus</button>
+        <button class="danger" onclick="resetErrors()">Återställ Fel</button>
+      </div>
+      <p style="font-size: 12px; color: #666; margin-top: 5px;">
+        Visa detaljerad felstatus och återställ pump-fel.
+      </p>
+    </div>
+  </div>
+  
   <div id="message" class="message"></div>
+  <div id="troubleshooting" style="display: none; margin-top: 20px; padding: 15px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;">
+    <h3 style="margin-top: 0;">Felsökningsinformation</h3>
+    <pre id="troubleshooting-data" style="font-family: monospace; white-space: pre-wrap;"></pre>
+  </div>
 </div>
 
 <script>
@@ -564,6 +800,144 @@ async function stopAll() {
     }
     
     showMessage('Bevattning stoppad');
+    setTimeout(loadStatus, 500);
+  } catch (err) {
+    showMessage('Nätverksfel: ' + err.message, true);
+  }
+}
+
+async function testAllZones() {
+  if (!confirm('Starta test av alla zoner? Detta tar ca 7-8 minuter (1 min per zon).')) {
+    return;
+  }
+  
+  showMessage('Testar alla zoner... Detta tar några minuter.');
+  
+  try {
+    const r = await fetch('/menu/test-bevattning', {
+      method: 'POST',
+      headers: {'X-API-Key': key, 'Content-Type': 'application/json'},
+      body: JSON.stringify({duration_seconds: 60})
+    });
+    
+    if (!r.ok) {
+      const err = await r.json();
+      showMessage('Fel: ' + (err.detail || 'Okänt fel'), true);
+      return;
+    }
+    
+    const result = await r.json();
+    const successCount = Object.values(result.test_results).filter(v => v === 'success').length;
+    showMessage(`Zontest slutfört: ${successCount}/${result.zones_tested.length} zoner testade OK`);
+    setTimeout(loadStatus, 500);
+  } catch (err) {
+    showMessage('Nätverksfel: ' + err.message, true);
+  }
+}
+
+async function testSingleZone() {
+  const zone = parseInt(document.getElementById('zone').value);
+  if (!confirm(`Testa zon ${zone} i 1 minut?`)) {
+    return;
+  }
+  
+  showMessage(`Testar zon ${zone}...`);
+  
+  try {
+    const r = await fetch('/menu/test-bevattning', {
+      method: 'POST',
+      headers: {'X-API-Key': key, 'Content-Type': 'application/json'},
+      body: JSON.stringify({zone: zone, duration_seconds: 60})
+    });
+    
+    if (!r.ok) {
+      const err = await r.json();
+      showMessage('Fel: ' + (err.detail || 'Okänt fel'), true);
+      return;
+    }
+    
+    const result = await r.json();
+    const testResult = result.test_results[`zone_${zone}`];
+    if (testResult === 'success') {
+      showMessage(`Zon ${zone} testad OK`);
+    } else {
+      showMessage(`Zon ${zone} test misslyckades: ${testResult}`, true);
+    }
+    setTimeout(loadStatus, 500);
+  } catch (err) {
+    showMessage('Nätverksfel: ' + err.message, true);
+  }
+}
+
+async function setMode(mode) {
+  const modeName = mode === 1 ? 'Auto' : 'Manuellt';
+  if (!confirm(`Växla till ${modeName} läge?`)) {
+    return;
+  }
+  
+  try {
+    const r = await fetch(`/menu/lagesval?mode=${mode}`, {
+      method: 'POST',
+      headers: {'X-API-Key': key}
+    });
+    
+    if (!r.ok) {
+      const err = await r.json();
+      showMessage('Fel: ' + (err.detail || 'Okänt fel'), true);
+      return;
+    }
+    
+    const result = await r.json();
+    showMessage(`Läge ändrat till: ${result.mode}`);
+    setTimeout(loadStatus, 500);
+  } catch (err) {
+    showMessage('Nätverksfel: ' + err.message, true);
+  }
+}
+
+async function showTroubleshooting() {
+  try {
+    const r = await fetch('/menu/felsökning', {
+      headers: {'X-API-Key': key}
+    });
+    
+    if (!r.ok) {
+      const err = await r.json();
+      showMessage('Fel: ' + (err.detail || 'Okänt fel'), true);
+      return;
+    }
+    
+    const data = await r.json();
+    const formatted = JSON.stringify(data, null, 2);
+    document.getElementById('troubleshooting-data').innerText = formatted;
+    document.getElementById('troubleshooting').style.display = 'block';
+    
+    // Scroll to troubleshooting section
+    document.getElementById('troubleshooting').scrollIntoView({behavior: 'smooth'});
+  } catch (err) {
+    showMessage('Nätverksfel: ' + err.message, true);
+  }
+}
+
+async function resetErrors() {
+  if (!confirm('Återställa pump-fel och zonlogik?')) {
+    return;
+  }
+  
+  try {
+    const r = await fetch('/menu/reset-error', {
+      method: 'POST',
+      headers: {'X-API-Key': key}
+    });
+    
+    if (!r.ok) {
+      const err = await r.json();
+      showMessage('Fel: ' + (err.detail || 'Okänt fel'), true);
+      return;
+    }
+    
+    const result = await r.json();
+    showMessage('Fel återställda: ' + result.message);
     setTimeout(loadStatus, 500);
   } catch (err) {
     showMessage('Nätverksfel: ' + err.message, true);
