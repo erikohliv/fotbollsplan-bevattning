@@ -126,6 +126,9 @@ sudo systemctl start bevattning-api
   - 2=Moisture > threshold
   - 3=Anti-kollision/pump upptagen
   - 4=E-stop
+- **MW80** TestMode (1=testläge aktivt, 0=inaktivt)
+- **MW81** TestZoneResult (bitmask för testade zoner 1-7)
+- **MW82** ErrorReset (skriv 1 för att nollställa fel, PLC nollar)
 
 ## Sekvens & anti-vattenslag
 - **Start (auto):** Ventil för zon öppnas, OpenDelay löper, därefter pump på och kör-timer. Auto-läge kör alla zoner 1-7.
@@ -181,6 +184,18 @@ sudo systemctl start bevattning-api
   - `POST /command/set-manual-time` **DEPRECATED** (behålls för bakåtkompatibilitet, gör ingenting)
   - `POST /command/stop` (sätter Remote_Command=0 och ModeOverride=0 för att stoppa auto)
   - `POST /config` (tider, trösklar, markfukt, regen, temp, mode_override)
+  
+### Meny-system endpoints (nya funktioner):
+  - `POST /menu/test-bevattning` `{ "zone": 1..7, "duration_seconds": 60 }` (Testa enskild zon eller alla zoner)
+    - Om `zone` utelämnas testas alla zoner 1-7 sekventiellt
+    - Standardtestlängd är 60 sekunder per zon
+    - Resultat loggas i MW81 (TestZoneResult bitmask)
+  - `POST /menu/lagesval?mode=0|1` (Växla mellan Manual (0) och Auto (1) läge)
+    - Blockeras om E-stop är aktiv
+  - `GET /menu/felsökning` (Hämta detaljerad felstatus och diagnostik)
+    - Returnerar block reason, eventmask, och tolkning av systemtillstånd
+  - `POST /menu/reset-error` (Återställ pump-fel och zonlogik)
+    - Pulserar MW82 (ErrorReset) för att nollställa PLC-fel
 
 ## Healthcheck
 - Script: `python healthcheck.py`
@@ -225,6 +240,29 @@ curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
 # Starta manuell körning - zon 2, 10 minuter
 curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
   -d '{"zone":2}' http://localhost:8000/command/manual
+
+# Testa alla zoner (försäsongskontroll) - 60 sekunder per zon
+curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
+  -d '{"duration_seconds":60}' http://localhost:8000/menu/test-bevattning
+
+# Testa enskild zon (zon 3) - 60 sekunder
+curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
+  -d '{"zone":3,"duration_seconds":60}' http://localhost:8000/menu/test-bevattning
+
+# Växla till Auto-läge
+curl -X POST -H "X-API-Key: <din-nyckel>" \
+  http://localhost:8000/menu/lagesval?mode=1
+
+# Växla till Manuellt läge
+curl -X POST -H "X-API-Key: <din-nyckel>" \
+  http://localhost:8000/menu/lagesval?mode=0
+
+# Hämta felsökningsinformation
+curl -H "X-API-Key: <din-nyckel>" http://localhost:8000/menu/felsökning
+
+# Återställ pump-fel och zonlogik
+curl -X POST -H "X-API-Key: <din-nyckel>" \
+  http://localhost:8000/menu/reset-error
 ```
 
 ## Rekommenderad drift
