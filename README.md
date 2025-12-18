@@ -239,6 +239,91 @@ sudo systemctl start bevattning-api
   - `POST /menu/reset-error` (Återställ pump-fel och zonlogik)
     - Pulserar MW82 (ErrorReset) för att nollställa PLC-fel
 
+### Process View och Väderdata endpoints (Nya funktioner):
+  - `GET /rain-forecast` (Hämta regnprognos från Open-Meteo)
+    - Returnerar förväntad nederbörd nästa 24 timmar
+    - Returnerar historisk nederbörd senaste 7 dagarna
+    - Använder Open-Meteo API (gratis, inget API-nyckel behövs)
+    - Konfigurerbara koordinater via `LATITUDE` och `LONGITUDE` miljövariabler
+  - `GET /process-view` (Hämta live processtatus för grafisk visualisering)
+    - Zonsstatus (aktiv/inaktiv) för alla zoner 1-7
+    - Pumpstatus (på/av)
+    - Sekvensstatus (aktivt steg, aktuell zon)
+    - Felstatus (e-stop, markfukt-block, regn-block, anti-kollision)
+    - Miljödata (markfukt, regn 24h, temperatur)
+    - Konfiguration (tid_center, tid_horn)
+    - Mode-status (lokalt/fjärr)
+  - `POST /zone-control` `{ "zone": 1..7, "action": "start"|"stop" }` (Styr individuella zoner)
+    - `action: "start"` - Starta vald zon (använder auto-tider)
+    - `action: "stop"` - Stoppa all bevattning
+    - Används av Dash Process View för grafisk zonkontroll
+
+## Dash Process View (Grafisk Visualisering)
+Ett grafiskt webb-gränssnitt byggt med Plotly Dash för realtidsövervakning och styrning.
+
+### Funktioner
+- **Zonöversikt:** Grafisk visualisering av alla 7 zoner med färgkodad status
+  - Grön: Aktiv zon
+  - Orange: Vald zon (men inte aktiv)
+  - Grå: Inaktiv zon
+- **Pumpstatus:** Live status av pump (på/av) med visuell indikator
+- **Sekvensstatus:** Aktuellt steg och zon i pågående sekvens
+- **Felvisualisering:** Grafiska varningar för systemfel
+  - E-stop (röd varning)
+  - Markfukt-block (orange)
+  - Regn-block (orange)
+  - Anti-kollision (orange)
+- **Zonkontroll:** Klickbara kontroller för att starta/stoppa zoner
+- **Regnprognos:** Graf över förväntad nederbörd nästa 24 timmar
+- **Regnhistorik:** Graf över nederbörd senaste 7 dagarna
+- **Miljödata:** Live visning av markfukt, regn 24h, temperatur
+- **Auto-uppdatering:** Systemet uppdateras automatiskt var 5:e sekund
+
+### Starta Dash Process View
+```bash
+source .venv/bin/activate
+python3 dash_app.py
+```
+
+Dash-appen startar på `http://0.0.0.0:8050` (konfigurerbart via miljövariabler).
+
+### Miljövariabler för Dash
+- `API_URL` - URL till FastAPI backend (default: `http://127.0.0.1:8000`)
+- `API_KEY` - API-nyckel för autentisering
+- `DASH_PORT` - Port för Dash-appen (default: `8050`)
+- `DASH_HOST` - Host för Dash-appen (default: `0.0.0.0`)
+- `LATITUDE` - Latitud för väderdata (default: `55.6050` - Malmö)
+- `LONGITUDE` - Longitud för väderdata (default: `13.0038` - Malmö)
+
+### Systemd service för Dash (valfritt)
+För att köra Dash Process View som en systemd-tjänst, skapa en service-fil:
+
+```ini
+[Unit]
+Description=Bevattning Dash Process View
+After=network.target bevattning-api.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/fotbollsplan-bevattning
+Environment="PATH=/home/pi/fotbollsplan-bevattning/.venv/bin"
+EnvironmentFile=/home/pi/fotbollsplan-bevattning/api_.env
+ExecStart=/home/pi/fotbollsplan-bevattning/.venv/bin/python3 /home/pi/fotbollsplan-bevattning/dash_app.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Installera och starta:
+```bash
+sudo cp systemd_dash-process-view.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable dash-process-view
+sudo systemctl start dash-process-view
+```
+
 ## Healthcheck
 - Script: `python healthcheck.py`
 - Env: `API_URL` (default `http://127.0.0.1:8000/status`), `API_KEY`, `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_TO` (komma-separerad).
@@ -319,6 +404,22 @@ curl -H "X-API-Key: <din-nyckel>" http://localhost:8000/menu/felsökning
 # Återställ pump-fel och zonlogik
 curl -X POST -H "X-API-Key: <din-nyckel>" \
   http://localhost:8000/menu/reset-error
+
+# === PROCESS VIEW & VÄDERDATA ENDPOINTS ===
+
+# Hämta regnprognos (nästa 24h + senaste 7 dagarna)
+curl -H "X-API-Key: <din-nyckel>" http://localhost:8000/rain-forecast
+
+# Hämta live processtatus (zoner, pump, fel, miljödata)
+curl -H "X-API-Key: <din-nyckel>" http://localhost:8000/process-view
+
+# Starta zon via zone-control
+curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
+  -d '{"zone":5,"action":"start"}' http://localhost:8000/zone-control
+
+# Stoppa bevattning via zone-control
+curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
+  -d '{"zone":1,"action":"stop"}' http://localhost:8000/zone-control
 ```
 
 ## Rekommenderad drift

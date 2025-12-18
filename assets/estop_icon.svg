@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Emergency stop button - E-stop -->
+  <circle cx="32" cy="32" r="30" fill="#f44336" stroke="#c62828" stroke-width="3"/>
+  
+  <!-- Inner button -->
+  <circle cx="32" cy="32" r="24" fill="#d32f2f"/>
+  
+  <!-- Highlight -->
+  <ellipse cx="28" cy="24" rx="8" ry="6" fill="#ef5350" opacity="0.5"/>
+  
+  <!-- Stop hand symbol -->
+  <g transform="translate(32, 32)">
+    <rect x="-2" y="-12" width="4" height="16" fill="white" rx="2"/>
+    <rect x="-10" y="-8" width="4" height="12" fill="white" rx="2"/>
+    <rect x="-6" y="-10" width="4" height="14" fill="white" rx="2"/>
+    <rect x="2" y="-10" width="4" height="14" fill="white" rx="2"/>
+    <rect x="6" y="-8" width="4" height="12" fill="white" rx="2"/>
+    <rect x="-10" y="4" width="20" height="6" fill="white" rx="2"/>
+  </g>
+</svg>

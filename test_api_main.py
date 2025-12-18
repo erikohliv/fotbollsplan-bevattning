@@ -5,6 +5,7 @@ Test suite for api_main.py endpoints
 
 import pytest
 import logging
+import requests
 from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch, MagicMock
 import sys
@@ -377,6 +378,171 @@ def test_status_includes_mode(client, mock_modbus):
     data = response.json()
     assert "mode" in data
     assert "mode_text" in data
+
+
+def test_rain_forecast_authorized(client):
+    """Test rain forecast endpoint with valid API key"""
+    with patch('api_main.requests.get') as mock_get:
+        # Mock forecast response
+        mock_forecast_response = MagicMock()
+        mock_forecast_response.status_code = 200
+        mock_forecast_response.json.return_value = {
+            "hourly": {
+                "time": ["2024-01-01T00:00", "2024-01-01T01:00", "2024-01-01T02:00"],
+                "precipitation": [0.5, 1.0, 0.3]
+            }
+        }
+        
+        # Mock historical response
+        mock_historical_response = MagicMock()
+        mock_historical_response.status_code = 200
+        mock_historical_response.json.return_value = {
+            "daily": {
+                "time": ["2024-01-01", "2024-01-02"],
+                "precipitation_sum": [2.5, 1.2]
+            }
+        }
+        
+        mock_get.side_effect = [mock_forecast_response, mock_historical_response]
+        
+        response = client.get("/rain-forecast", headers={"X-API-Key": API_KEY})
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert "forecast_24h" in data
+        assert "history_7d" in data
+        assert "location" in data
+        assert "total_mm" in data["forecast_24h"]
+        assert "hourly" in data["forecast_24h"]
+        assert "daily" in data["history_7d"]
+
+
+def test_rain_forecast_unauthorized(client):
+    """Test rain forecast endpoint without API key"""
+    response = client.get("/rain-forecast")
+    assert response.status_code == 401
+
+
+def test_rain_forecast_api_error(client):
+    """Test rain forecast endpoint when weather API fails"""
+    with patch('api_main.requests.get') as mock_get:
+        mock_get.side_effect = requests.exceptions.RequestException("API unavailable")
+        
+        response = client.get("/rain-forecast", headers={"X-API-Key": API_KEY})
+        assert response.status_code == 502
+
+
+def test_process_view_authorized(client, mock_modbus):
+    """Test process view endpoint with valid API key"""
+    # Setup mock to return multiple register reads
+    with patch('api_main.mb_client') as mock:
+        mock_client_instance = MagicMock()
+        mock_client_instance.connect.return_value = True
+        mock_client_instance.close.return_value = None
+        
+        # Mock multiple read operations
+        def mock_read(address, count, unit):
+            result = MagicMock()
+            result.isError.return_value = False
+            
+            if address == 50:  # MW_STATUS_ZONE
+                result.registers = [2, 1, 5, 2]  # zone=2, pump=on, steg=5, selected=2
+            elif address == 70:  # MW_HEARTBEAT
+                result.registers = [1, 100, 0x04, 0]  # heartbeat, count, eventmask, block_reason
+            elif address == 20:  # MW_TID_CENTER
+                result.registers = [30, 15]  # tid_center, tid_horn
+            elif address == 30:  # MW_MARKFUKT
+                result.registers = [65, 2, 18]  # markfukt, regen24, temp
+            elif address == 100:  # MW_MODE
+                result.registers = [2]  # mode
+            else:
+                result.registers = [0] * count
+            
+            return result
+        
+        mock_client_instance.read_holding_registers.side_effect = mock_read
+        mock.return_value = mock_client_instance
+        
+        response = client.get("/process-view", headers={"X-API-Key": API_KEY})
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert "zones" in data
+        assert len(data["zones"]) == 7
+        assert "pump" in data
+        assert data["pump"]["on"] is True
+        assert "sequence" in data
+        assert "errors" in data
+        assert "block_status" in data
+        assert "environment" in data
+        assert "configuration" in data
+        assert "mode" in data
+
+
+def test_process_view_unauthorized(client):
+    """Test process view endpoint without API key"""
+    response = client.get("/process-view")
+    assert response.status_code == 401
+
+
+def test_zone_control_start_authorized(client, mock_modbus):
+    """Test zone control endpoint to start a zone"""
+    response = client.post(
+        "/zone-control",
+        json={"zone": 3, "action": "start"},
+        headers={"X-API-Key": API_KEY}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["action"] == "start"
+    assert data["zone"] == 3
+    assert "message" in data
+
+
+def test_zone_control_stop_authorized(client, mock_modbus):
+    """Test zone control endpoint to stop irrigation"""
+    response = client.post(
+        "/zone-control",
+        json={"zone": 1, "action": "stop"},
+        headers={"X-API-Key": API_KEY}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["action"] == "stop"
+    assert "message" in data
+
+
+def test_zone_control_unauthorized(client):
+    """Test zone control endpoint without API key"""
+    response = client.post(
+        "/zone-control",
+        json={"zone": 1, "action": "start"}
+    )
+    assert response.status_code == 401
+
+
+def test_zone_control_invalid_zone(client, mock_modbus):
+    """Test zone control endpoint with invalid zone"""
+    response = client.post(
+        "/zone-control",
+        json={"zone": 10, "action": "start"},
+        headers={"X-API-Key": API_KEY}
+    )
+    assert response.status_code == 400
+
+
+def test_zone_control_invalid_action(client, mock_modbus):
+    """Test zone control endpoint with invalid action"""
+    response = client.post(
+        "/zone-control",
+        json={"zone": 1, "action": "invalid"},
+        headers={"X-API-Key": API_KEY}
+    )
+    assert response.status_code == 400
 
 
 if __name__ == "__main__":

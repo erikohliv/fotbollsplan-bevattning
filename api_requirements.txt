@@ -3,3 +3,6 @@ uvicorn[standard]==0.30.6
 pymodbus==3.6.8
 python-dotenv==1.0.1
 requests==2.32.3
+dash==2.14.2
+plotly==5.18.0
+pandas==2.1.4

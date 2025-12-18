@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Sprinkler zone icon - bevattningszon -->
+  <circle cx="32" cy="32" r="30" fill="#4CAF50" stroke="#388E3C" stroke-width="2"/>
+  
+  <!-- Sprinkler huvud -->
+  <rect x="28" y="40" width="8" height="12" fill="#666" rx="2"/>
+  
+  <!-- Vattenspray - vänster -->
+  <path d="M 20 30 Q 18 24 16 18" stroke="#03A9F4" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M 16 28 Q 14 22 12 16" stroke="#03A9F4" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  
+  <!-- Vattenspray - höger -->
+  <path d="M 44 30 Q 46 24 48 18" stroke="#03A9F4" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M 48 28 Q 50 22 52 16" stroke="#03A9F4" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  
+  <!-- Vattenspray - mitten -->
+  <path d="M 32 28 Q 32 22 32 14" stroke="#03A9F4" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  
+  <!-- Vattendroppar -->
+  <circle cx="32" cy="12" r="2" fill="#03A9F4"/>
+  <circle cx="48" cy="16" r="1.5" fill="#03A9F4"/>
+  <circle cx="16" cy="16" r="1.5" fill="#03A9F4"/>
+</svg>
