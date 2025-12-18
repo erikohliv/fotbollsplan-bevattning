@@ -172,8 +172,10 @@ sudo systemctl start bevattning-api
 ## FastAPI
 - Endpoints (alla kräver `X-API-Key`):
   - `GET /status`
+  - `GET /` (Webb-UI för styrning och övervakning)
   - `POST /command/start-auto` (pulserar MW10=50->0)
-  - `POST /command/manual` `{ "zone": 1..7, "minutes": <valfritt> }` (skriver MW64 om minutes anges, skriver MW63 och pulsar MW61)
+  - `POST /command/start-night-program` (startar natt-program som kör alla zoner)
+  - `POST /command/manual` `{ "zone": 1..7, "minutes": <valfritt, default 5> }` (skriver MW64 med angiven eller default körtid, skriver MW63 och pulsar MW61)
   - `POST /command/set-zone` `{ "zone": 1..7 }` (sätter MW63 utan att starta)
   - `POST /command/set-manual-time` `{ "minutes": 1..240 }` (sätter MW64 utan att starta)
   - `POST /command/stop` (sätter Remote_Command=0 och ModeOverride=0 för att stoppa auto)
@@ -197,10 +199,25 @@ sudo systemctl start bevattning-api
 
 ## Snabbtest av API
 ```bash
+# Hämta status
 curl -H "X-API-Key: <din-nyckel>" http://localhost:8000/status
+
+# Starta auto-program (alla zoner enligt schema)
 curl -X POST -H "X-API-Key: <din-nyckel>" http://localhost:8000/command/start-auto
+
+# Starta natt-program (samma som auto, kör alla zoner)
+curl -X POST -H "X-API-Key: <din-nyckel>" http://localhost:8000/command/start-night-program
+
+# Starta manuell körning - zon 2, 5 minuter (default)
 curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
-  -d '{"zone":2,"minutes":5}' http://localhost:8000/command/manual
+  -d '{"zone":2}' http://localhost:8000/command/manual
+
+# Starta manuell körning - zon 2, 10 minuter
+curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
+  -d '{"zone":2,"minutes":10}' http://localhost:8000/command/manual
+
+# Stoppa all bevattning
+curl -X POST -H "X-API-Key: <din-nyckel>" http://localhost:8000/command/stop
 ```
 
 ## Rekommenderad drift

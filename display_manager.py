@@ -556,7 +556,7 @@ class Display2Manager:
         self.modbus = ModbusReader(modbus_host, modbus_port)
         self.current_view = Display2View.OVERVIEW
         self.selected_zone = 1
-        self.selected_time = 5  # minutes
+        self.selected_time = 5  # Default: 5 minutes (standard värde för manuell körning)
         self.running = False
         self.thread = None
         self.button_pins = button_pins or {'up': 17, 'down': 27, 'left': 22, 'right': 23}
