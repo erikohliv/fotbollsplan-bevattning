@@ -5,6 +5,7 @@ Test suite for api_main.py endpoints
 
 import pytest
 import logging
+import requests
 from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch, MagicMock
 import sys
@@ -426,7 +427,6 @@ def test_rain_forecast_unauthorized(client):
 def test_rain_forecast_api_error(client):
     """Test rain forecast endpoint when weather API fails"""
     with patch('api_main.requests.get') as mock_get:
-        import requests
         mock_get.side_effect = requests.exceptions.RequestException("API unavailable")
         
         response = client.get("/rain-forecast", headers={"X-API-Key": API_KEY})

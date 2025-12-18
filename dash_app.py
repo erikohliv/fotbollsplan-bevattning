@@ -10,6 +10,7 @@ Grafisk visualisering av bevattningssystemet med:
 
 import os
 import logging
+import json
 from datetime import datetime
 from typing import Dict, Any, List
 
@@ -36,7 +37,8 @@ logger = logging.getLogger(__name__)
 app = dash.Dash(
     __name__,
     title="Bevattning Process View",
-    update_title="Uppdaterar..."
+    update_title="Uppdaterar...",
+    assets_folder='assets'
 )
 
 # Färgschema
@@ -53,6 +55,22 @@ COLORS = {
     'pump_on': '#2196F3',
     'pump_off': '#9e9e9e',
     'error': '#f44336'
+}
+
+# Ikoner (emoji som fallback, SVG laddas från assets)
+ICONS = {
+    'pump_on': '💧',
+    'pump_off': '⚫',
+    'zone_active': '🟢',
+    'zone_inactive': '⚪',
+    'zone_selected': '🟡',
+    'rain': '🌧️',
+    'moisture': '💧',
+    'temperature': '🌡️',
+    'error': '🔴',
+    'warning': '⚠️',
+    'success': '✅',
+    'sequence': '📋'
 }
 
 
@@ -155,8 +173,27 @@ def create_rain_forecast_figure(rain_data: Dict) -> go.Figure:
             x=0.5, y=0.5, showarrow=False
         )
     
-    times = [datetime.fromisoformat(h['time'].replace('Z', '+00:00')) for h in hourly]
-    precip = [h['precipitation'] for h in hourly]
+    # Parse timestamps with error handling
+    times = []
+    precip = []
+    for h in hourly:
+        try:
+            time_str = h['time']
+            # Handle ISO format timestamps with or without 'Z' suffix
+            if time_str.endswith('Z'):
+                time_str = time_str[:-1] + '+00:00'
+            times.append(datetime.fromisoformat(time_str))
+            precip.append(h['precipitation'])
+        except (ValueError, KeyError, AttributeError) as e:
+            logger.warning(f"Kunde inte tolka tidsstämpel: {e}")
+            continue
+    
+    if not times:
+        return go.Figure().add_annotation(
+            text="Kunde inte tolka prognosdata",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False
+        )
     
     fig = go.Figure()
     fig.add_trace(go.Bar(
@@ -355,7 +392,6 @@ app.layout = html.Div([
 )
 def update_data(n):
     """Hämta data från API"""
-    import json
     
     process_data = make_api_request("/process-view")
     rain_data = make_api_request("/rain-forecast")
@@ -369,7 +405,6 @@ def update_data(n):
 )
 def update_zone_graph(process_json):
     """Uppdatera zongraf"""
-    import json
     
     if not process_json:
         return go.Figure()
@@ -390,7 +425,6 @@ def update_zone_graph(process_json):
 )
 def update_pump_status(process_json):
     """Uppdatera pumpstatus"""
-    import json
     
     if not process_json:
         return "Laddar..."
@@ -400,7 +434,7 @@ def update_pump_status(process_json):
         if data.get('ok') and 'pump' in data:
             pump = data['pump']
             color = COLORS['pump_on'] if pump['on'] else COLORS['pump_off']
-            icon = "🟢" if pump['on'] else "⚫"
+            icon = ICONS['pump_on'] if pump['on'] else ICONS['pump_off']
             
             return html.Div([
                 html.Span(icon, style={'fontSize': '24px', 'marginRight': '10px'}),
@@ -419,7 +453,6 @@ def update_pump_status(process_json):
 )
 def update_sequence_status(process_json):
     """Uppdatera sekvensstatus"""
-    import json
     
     if not process_json:
         return ""
@@ -430,7 +463,7 @@ def update_sequence_status(process_json):
             seq = data['sequence']
             if seq['active']:
                 return html.Div([
-                    html.Span("📋 ", style={'fontSize': '18px'}),
+                    html.Span(ICONS['sequence'] + " ", style={'fontSize': '18px'}),
                     html.Span(f"Sekvens aktiv - Steg {seq['current_step']}, Zon {seq['current_zone']}")
                 ], style={'color': COLORS['info']})
             else:
@@ -447,7 +480,6 @@ def update_sequence_status(process_json):
 )
 def update_error_status(process_json):
     """Uppdatera felstatus"""
-    import json
     
     if not process_json:
         return "Laddar..."
@@ -462,19 +494,23 @@ def update_error_status(process_json):
             
             # Kontrollera aktiva fel
             if errors.get('e_stop'):
-                error_items.append(html.Div("🔴 E-STOP AKTIV", 
+                error_items.append(html.Div(
+                    [html.Span(ICONS['error'] + " "), html.Span("E-STOP AKTIV")],
                     style={'color': COLORS['error'], 'fontWeight': 'bold', 'marginBottom': '5px'}))
             
             if errors.get('moisture_block'):
-                error_items.append(html.Div("💧 Markfukt-block", 
+                error_items.append(html.Div(
+                    [html.Span(ICONS['moisture'] + " "), html.Span("Markfukt-block")],
                     style={'color': COLORS['warning'], 'marginBottom': '5px'}))
             
             if errors.get('rain_block'):
-                error_items.append(html.Div("🌧️ Regn-block", 
+                error_items.append(html.Div(
+                    [html.Span(ICONS['rain'] + " "), html.Span("Regn-block")],
                     style={'color': COLORS['warning'], 'marginBottom': '5px'}))
             
             if errors.get('anti_collision'):
-                error_items.append(html.Div("⚠️ Anti-kollision", 
+                error_items.append(html.Div(
+                    [html.Span(ICONS['warning'] + " "), html.Span("Anti-kollision")],
                     style={'color': COLORS['warning'], 'marginBottom': '5px'}))
             
             # Block status
@@ -486,7 +522,7 @@ def update_error_status(process_json):
                 ))
             else:
                 error_items.append(html.Div(
-                    "✅ Systemet OK - Inga aktiva fel",
+                    [html.Span(ICONS['success'] + " "), html.Span("Systemet OK - Inga aktiva fel")],
                     style={'color': COLORS['primary'], 'fontWeight': 'bold'}
                 ))
             
@@ -503,7 +539,6 @@ def update_error_status(process_json):
 )
 def update_rain_forecast(rain_json):
     """Uppdatera regnprognosgraf"""
-    import json
     
     if not rain_json:
         return go.Figure()
@@ -523,7 +558,6 @@ def update_rain_forecast(rain_json):
 )
 def update_rain_history(rain_json):
     """Uppdatera historisk regngraf"""
-    import json
     
     if not rain_json:
         return go.Figure()
@@ -543,7 +577,6 @@ def update_rain_history(rain_json):
 )
 def update_environment_data(process_json):
     """Uppdatera miljödata"""
-    import json
     
     if not process_json:
         return "Laddar..."
@@ -556,15 +589,15 @@ def update_environment_data(process_json):
             
             return html.Div([
                 html.Div([
-                    html.Span("💧 Markfukt: ", style={'fontWeight': 'bold'}),
+                    html.Span(ICONS['moisture'] + " Markfukt: ", style={'fontWeight': 'bold'}),
                     html.Span(f"{env.get('moisture_percent', 0)}%")
                 ], style={'marginBottom': '8px'}),
                 html.Div([
-                    html.Span("🌧️ Regn 24h: ", style={'fontWeight': 'bold'}),
+                    html.Span(ICONS['rain'] + " Regn 24h: ", style={'fontWeight': 'bold'}),
                     html.Span(f"{env.get('rain_24h_mm', 0)} mm")
                 ], style={'marginBottom': '8px'}),
                 html.Div([
-                    html.Span("🌡️ Temperatur: ", style={'fontWeight': 'bold'}),
+                    html.Span(ICONS['temperature'] + " Temperatur: ", style={'fontWeight': 'bold'}),
                     html.Span(f"{env.get('temperature_c', 0)}°C")
                 ], style={'marginBottom': '15px'}),
                 html.Hr(),
@@ -609,7 +642,7 @@ def handle_controls(start_clicks, stop_clicks, selected_zone):
         if result.get('ok'):
             return (
                 html.Div([
-                    html.Span("✅ ", style={'fontSize': '18px'}),
+                    html.Span(ICONS['success'] + " ", style={'fontSize': '18px'}),
                     html.Span(result.get('message', f"Zon {selected_zone} startad"))
                 ]),
                 {'display': 'block', 'backgroundColor': '#d4edda', 'color': '#155724',
@@ -619,7 +652,7 @@ def handle_controls(start_clicks, stop_clicks, selected_zone):
         else:
             return (
                 html.Div([
-                    html.Span("❌ ", style={'fontSize': '18px'}),
+                    html.Span(ICONS['error'] + " ", style={'fontSize': '18px'}),
                     html.Span(f"Fel: {result.get('error', 'Okänt fel')}")
                 ]),
                 {'display': 'block', 'backgroundColor': '#f8d7da', 'color': '#721c24',
@@ -637,7 +670,7 @@ def handle_controls(start_clicks, stop_clicks, selected_zone):
         if result.get('ok'):
             return (
                 html.Div([
-                    html.Span("✅ ", style={'fontSize': '18px'}),
+                    html.Span(ICONS['success'] + " ", style={'fontSize': '18px'}),
                     html.Span("Bevattning stoppad")
                 ]),
                 {'display': 'block', 'backgroundColor': '#d4edda', 'color': '#155724',
@@ -647,7 +680,7 @@ def handle_controls(start_clicks, stop_clicks, selected_zone):
         else:
             return (
                 html.Div([
-                    html.Span("❌ ", style={'fontSize': '18px'}),
+                    html.Span(ICONS['error'] + " ", style={'fontSize': '18px'}),
                     html.Span(f"Fel: {result.get('error', 'Okänt fel')}")
                 ]),
                 {'display': 'block', 'backgroundColor': '#f8d7da', 'color': '#721c24',

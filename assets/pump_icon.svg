@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Pump icon - cirkulär pump med vattenflöde -->
+  <circle cx="32" cy="32" r="28" fill="#2196F3" stroke="#1976D2" stroke-width="2"/>
+  <circle cx="32" cy="32" r="20" fill="#1976D2" stroke="#0D47A1" stroke-width="2"/>
+  
+  <!-- Rotor blad -->
+  <path d="M 32 12 L 32 28" stroke="white" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 32 36 L 32 52" stroke="white" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 12 32 L 28 32" stroke="white" stroke-width="4" stroke-linecap="round"/>
+  <path d="M 36 32 L 52 32" stroke="white" stroke-width="4" stroke-linecap="round"/>
+  
+  <!-- Centrum cirkel -->
+  <circle cx="32" cy="32" r="6" fill="white"/>
+</svg>

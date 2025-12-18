@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Moisture/soil icon - markfukt -->
+  <rect x="8" y="32" width="48" height="24" fill="#8D6E63" rx="2"/>
+  <rect x="8" y="40" width="48" height="4" fill="#6D4C41"/>
+  
+  <!-- Water droplets in soil -->
+  <circle cx="16" cy="44" r="3" fill="#2196F3" opacity="0.7"/>
+  <circle cx="26" cy="48" r="2.5" fill="#2196F3" opacity="0.7"/>
+  <circle cx="38" cy="44" r="3" fill="#2196F3" opacity="0.7"/>
+  <circle cx="48" cy="48" r="2.5" fill="#2196F3" opacity="0.7"/>
+  
+  <!-- Grass on top -->
+  <path d="M 12 32 L 10 24 L 14 32" fill="#4CAF50"/>
+  <path d="M 22 32 L 20 22 L 24 32" fill="#4CAF50"/>
+  <path d="M 32 32 L 30 20 L 34 32" fill="#4CAF50"/>
+  <path d="M 42 32 L 40 22 L 44 32" fill="#4CAF50"/>
+  <path d="M 52 32 L 50 24 L 54 32" fill="#4CAF50"/>
+</svg>

@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+import json
 from typing import Optional, List
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -1166,11 +1167,19 @@ def get_rain_forecast(x_api_key: Optional[str] = Header(None)):
             precip = forecast_data["hourly"]["precipitation"]
             
             for i, time_str in enumerate(times):
-                forecast_time = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+                try:
+                    # Handle ISO format timestamps with or without 'Z' suffix
+                    if time_str.endswith('Z'):
+                        time_str = time_str[:-1] + '+00:00'
+                    forecast_time = datetime.fromisoformat(time_str)
+                except (ValueError, AttributeError) as e:
+                    logger.warning(f"Kunde inte tolka tidsstämpel '{time_str}': {e}")
+                    continue
+                
                 if now <= forecast_time <= now + timedelta(hours=24):
                     next_24h_precipitation += precip[i] or 0.0
                     hourly_forecast.append({
-                        "time": time_str,
+                        "time": times[i],  # Use original time_str
                         "precipitation": precip[i] or 0.0
                     })
         
