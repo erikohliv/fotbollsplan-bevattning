@@ -283,7 +283,7 @@ class ModbusReader:
                 self._client.close()
             except OSError as e:
                 # Expected if socket already closed by remote end (e.g., EBADF/ENOTCONN)
-                logger.debug(f"OSError closing Modbus client: {e}")
+                logger.debug(f"Expected OSError closing Modbus client: {e}")
             except Exception as e:
                 logger.warning(f"Unexpected error closing Modbus client: {e}")
         self._client = None
@@ -315,9 +315,9 @@ class ModbusReader:
     def _handle_modbus_exception(self, exc: Exception, context: str):
         """Shared Modbus exception handler with reset"""
         if isinstance(exc, (ConnectionException, ModbusIOException)):
-            logger.debug(f"{context} exception: {exc}")
+            logger.debug(f"{context} {type(exc).__name__}: {exc}")
         else:
-            logger.warning(f"Unexpected {context} exception: {exc}")
+            logger.warning(f"Unexpected {context} {type(exc).__name__}: {exc}")
         self._reset_client()
     
     def _validate_result(self, result, address: int, context: str) -> bool:
@@ -333,7 +333,7 @@ class ModbusReader:
         return True
     
     def _invalidate_cache_for_address(self, address: int):
-        """Remove cached entries covering a given register address"""
+        """Remove cached entries that overlap the given register address"""
         # k[0] = start address, k[1] = count; remove any cache entry whose range overlaps the target address
         for key in list(self._cache.keys()):
             if key[0] <= address <= key[0] + key[1] - 1:
