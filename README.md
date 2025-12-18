@@ -129,6 +129,11 @@ sudo systemctl start bevattning-api
 - **MW80** TestMode (1=testläge aktivt, 0=inaktivt)
 - **MW81** TestZoneResult (bitmask för testade zoner 1-7)
 - **MW82** ErrorReset (skriv 1 för att nollställa fel, PLC nollar)
+- **MW100** ModeSwitch (Lokal/Fjärr-styrning)
+  - 0=Neutral (ingen ändring, default)
+  - 1=Lokalt läge (fysisk styrning aktiverad, fjärrkommandon blockerade)
+  - 2=Fjärrläge (fjärrkommandon aktiverade)
+  - Fysisk 1-0-2 switch skriver värde och återgår automatiskt till 0
 
 ## Sekvens & anti-vattenslag
 - **Start (auto):** Ventil för zon öppnas, OpenDelay löper, därefter pump på och kör-timer. Auto-läge kör alla zoner 1-7.
@@ -256,6 +261,18 @@ curl -X POST -H "X-API-Key: <din-nyckel>" \
 # Växla till Manuellt läge
 curl -X POST -H "X-API-Key: <din-nyckel>" \
   http://localhost:8000/menu/lagesval?mode=0
+
+# Ställ in Lokal/Fjärr-styrning - Lokalt läge
+curl -X POST -H "X-API-Key: <din-nyckel>" \
+  http://localhost:8000/set-mode/1
+
+# Ställ in Lokal/Fjärr-styrning - Fjärrläge
+curl -X POST -H "X-API-Key: <din-nyckel>" \
+  http://localhost:8000/set-mode/2
+
+# Ställ in Lokal/Fjärr-styrning - Neutral (ingen ändring)
+curl -X POST -H "X-API-Key: <din-nyckel>" \
+  http://localhost:8000/set-mode/0
 
 # Hämta felsökningsinformation
 curl -H "X-API-Key: <din-nyckel>" http://localhost:8000/menu/felsökning
