@@ -31,3 +31,4 @@ bevattning_log.csv
 # OS
 .DS_Store
 Thumbs.db
+api_.env
