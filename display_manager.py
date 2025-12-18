@@ -31,6 +31,11 @@ except ImportError:
     except ImportError:
         ModbusTcpClient = None
 
+try:
+    from pymodbus.exceptions import ModbusIOException, ConnectionException
+except ImportError:
+    ModbusIOException = ConnectionException = Exception
+
 
 # Modbus register addresses (from existing system)
 MW_STATUS_ZONE = 50
@@ -268,6 +273,75 @@ class ModbusReader:
         self.unit = unit
         self.cache_duration = cache_duration  # Cache duration in seconds
         self._cache = {}  # {(address, count): (data, timestamp)}
+        self._client = None
+        self._client_connected = False
+
+    def _reset_client(self):
+        """Close and reset Modbus client"""
+        if self._client:
+            try:
+                self._client.close()
+            except OSError as e:
+                # Expected if socket already closed by remote end (e.g., EBADF/ENOTCONN)
+                logger.debug(f"Expected OSError closing Modbus client: {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error closing Modbus client: {e}")
+        self._client = None
+        self._client_connected = False
+
+    def _get_client(self):
+        """Get or create a persistent Modbus client connection"""
+        if ModbusTcpClient is None:
+            logger.warning("pymodbus not available")
+            return None
+
+        if self._client is None:
+            self._client = ModbusTcpClient(self.host, port=self.port, timeout=2)
+            self._client_connected = False
+
+        if not self._client_connected:
+            try:
+                if not self._client.connect():
+                    logger.debug("Modbus connection failed")
+                    self._reset_client()
+                    return None
+                self._client_connected = True
+            except Exception as e:
+                self._handle_modbus_exception(e, "Modbus connection")
+                return None
+
+        return self._client
+
+    def _handle_modbus_exception(self, exc: Exception, context: str):
+        """Shared Modbus exception handler with reset"""
+        if isinstance(exc, (ConnectionException, ModbusIOException)):
+            logger.debug(f"{context} {type(exc).__name__}: {exc}")
+        else:
+            logger.warning(f"Unexpected {context} {type(exc).__name__}: {exc}")
+        self._reset_client()
+    
+    def _validate_result(self, result, address: int, context: str) -> bool:
+        """Validate Modbus result and reset connection on errors"""
+        if result is None:
+            logger.debug(f"{context} error at {address}")
+            self._reset_client()
+            return False
+        if hasattr(result, 'isError') and result.isError():
+            logger.debug(f"{context} error at {address}")
+            self._reset_client()
+            return False
+        return True
+    
+    def _invalidate_cache_for_address(self, address: int):
+        """Remove cached entries that overlap the given register address"""
+        # k[0] = start address, k[1] = count; remove any cache entry whose range overlaps the target address
+        for key in list(self._cache.keys()):
+            if key[0] <= address <= key[0] + key[1] - 1:
+                del self._cache[key]
+    
+    def close(self):
+        """Public close to release persistent Modbus connection"""
+        self._reset_client()
     
     def read_registers(self, address: int, count: int = 1, use_cache: bool = True) -> Optional[list]:
         """Read holding registers from Modbus with optional caching"""
@@ -281,21 +355,13 @@ class ModbusReader:
                 logger.debug(f"Using cached Modbus data for addr {address} (age: {age:.3f}s)")
                 return cached_data
         
-        if ModbusTcpClient is None:
-            logger.warning("pymodbus not available")
+        client = self._get_client()
+        if client is None:
             return None
-        
-        client = ModbusTcpClient(self.host, port=self.port, timeout=2)
         try:
-            if not client.connect():
-                logger.debug("Modbus connection failed")
-                return None
-            
             result = client.read_holding_registers(address, count, unit=self.unit)
-            client.close()
             
-            if result is None or (hasattr(result, 'isError') and result.isError()):
-                logger.debug(f"Modbus read error at {address}")
+            if not self._validate_result(result, address, "Modbus read"):
                 return None
             
             data = result.registers
@@ -306,11 +372,7 @@ class ModbusReader:
             
             return data
         except Exception as e:
-            logger.debug(f"Modbus exception: {e}")
-            try:
-                client.close()
-            except Exception:
-                pass
+            self._handle_modbus_exception(e, "Modbus read")
             return None
     
     def clear_cache(self):
@@ -319,35 +381,21 @@ class ModbusReader:
     
     def write_register(self, address: int, value: int) -> bool:
         """Write single holding register to Modbus"""
-        if ModbusTcpClient is None:
-            logger.warning("pymodbus not available")
+        client = self._get_client()
+        if client is None:
             return False
-        
-        client = ModbusTcpClient(self.host, port=self.port, timeout=2)
         try:
-            if not client.connect():
-                logger.debug("Modbus connection failed")
-                return False
-            
             result = client.write_register(address, int(value), unit=self.unit)
-            client.close()
             
-            if result is None or (hasattr(result, 'isError') and result.isError()):
-                logger.debug(f"Modbus write error at {address}")
+            if not self._validate_result(result, address, "Modbus write"):
                 return False
             
             # Invalidate cache for this register
-            keys_to_remove = [k for k in self._cache.keys() if k[0] <= address <= k[0] + k[1] - 1]
-            for key in keys_to_remove:
-                del self._cache[key]
+            self._invalidate_cache_for_address(address)
             
             return True
         except Exception as e:
-            logger.debug(f"Modbus write exception: {e}")
-            try:
-                client.close()
-            except Exception:
-                pass
+            self._handle_modbus_exception(e, "Modbus write")
             return False
 
 
@@ -558,6 +606,7 @@ class Display1Manager:
                 self.thread.join(timeout=2)
             self.lcd.clear()
             self.lcd.close()
+            self.modbus.close()
 
 
 class Display2Manager:
@@ -783,6 +832,7 @@ class Display2Manager:
                 self.thread.join(timeout=2)
             self.lcd.clear()
             self.lcd.close()
+            self.modbus.close()
             
             if self.gpio_available and self.GPIO:
                 try:
