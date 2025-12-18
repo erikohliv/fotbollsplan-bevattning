@@ -1,0 +1,15 @@
+Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area (mm2),Färg,Kabeltyp,Notering,Modbus-Register
+1,Nödstopp:S1:1,UNIPI:X1:1,"0,75",Röd,H07V-K (RK),Nödstoppkoppling till UNIPI-ingång,MW73 (Stopfunktion)
+2,Startknapp:S2:1,UNIPI:X2:1,"0,75",Röd,H07V-K (RK),Startknappkoppling till UNIPI-ingång,MW10 (Startfunktion)
+3,UNIPI:Relä1+,SolenoidVentil 1:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 1,MW20
+4,UNIPI:Relä2+,SolenoidVentil 2:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 2,MW21
+5,UNIPI:Relä3+,SolenoidVentil 3:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 3,MW22
+6,UNIPI:Relä4+,SolenoidVentil 4:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 4,MW23
+7,UNIPI:Relä5+,SolenoidVentil 5:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 5,MW24
+8,UNIPI:Relä6+,SolenoidVentil 6:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 6,MW25
+9,UNIPI:Relä7+,SolenoidVentil 7:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 7,MW26
+10,Pumpstyrning:Relä+,Siemens LOGO:PumpIn,"1,5",Röd,H07V-K (RK),Pumpstyrning via Siemens LOGO,MW100
+11,Trycksensor:AnalogOut,UNIPI:AnalogIn1,"0,5",Vit,SYV-K,Tryckmätning kopplat till UNIPI,MW30 (Fuktnivå)
+12,RaspberryPi:GPIO7,UNIPI:DigitalIn1,"0,5",Svart,H05VV-F,Styrsignal från Raspberry Pi (zonkontroll),MW82 (ErrorReset)
+13,Jordplint:Main,SolenoidVentiler:Jord,"1,5",Gul/Grön,H07V-K (MK),Skyddsjord för alla ventiler,-
+14,UNIPI:Relä_Common,SolenoidVentiler:Common,"1,5",Svart,H05VV-F (RKK),Gemensam anslutning till ventilspolar,Common Ground
