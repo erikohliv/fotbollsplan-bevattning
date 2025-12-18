@@ -282,8 +282,9 @@ def _pulse_remote_command(value: int, pulse_seconds: float = 1.0):
 @app.post("/command/start-auto")
 def start_auto(x_api_key: Optional[str] = Header(None), pulse_seconds: float = 1.0):
     require_key(x_api_key)
-    logger.info("Startar auto-program via API")
+    logger.info("[USER_ACTION] Auto-program startas - timestamp=%s", int(time.time()))
     _pulse_remote_command(50, pulse_seconds)
+    logger.info("[USER_ACTION] Auto-program startkommando skickat")
     return {"ok": True}
 
 
@@ -294,8 +295,9 @@ def start_night_program(x_api_key: Optional[str] = Header(None), pulse_seconds: 
     Detta tvingar fram en "natt körning" genom att aktivera auto-mode.
     """
     require_key(x_api_key)
-    logger.info("Natt-program startas via API")
+    logger.info("[USER_ACTION] Natt-program startas via API - timestamp=%s", int(time.time()))
     _pulse_remote_command(50, pulse_seconds)
+    logger.info("[USER_ACTION] Natt-program startkommando skickat - alla zoner kommer köras")
     return {"ok": True, "message": "Natt-program startat (alla zoner)"}
 
 
@@ -308,7 +310,7 @@ def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
     """
     require_key(x_api_key)
     zone = validate_zone(cmd.zone)
-    logger.info("Manuell körning initieras för zon %s", zone)
+    logger.info("[USER_ACTION] Manuell körning initieras - zon=%s timestamp=%s", zone, int(time.time()))
     # Write selected zone and pulse manual start
     with get_modbus_connection() as client:
         rr = client.write_register(MW_SET_SELECTED, zone, unit=MODBUS_UNIT)
@@ -316,6 +318,7 @@ def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
         # Pulse manual start
         rr = client.write_register(MW_MANUAL_START, 1, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr, f"manual start for zone {zone}")
+    logger.info("[USER_ACTION] Manuell körning startad - zon=%s", zone)
     return {"ok": True, "zone": zone, "note": "Manual mode runs only the selected zone using auto times"}
 
 
@@ -344,13 +347,14 @@ def set_manual_time(cmd: SetManualTime, x_api_key: Optional[str] = Header(None))
 @app.post("/command/stop")
 def stop(x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
-    logger.info("Stopp-kommando mottaget")
+    logger.info("[USER_ACTION] Stopp-kommando mottaget - timestamp=%s", int(time.time()))
     # Reuse connection for multiple writes
     with get_modbus_connection() as client:
         rr = client.write_register(MW_REMOTE_CMD, 0, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr, "stop remote command")
         rr = client.write_register(MW_MODE_OVERRIDE, 0, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr, "reset mode override")
+    logger.info("[USER_ACTION] Stopp-kommando verkställt - pump och sekvens stoppad")
     return {"ok": True}
 
 
@@ -1235,6 +1239,7 @@ def get_process_view(x_api_key: Optional[str] = Header(None)):
     - Aktuellt steg i sekvensen
     """
     require_key(x_api_key)
+    logger.debug("[API_CALL] /process-view anropad - timestamp=%s", int(time.time()))
     
     with get_modbus_connection() as client:
         # Läs status-register
@@ -1399,9 +1404,11 @@ def zone_control(cmd: ZoneControlCommand, x_api_key: Optional[str] = Header(None
     require_key(x_api_key)
     
     zone = validate_zone(cmd.zone)
+    logger.info("[USER_ACTION] zone-control anropad - zon=%s action=%s timestamp=%s", 
+                zone, cmd.action, int(time.time()))
     
     if cmd.action == "start":
-        logger.info("Zon %s startas via zone-control", zone)
+        logger.info("[ZONE_EVENT] Zon %s STARTAS via process view", zone)
         
         # Sätt vald zon och starta manuell körning
         with get_modbus_connection() as client:
@@ -1412,6 +1419,7 @@ def zone_control(cmd: ZoneControlCommand, x_api_key: Optional[str] = Header(None
             rr = client.write_register(MW_MANUAL_START, 1, unit=MODBUS_UNIT)
             _ensure_modbus_ok(rr, f"start zone {zone} via zone-control")
         
+        logger.info("[ZONE_EVENT] Zon %s STARTAD - använder auto-tider", zone)
         return {
             "ok": True,
             "action": "start",
@@ -1420,7 +1428,7 @@ def zone_control(cmd: ZoneControlCommand, x_api_key: Optional[str] = Header(None
         }
     
     elif cmd.action == "stop":
-        logger.info("Stopp-kommando för zon %s via zone-control", zone)
+        logger.info("[PUMP_EVENT] STOPP-kommando för zon %s via process view", zone)
         
         with get_modbus_connection() as client:
             rr = client.write_register(MW_REMOTE_CMD, 0, unit=MODBUS_UNIT)
@@ -1429,6 +1437,7 @@ def zone_control(cmd: ZoneControlCommand, x_api_key: Optional[str] = Header(None
             rr = client.write_register(MW_MODE_OVERRIDE, 0, unit=MODBUS_UNIT)
             _ensure_modbus_ok(rr, "reset mode override via zone-control")
         
+        logger.info("[PUMP_EVENT] Bevattning STOPPAD via process view")
         return {
             "ok": True,
             "action": "stop",

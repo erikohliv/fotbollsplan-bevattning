@@ -75,9 +75,11 @@ ICONS = {
 
 
 def make_api_request(endpoint: str, method: str = "GET", json_data: Dict = None) -> Dict[str, Any]:
-    """Gör API-anrop med felhantering"""
+    """Gör API-anrop med felhantering och loggning"""
     url = f"{API_URL}{endpoint}"
     headers = {"X-API-Key": API_KEY}
+    
+    logger.info("[DASH_API_CALL] %s %s - data=%s", method, endpoint, json_data if json_data else "None")
     
     try:
         if method == "GET":
@@ -86,18 +88,21 @@ def make_api_request(endpoint: str, method: str = "GET", json_data: Dict = None)
             headers["Content-Type"] = "application/json"
             response = requests.post(url, headers=headers, json=json_data or {}, timeout=10)
         else:
+            logger.error("[DASH_API_ERROR] Unsupported method: %s", method)
             return {"ok": False, "error": f"Unsupported method: {method}"}
         
         response.raise_for_status()
-        return response.json()
+        result = response.json()
+        logger.info("[DASH_API_SUCCESS] %s %s - status=%s", method, endpoint, response.status_code)
+        return result
     
     except requests.exceptions.RequestException as e:
-        logger.error(f"API request failed: {e}")
+        logger.error("[DASH_API_ERROR] %s %s failed: %s", method, endpoint, e)
         return {"ok": False, "error": str(e)}
 
 
 def create_zone_figure(zones_data: List[Dict]) -> go.Figure:
-    """Skapa grafisk representation av zoner med klickbar funktionalitet"""
+    """Skapa grafisk representation av zoner med klickbar funktionalitet och felindikering"""
     fig = go.Figure()
     
     # Skapa ett rutnät med zoner
@@ -127,12 +132,17 @@ def create_zone_figure(zones_data: List[Dict]) -> go.Figure:
             size = 80
             status_text = 'Inaktiv'
         
+        # Check if zone is affected by error (will be set by callback)
+        error_indicator = zone_data.get('error_affected', False)
+        border_color = COLORS['error'] if error_indicator else '#333'
+        border_width = 4 if error_indicator else 2
+        
         # Lägg till zon som cirkel med klickbar data
         fig.add_trace(go.Scatter(
             x=[x],
             y=[y],
             mode='markers+text',
-            marker=dict(size=size, color=color, line=dict(width=2, color='#333')),
+            marker=dict(size=size, color=color, line=dict(width=border_width, color=border_color)),
             text=f"Zon {zone_num}",
             textposition="middle center",
             textfont=dict(size=14, color=text_color, family='Arial Black'),
@@ -279,6 +289,9 @@ app.layout = html.Div([
         'marginBottom': '20px'
     }),
     
+    # Critical Error Banner (visible only when critical errors exist)
+    html.Div(id='critical-error-banner', style={'display': 'none'}),
+    
     # Main content
     html.Div([
         # Vänster kolumn - Process view
@@ -392,6 +405,60 @@ app.layout = html.Div([
 
 
 # Callbacks
+@app.callback(
+    Output('critical-error-banner', 'children'),
+    [Input('hidden-process-data', 'children')]
+)
+def update_critical_error_banner(process_json):
+    """Uppdatera kritiskt felmeddelande banner"""
+    
+    if not process_json:
+        return html.Div(style={'display': 'none'})
+    
+    try:
+        data = json.loads(process_json)
+        if data.get('ok'):
+            error_details = data.get('error_details', {})
+            
+            # Check for critical errors
+            critical_errors = []
+            if error_details.get('e_stop', {}).get('active'):
+                critical_errors.append({
+                    'text': 'NÖDSTOPP AKTIVT',
+                    'explanation': error_details['e_stop'].get('explanation', 'E-stop är aktiverat')
+                })
+            
+            if critical_errors:
+                # Build critical error banner
+                error_items = []
+                for error in critical_errors:
+                    error_items.append(html.Div([
+                        html.Div([
+                            html.Span('🚨 ', style={'fontSize': '28px', 'marginRight': '10px'}),
+                            html.Span(error['text'], style={'fontSize': '20px', 'fontWeight': 'bold'})
+                        ]),
+                        html.Div(error['explanation'], 
+                                style={'marginTop': '5px', 'fontSize': '14px', 'marginLeft': '38px'})
+                    ], style={'marginBottom': '10px'}))
+                
+                return html.Div(
+                    error_items,
+                    style={
+                        'backgroundColor': '#d32f2f',
+                        'color': 'white',
+                        'padding': '20px',
+                        'margin': '0 20px 20px 20px',
+                        'borderRadius': '8px',
+                        'boxShadow': '0 4px 8px rgba(0,0,0,0.3)',
+                        'animation': 'pulse 2s infinite'
+                    }
+                )
+    except Exception as e:
+        logger.error(f"Error updating critical error banner: {e}")
+    
+    return html.Div(style={'display': 'none'})
+
+
 @app.callback(
     [Output('hidden-process-data', 'children'),
      Output('hidden-rain-data', 'children')],
@@ -675,7 +742,7 @@ def update_environment_data(process_json):
     [State('zone-selector', 'value')]
 )
 def handle_controls(start_clicks, stop_clicks, selected_zone):
-    """Hantera kontrollknappar"""
+    """Hantera kontrollknappar med loggning"""
     ctx = callback_context
     
     if not ctx.triggered:
@@ -684,6 +751,7 @@ def handle_controls(start_clicks, stop_clicks, selected_zone):
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
     if button_id == 'btn-start-zone':
+        logger.info("[DASH_USER_ACTION] Knapp 'Starta Zon' klickad - zon=%s", selected_zone)
         result = make_api_request(
             "/zone-control",
             method="POST",
@@ -691,6 +759,7 @@ def handle_controls(start_clicks, stop_clicks, selected_zone):
         )
         
         if result.get('ok'):
+            logger.info("[DASH_USER_ACTION] Zon %s startad via knapp-kontroll", selected_zone)
             return (
                 html.Div([
                     html.Span(ICONS['success'] + " ", style={'fontSize': '18px'}),
@@ -701,6 +770,7 @@ def handle_controls(start_clicks, stop_clicks, selected_zone):
                  'borderRadius': '4px'}
             )
         else:
+            logger.error("[DASH_USER_ACTION] Zon %s start misslyckades: %s", selected_zone, result.get('error'))
             return (
                 html.Div([
                     html.Span(ICONS['error'] + " ", style={'fontSize': '18px'}),
@@ -712,6 +782,7 @@ def handle_controls(start_clicks, stop_clicks, selected_zone):
             )
     
     elif button_id == 'btn-stop':
+        logger.info("[DASH_USER_ACTION] Knapp 'Stoppa' klickad")
         result = make_api_request(
             "/zone-control",
             method="POST",
@@ -719,6 +790,7 @@ def handle_controls(start_clicks, stop_clicks, selected_zone):
         )
         
         if result.get('ok'):
+            logger.info("[DASH_USER_ACTION] Bevattning stoppad via knapp-kontroll")
             return (
                 html.Div([
                     html.Span(ICONS['success'] + " ", style={'fontSize': '18px'}),
@@ -729,6 +801,7 @@ def handle_controls(start_clicks, stop_clicks, selected_zone):
                  'borderRadius': '4px'}
             )
         else:
+            logger.error("[DASH_USER_ACTION] Stopp misslyckades: %s", result.get('error'))
             return (
                 html.Div([
                     html.Span(ICONS['error'] + " ", style={'fontSize': '18px'}),
@@ -750,7 +823,7 @@ def handle_controls(start_clicks, stop_clicks, selected_zone):
     prevent_initial_call=True
 )
 def handle_zone_click(clickData, process_json):
-    """Hantera klick på zoner i grafen"""
+    """Hantera klick på zoner i grafen med loggning"""
     
     if not clickData or not clickData.get('points'):
         return "", {'display': 'none'}
@@ -767,6 +840,8 @@ def handle_zone_click(clickData, process_json):
         if not zone_num or not isinstance(zone_num, int):
             return "", {'display': 'none'}
         
+        logger.info("[DASH_USER_ACTION] Zon %s klickad i graf", zone_num)
+        
         # Check if zone is currently active
         is_active = False
         if process_json:
@@ -782,6 +857,7 @@ def handle_zone_click(clickData, process_json):
         
         # If active, stop; otherwise start
         action = "stop" if is_active else "start"
+        logger.info("[DASH_USER_ACTION] Zon %s - åtgärd=%s (aktiv=%s)", zone_num, action, is_active)
         
         result = make_api_request(
             "/zone-control",
@@ -791,6 +867,7 @@ def handle_zone_click(clickData, process_json):
         
         if result.get('ok'):
             message = f"Zon {zone_num} stoppad" if action == "stop" else f"Zon {zone_num} startad"
+            logger.info("[DASH_USER_ACTION] Zon-klick lyckades - zon=%s action=%s", zone_num, action)
             return (
                 html.Div([
                     html.Span(ICONS['success'] + " ", style={'fontSize': '18px'}),
@@ -801,6 +878,7 @@ def handle_zone_click(clickData, process_json):
                  'borderRadius': '4px'}
             )
         else:
+            logger.error("[DASH_USER_ACTION] Zon-klick misslyckades - zon=%s error=%s", zone_num, result.get('error'))
             return (
                 html.Div([
                     html.Span(ICONS['error'] + " ", style={'fontSize': '18px'}),
@@ -812,7 +890,7 @@ def handle_zone_click(clickData, process_json):
             )
     
     except Exception as e:
-        logger.error(f"Error handling zone click: {e}")
+        logger.error(f"[DASH_USER_ACTION] Fel vid zonklick: {e}")
         return (
             html.Div([
                 html.Span(ICONS['error'] + " ", style={'fontSize': '18px'}),
