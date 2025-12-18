@@ -9,50 +9,61 @@ Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area (mm2),Färg,Kabeltyp,Notering,
 7,Display Knapp 2:NO,UNIPI:DI9,"0,75",Grå,H05VV-F (RKK),Display minska zon (från Display 2),MW63 (Zone Select),%IX1.0
 8,Test-knapp:NO,UNIPI:DI6,"0,75",Orange,H05VV-F (RKK),Testfunktion,Test Mode,%IX0.5
 9,Blow-knapp:NO,UNIPI:DI7,"0,75",Brun,H05VV-F (RKK),Utblåsningsfunktion,Blow Mode,%IX0.6
-10,Gemensam DI:0V,UNIPI:DI_COM,-,Svart,H05VV-F (RKK),Gemensam 0V för alla digitala ingångar,-,-
-,,,,,,DIGITALA UTGÅNGAR (RELÄER),,
-11,UNIPI:Relä1,SolenoidVentil 1:+,"1,5",Blå,Cat7/H05VV-F,Styr ventilzon 1 (24V AC),MW20/Ventil_1,%QX0.0
-12,UNIPI:Relä2,SolenoidVentil 2:+,"1,5",Blå,Cat7/H05VV-F,Styr ventilzon 2 (24V AC),MW21/Ventil_2,%QX0.1
-13,UNIPI:Relä3,SolenoidVentil 3:+,"1,5",Blå,Cat7/H05VV-F,Styr ventilzon 3 (24V AC),MW22/Ventil_3,%QX0.2
-14,UNIPI:Relä4,SolenoidVentil 4:+,"1,5",Blå,Cat7/H05VV-F,Styr ventilzon 4 (24V AC),MW23/Ventil_4,%QX0.3
-15,UNIPI:Relä5,SolenoidVentil 5:+,"1,5",Blå,Cat7/H05VV-F,Styr ventilzon 5 (24V AC),MW24/Ventil_5,%QX0.4
-16,UNIPI:Relä6,SolenoidVentil 6:+,"1,5",Blå,Cat7/H05VV-F,Styr ventilzon 6 (24V AC),MW25/Ventil_6,%QX0.5
-17,UNIPI:Relä7,SolenoidVentil 7:+,"1,5",Blå,Cat7/H05VV-F,Styr ventilzon 7 (24V AC),MW26/Ventil_7,%QX0.6
-18,UNIPI:Relä8,Siemens LOGO:PumpIn,"1,5",Röd,Cat7/H05VV-F,Pumpstyrning via Siemens LOGO,MW100/Signal_Pump,%QX0.7
-19,24V AC:Fas,UNIPI:Relä_COM (alla),"1,5",Brun,H07V-K,Gemensam 24V AC till alla reläer,-,-
-20,24V AC:Neutral,SolenoidVentiler:Common (alla),"1,5",Blå,H07V-K,Gemensam neutral till alla ventilspolar,-,-
-,,,,,,ANALOGA INGÅNGAR,,
-21,Markfuktgivare:Signal,UNIPI:AI1,Cat7 par 1,Vit/Orange,Cat7,Markfuktsensor 0-10V analog signal (kan delas med nätverkskabel),MW30 (Fuktnivå),%IW0
-22,Markfuktgivare:GND,UNIPI:AGND,Cat7 par 1,Orange,Cat7,Analog jord för markfuktsensor (kan delas med nätverkskabel),-,-
-23,Markfuktgivare:+24V,Matning:+24V,Cat7 par 2,Vit/Grön,Cat7,Matningsspänning för markfuktsensor (kan delas med nätverkskabel),-,-
-23b,Markfuktgivare:0V,Matning:GND,Cat7 par 2,Grön,Cat7,Matningsjord för markfuktsensor (kan delas med nätverkskabel),-,-
+10,Reserv DI:NO,UNIPI:DI10,-,Rosa,H05VV-F (RKK),Reserv digital ingång 10,Reserved,%IX1.1
+11,Reserv DI:NO,UNIPI:DI11,-,Ljusblå,H05VV-F (RKK),Reserv digital ingång 11,Reserved,%IX1.2
+12,Reserv DI:NO,UNIPI:DI12,-,Lila,H05VV-F (RKK),Reserv digital ingång 12,Reserved,%IX1.3
+13,Reserv DI:NO,UNIPI:DI13,-,Turkos,H05VV-F (RKK),Reserv digital ingång 13,Reserved,%IX1.4
+14,Reserv DI:NO,UNIPI:DI14,-,Beige,H05VV-F (RKK),Reserv digital ingång 14,Reserved,%IX1.5
+15,Gemensam DI:0V,UNIPI:DI_COM,-,Svart,H05VV-F (RKK),Gemensam 0V för alla digitala ingångar (14st),-,-
+,,,,,,DIGITALA UTGÅNGAR (RELÄER - 8st),,
+16,UNIPI:Relä1,SolenoidVentil 1:+,"1,5",Blå,Cat7/H05VV-F,Styr ventilzon 1 (24V AC),MW20/Ventil_1,%QX0.0
+17,UNIPI:Relä2,SolenoidVentil 2:+,"1,5",Blå,Cat7/H05VV-F,Styr ventilzon 2 (24V AC),MW21/Ventil_2,%QX0.1
+18,UNIPI:Relä3,SolenoidVentil 3:+,"1,5",Blå,Cat7/H05VV-F,Styr ventilzon 3 (24V AC),MW22/Ventil_3,%QX0.2
+19,UNIPI:Relä4,SolenoidVentil 4:+,"1,5",Blå,Cat7/H05VV-F,Styr ventilzon 4 (24V AC),MW23/Ventil_4,%QX0.3
+20,UNIPI:Relä5,SolenoidVentil 5:+,"1,5",Blå,Cat7/H05VV-F,Styr ventilzon 5 (24V AC),MW24/Ventil_5,%QX0.4
+21,UNIPI:Relä6,SolenoidVentil 6:+,"1,5",Blå,Cat7/H05VV-F,Styr ventilzon 6 (24V AC),MW25/Ventil_6,%QX0.5
+22,UNIPI:Relä7,SolenoidVentil 7:+,"1,5",Blå,Cat7/H05VV-F,Styr ventilzon 7 (24V AC),MW26/Ventil_7,%QX0.6
+23,UNIPI:Relä8,Siemens LOGO:PumpIn,"1,5",Röd,Cat7/H05VV-F,Pumpstyrning via Siemens LOGO,MW100/Signal_Pump,%QX0.7
+24,24V AC:Fas,UNIPI:Relä_COM (alla 8st),"1,5",Brun,H07V-K,Gemensam 24V AC till alla reläer,-,-
+25,24V AC:Neutral,SolenoidVentiler:Common (alla),"1,5",Blå,H07V-K,Gemensam neutral till alla ventilspolar,-,-
+,,,,,,ANALOGA INGÅNGAR (AI),,
+26,Markfuktgivare:Signal,UNIPI:AI1,Cat7 par 1,Vit/Orange,Cat7,Markfuktsensor 0-10V analog signal (kan delas med nätverkskabel),MW30 (Fuktnivå),%IW0
+27,Markfuktgivare:GND,UNIPI:AGND,Cat7 par 1,Orange,Cat7,Analog jord för markfuktsensor (kan delas med nätverkskabel),-,-
+28,Markfuktgivare:+24V,Matning:+24V,Cat7 par 2,Vit/Grön,Cat7,Matningsspänning för markfuktsensor (kan delas med nätverkskabel),-,-
+29,Markfuktgivare:0V,Matning:GND,Cat7 par 2,Grön,Cat7,Matningsjord för markfuktsensor (kan delas med nätverkskabel),-,-
+30,Reserv sensor:Signal,UNIPI:AI2,-,Vit/Brun,Cat7/SYV-K,Reserv analog ingång 2 (0-10V),Reserved,%IW1
+31,Reserv sensor:GND,UNIPI:AGND,-,Brun,Cat7/SYV-K,Analog jord för AI2,-,-
+,,,,,,ANALOGA UTGÅNGAR (AO),,
+32,UNIPI:AO1,Reserv aktuator:Signal,-,Vit,SYV-K,Analog utgång 1 (0-10V) - reserv,Reserved,%QW0
+33,UNIPI:AO2,Reserv aktuator:Signal,-,Grå,SYV-K,Analog utgång 2 (0-10V) - reserv,Reserved,%QW1
+34,UNIPI:AGND,Analoga enheter:GND,-,Svart,SYV-K,Gemensam analog jord för AO,-,-
 ,,,,,,I2C DISPLAYER (via Raspberry Pi),,
-24,RaspberryPi:GPIO2 (SDA),Display1:SDA,-,Gul,H05VV-F (RKK),I2C Data till Display 1 (20x4 LCD),Display Status,I2C 0x27
-25,RaspberryPi:GPIO3 (SCL),Display1:SCL,-,Orange,H05VV-F (RKK),I2C Clock till Display 1 (20x4 LCD),Display Status,I2C 0x27
-26,RaspberryPi:+5V,Display1:VCC,-,Röd,H05VV-F (RKK),5V matning till Display 1,-,-
-27,RaspberryPi:GND,Display1:GND,-,Svart,H05VV-F (RKK),Jord till Display 1,-,-
-28,RaspberryPi:GPIO2 (SDA),Display2:SDA,-,Gul,H05VV-F (RKK),I2C Data till Display 2 (2x8 LCD),Display Control,I2C 0x3F
-29,RaspberryPi:GPIO3 (SCL),Display2:SCL,-,Orange,H05VV-F (RKK),I2C Clock till Display 2 (2x8 LCD),Display Control,I2C 0x3F
-30,RaspberryPi:+5V,Display2:VCC,-,Röd,H05VV-F (RKK),5V matning till Display 2,-,-
-31,RaspberryPi:GND,Display2:GND,-,Svart,H05VV-F (RKK),Jord till Display 2,-,-
+35,RaspberryPi:GPIO2 (SDA),Display1:SDA,-,Gul,H05VV-F (RKK),I2C Data till Display 1 (20x4 LCD),Display Status,I2C 0x27
+36,RaspberryPi:GPIO3 (SCL),Display1:SCL,-,Orange,H05VV-F (RKK),I2C Clock till Display 1 (20x4 LCD),Display Status,I2C 0x27
+37,RaspberryPi:+5V,Display1:VCC,-,Röd,H05VV-F (RKK),5V matning till Display 1,-,-
+38,RaspberryPi:GND,Display1:GND,-,Svart,H05VV-F (RKK),Jord till Display 1,-,-
+39,RaspberryPi:GPIO2 (SDA),Display2:SDA,-,Gul,H05VV-F (RKK),I2C Data till Display 2 (2x8 LCD),Display Control,I2C 0x3F
+40,RaspberryPi:GPIO3 (SCL),Display2:SCL,-,Orange,H05VV-F (RKK),I2C Clock till Display 2 (2x8 LCD),Display Control,I2C 0x3F
+41,RaspberryPi:+5V,Display2:VCC,-,Röd,H05VV-F (RKK),5V matning till Display 2,-,-
+42,RaspberryPi:GND,Display2:GND,-,Svart,H05VV-F (RKK),Jord till Display 2,-,-
 ,,,,,,DISPLAY 2 KNAPPAR (GPIO),,
-32,Display2 UP-knapp:NO,RaspberryPi:GPIO17,-,Vit,H05VV-F (RKK),UP-knapp för Display 2 navigation,Zone Increase,GPIO 17
-33,Display2 DOWN-knapp:NO,RaspberryPi:GPIO27,-,Grå,H05VV-F (RKK),DOWN-knapp för Display 2 navigation,Zone Decrease,GPIO 27
-34,Display2 LEFT-knapp:NO,RaspberryPi:GPIO22,-,Grön,H05VV-F (RKK),LEFT-knapp för Display 2 navigation,Previous View,GPIO 22
-35,Display2 RIGHT-knapp:NO,RaspberryPi:GPIO23,-,Blå,H05VV-F (RKK),RIGHT-knapp för Display 2 navigation,Next View,GPIO 23
-36,Display2 Knappar:COM,RaspberryPi:GND,-,Svart,H05VV-F (RKK),Gemensam jord för alla Display 2-knappar,-,-
+43,Display2 UP-knapp:NO,RaspberryPi:GPIO17,-,Vit,H05VV-F (RKK),UP-knapp för Display 2 navigation,Zone Increase,GPIO 17
+44,Display2 DOWN-knapp:NO,RaspberryPi:GPIO27,-,Grå,H05VV-F (RKK),DOWN-knapp för Display 2 navigation,Zone Decrease,GPIO 27
+45,Display2 LEFT-knapp:NO,RaspberryPi:GPIO22,-,Grön,H05VV-F (RKK),LEFT-knapp för Display 2 navigation,Previous View,GPIO 22
+46,Display2 RIGHT-knapp:NO,RaspberryPi:GPIO23,-,Blå,H05VV-F (RKK),RIGHT-knapp för Display 2 navigation,Next View,GPIO 23
+47,Display2 Knappar:COM,RaspberryPi:GND,-,Svart,H05VV-F (RKK),Gemensam jord för alla Display 2-knappar,-,-
 ,,,,,,JORDNING & SKÄRM,,
-37,Jordplint:Main,SolenoidVentiler:PE (alla),"2,5",Gul/Grön,H07V-K,Skyddsjord för alla ventiler,-,-
-38,Jordplint:Main,UNIPI:PE,"2,5",Gul/Grön,H07V-K,Skyddsjord för UNIPI,-,-
-39,Jordplint:Main,RaspberryPi:PE,"2,5",Gul/Grön,H07V-K,Skyddsjord för Raspberry Pi,-,-
-40,Kabelskärm:Shield,Jordplint:Shield,-,Metall,Cat7/SYV-K,Kabelskärm för Cat7 och shieldade kablar (anslutas i en ände),-,-
+48,Jordplint:Main,SolenoidVentiler:PE (alla),"2,5",Gul/Grön,H07V-K,Skyddsjord för alla ventiler,-,-
+49,Jordplint:Main,UNIPI:PE,"2,5",Gul/Grön,H07V-K,Skyddsjord för UNIPI,-,-
+50,Jordplint:Main,RaspberryPi:PE,"2,5",Gul/Grön,H07V-K,Skyddsjord för Raspberry Pi,-,-
+51,Kabelskärm:Shield,Jordplint:Shield,-,Metall,Cat7/SYV-K,Kabelskärm för Cat7 och shieldade kablar (anslutas i en ände),-,-
 ,,,,,,NÄTVERK & KOMMUNIKATION,,
-41,Nätverk Switch:RJ45-1,UNIPI:ETH,Cat7,Färgkodad,Cat7,Ethernet för Modbus TCP-kommunikation,Modbus TCP,-
-42,Nätverk Switch:RJ45-2,RaspberryPi:ETH,Cat7,Färgkodad,Cat7,Ethernet för API och Modbus-kommunikation,FastAPI/Modbus,-
-43,Nätverk Switch:RJ45-3,Siemens LOGO:ETH,Cat7,Färgkodad,Cat7,Ethernet för LOGO-kommunikation (om tillämpligt),Pump Control,-
+52,Nätverk Switch:RJ45-1,UNIPI:ETH,Cat7,Färgkodad,Cat7,Ethernet för Modbus TCP-kommunikation,Modbus TCP,-
+53,Nätverk Switch:RJ45-2,RaspberryPi:ETH,Cat7,Färgkodad,Cat7,Ethernet för API och Modbus-kommunikation,FastAPI/Modbus,-
+54,Nätverk Switch:RJ45-3,Siemens LOGO:ETH,Cat7,Färgkodad,Cat7,Ethernet för LOGO-kommunikation (om tillämpligt),Pump Control,-
 ,,,,,,FÄLTDISTRIBUTION (PLANEN),,
-44,Nätverk Switch:RJ45-4,Fältbox Höger:ETH,Cat7,Färgkodad,Cat7,Nätverkskabel till höger sida av planen (kan dela med sensorer),Expansion/Sensors,-
-45,Nätverk Switch:RJ45-5,Fältbox Vänster:ETH,Cat7,Färgkodad,Cat7,Nätverkskabel till vänster sida av planen (kan dela med sensorer),Expansion/Sensors,-
+55,Nätverk Switch:RJ45-4,Fältbox Höger:ETH,Cat7,Färgkodad,Cat7,Nätverkskabel till höger sida av planen (kan dela med sensorer),Expansion/Sensors,-
+56,Nätverk Switch:RJ45-5,Fältbox Vänster:ETH,Cat7,Färgkodad,Cat7,Nätverkskabel till vänster sida av planen (kan dela med sensorer),Expansion/Sensors,-
 ,,,,,,NOTER,,
 N1,-,-,-,-,-,"Cat7 kablar har 4 par (8 ledare). Om bara Ethernet används (2 par), kan övriga par användas för:",-,-
 N2,-,-,-,-,-,"  - Analoga signaler (ex. markfukt: signal + GND på par 1, matning på par 2)",-,-
