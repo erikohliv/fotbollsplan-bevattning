@@ -282,6 +282,7 @@ class ModbusReader:
             try:
                 self._client.close()
             except OSError as e:
+                # Expected if socket already closed by remote end
                 logger.debug(f"OSError closing Modbus client: {e}")
             except Exception as e:
                 logger.warning(f"Unexpected error closing Modbus client: {e}")
@@ -305,13 +306,8 @@ class ModbusReader:
                     self._reset_client()
                     return None
                 self._client_connected = True
-            except (ConnectionException, ModbusIOException) as e:
-                logger.debug(f"Modbus connection exception: {e}")
-                self._reset_client()
-                return None
             except Exception as e:
-                logger.warning(f"Unexpected Modbus connection exception: {e}")
-                self._reset_client()
+                self._handle_modbus_exception(e, "Modbus connection")
                 return None
 
         return self._client
@@ -338,6 +334,7 @@ class ModbusReader:
     
     def _invalidate_cache_for_address(self, address: int):
         """Remove cached entries covering a given register address"""
+        # k[0] = start address, k[1] = count; remove any cache entry whose range overlaps the target address
         keys_to_remove = [k for k in self._cache.keys() if k[0] <= address <= k[0] + k[1] - 1]
         for key in keys_to_remove:
             del self._cache[key]
