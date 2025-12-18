@@ -52,6 +52,9 @@ MW_TID_HORN = 21
 MW_MARKFUKT = 30
 MW_REGEN24 = 31
 MW_TEMP = 32
+MW_AUTO_OVERRIDE = 33      # AutoOverride från befintlig mappning
+MW_REGEN_THRESHOLD = 34    # Regntröskel i mm (default 5)
+MW_MOISTURE_THRESHOLD = 35 # Markfukttröskel i % (default 80)
 MW_STATUS_ZONE = 50
 MW_STATUS_PUMP = 51
 MW_STATUS_STEG = 52
@@ -67,7 +70,6 @@ MW_BLOCK_REASON = 73
 MW_TEST_MODE = 80          # Test mode aktivering (1=aktiv, 0=inaktiv)
 MW_TEST_ZONE_RESULT = 81   # Test resultat för aktuell zon (bitmask för zoner 1-7)
 MW_ERROR_RESET = 82        # Error reset trigger (skriv 1 för att nollställa fel)
-MW_AUTO_OVERRIDE = 33      # AutoOverride från befintlig mappning
 MW_MODE = 100              # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
 
 # Zone constants
@@ -1251,6 +1253,10 @@ def get_process_view(x_api_key: Optional[str] = Header(None)):
         env_regs = client.read_holding_registers(MW_MARKFUKT, 3, unit=MODBUS_UNIT)
         _ensure_modbus_ok(env_regs, "read process view environment")
         
+        # Läs tröskelvärden för fel
+        threshold_regs = client.read_holding_registers(MW_REGEN_THRESHOLD, 2, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(threshold_regs, "read process view thresholds")
+        
         # Läs mode
         mode_reg = client.read_holding_registers(MW_MODE, 1, unit=MODBUS_UNIT)
         _ensure_modbus_ok(mode_reg, "read process view mode")
@@ -1262,6 +1268,10 @@ def get_process_view(x_api_key: Optional[str] = Header(None)):
     
     eventmask = heartbeat_regs.registers[2]
     block_reason = heartbeat_regs.registers[3]
+    
+    # Tröskelvärden (använd default om 0)
+    regen_threshold = threshold_regs.registers[0] if threshold_regs.registers[0] > 0 else 5
+    moisture_threshold = threshold_regs.registers[1] if threshold_regs.registers[1] > 0 else 80
     
     # Tolka zonsstatus - aktiv zon är den som körs just nu
     zones_status = []
@@ -1292,13 +1302,13 @@ def get_process_view(x_api_key: Optional[str] = Header(None)):
         "moisture_block": {
             "active": errors["moisture_block"],
             "text": "Markfukt-block",
-            "explanation": f"Markfukten ({env_regs.registers[0]}%) är över tröskelvärdet. Bevattning blockeras.",
+            "explanation": f"Markfukten ({env_regs.registers[0]}%) är över tröskelvärdet ({moisture_threshold}%). Bevattning blockeras.",
             "severity": "warning"
         },
         "rain_block": {
             "active": errors["rain_block"],
             "text": "Regn-block",
-            "explanation": f"Nederbörd senaste 24h ({env_regs.registers[1]} mm) är över tröskelvärdet. Bevattning blockeras.",
+            "explanation": f"Nederbörd senaste 24h ({env_regs.registers[1]} mm) är över tröskelvärdet ({regen_threshold} mm). Bevattning blockeras.",
             "severity": "warning"
         },
         "anti_collision": {
@@ -1326,8 +1336,8 @@ def get_process_view(x_api_key: Optional[str] = Header(None)):
     
     block_explanations = {
         0: "Systemet fungerar normalt. Inga aktiva blockeringar.",
-        1: f"Nederbörd senaste 24h ({env_regs.registers[1]} mm) överstiger tröskelvärdet. Bevattning pausas automatiskt.",
-        2: f"Markfukten ({env_regs.registers[0]}%) överstiger tröskelvärdet. Bevattning pausas automatiskt.",
+        1: f"Nederbörd senaste 24h ({env_regs.registers[1]} mm) överstiger tröskelvärdet ({regen_threshold} mm). Bevattning pausas automatiskt.",
+        2: f"Markfukten ({env_regs.registers[0]}%) överstiger tröskelvärdet ({moisture_threshold}%). Bevattning pausas automatiskt.",
         3: "En annan sekvens eller process använder pumpen. Vänta tills den är klar.",
         4: "Nödstopp är aktiverat. Kontrollera fysisk E-stop-knapp och återställ innan körning."
     }
@@ -1366,7 +1376,9 @@ def get_process_view(x_api_key: Optional[str] = Header(None)):
         },
         "configuration": {
             "tid_center_min": config_regs.registers[0],
-            "tid_horn_min": config_regs.registers[1]
+            "tid_horn_min": config_regs.registers[1],
+            "regen_threshold_mm": regen_threshold,
+            "moisture_threshold_percent": moisture_threshold
         },
         "mode": {
             "value": mode_value,

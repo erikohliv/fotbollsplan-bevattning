@@ -153,7 +153,7 @@ def create_zone_figure(zones_data: List[Dict]) -> go.Figure:
         yaxis=dict(showgrid=False, showticklabels=False, range=[-0.5, 2.5]),
         height=400,
         margin=dict(l=20, r=20, t=40, b=20),
-        title=dict(text="Zonöversikt - Klicka på en zon för att starta", x=0.5, xanchor='center'),
+        title=dict(text="Zonöversikt - Klicka på en zon för att starta/stoppa", x=0.5, xanchor='center'),
         clickmode='event+select'  # Enable click events
     )
     
@@ -760,14 +760,11 @@ def handle_zone_click(clickData, process_json):
         point = clickData['points'][0]
         zone_num = point.get('customdata')
         
-        if not zone_num or not isinstance(zone_num, (int, list)):
-            return "", {'display': 'none'}
-        
         # If customdata is a list, get first element
         if isinstance(zone_num, list):
             zone_num = zone_num[0] if zone_num else None
         
-        if zone_num is None:
+        if not zone_num or not isinstance(zone_num, int):
             return "", {'display': 'none'}
         
         # Check if zone is currently active

@@ -45,7 +45,7 @@ def mock_modbus():
                 result.registers = [2, 1, 3, 2]  # zone=2, pump=on, steg=3, selected=2
             # MW70-73: Heartbeat and error registers
             elif address == 70:
-                result.registers = [1, 100, 0x04, 0]  # heartbeat, count, eventmask, block_reason=0 (OK)
+                result.registers = [1, 100, 4, 0]  # heartbeat, count, eventmask (bit 2 = sequence active), block_reason=0 (OK)
             # MW20-21: Config
             elif address == 20:
                 result.registers = [30, 15]  # tid_center=30, tid_horn=15
