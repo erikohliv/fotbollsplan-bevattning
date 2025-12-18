@@ -207,9 +207,7 @@ PROGRAM Fotbollsplan_Master
       LocalModeActive := FALSE;
       RemoteModeActive := TRUE;
       CurrentModeSwitch := 2;
-    ELSIF ModeSwitchReg = 0 THEN
-      (* Neutral - behåll nuvarande läge *)
-      (* Gör ingenting, CurrentModeSwitch behålls *)
+    (* ELSIF ModeSwitchReg = 0: Neutral - behåller nuvarande läge utan ändring *)
     END_IF;
     PrevModeSwitchReg := ModeSwitchReg;
   END_IF;

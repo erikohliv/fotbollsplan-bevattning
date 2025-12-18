@@ -65,7 +65,7 @@ MW_TEST_MODE = 80          # Test mode aktivering (1=aktiv, 0=inaktiv)
 MW_TEST_ZONE_RESULT = 81   # Test resultat för aktuell zon (bitmask för zoner 1-7)
 MW_ERROR_RESET = 82        # Error reset trigger (skriv 1 för att nollställa fel)
 MW_AUTO_OVERRIDE = 33      # AutoOverride från befintlig mappning
-MW_MODE = 100              # Mode switch: 1=Lokalt läge, 2=Fjärrläge, 0=Neutral
+MW_MODE = 100              # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
 
 # Zone constants
 MIN_ZONE = 1
@@ -233,14 +233,14 @@ def status(x_api_key: Optional[str] = Header(None)):
     # side-effect registers while still being more efficient than the original implementation.
     # Group 1: MW50-53 (zone, pump, steg, selected_zone)
     # Group 2: MW70-73 (heartbeat data)
-    # Group 3: MW100 (mode switch status)
+    # Group 3: MW_MODE (mode switch status)
     with get_modbus_connection() as client:
         rr1 = client.read_holding_registers(MW_STATUS_ZONE, 4, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr1, "read status registers MW50-53")
         rr2 = client.read_holding_registers(MW_HEARTBEAT, 4, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr2, "read heartbeat registers MW70-73")
         rr3 = client.read_holding_registers(MW_MODE, 1, unit=MODBUS_UNIT)
-        _ensure_modbus_ok(rr3, "read mode register MW100")
+        _ensure_modbus_ok(rr3, f"read mode register MW{MW_MODE}")
     
     mode_value = rr3.registers[0]
     mode_text = {
@@ -259,7 +259,7 @@ def status(x_api_key: Optional[str] = Header(None)):
         "eventmask": rr2.registers[2],
         "block_reason": rr2.registers[3],
         "mode": mode_value,
-        "mode_text": mode_text.get(mode_value, f"Okänd läge {mode_value}"),
+        "mode_text": mode_text.get(mode_value, f"Okänt läge {mode_value}"),
         "timestamp": int(time.time())
     }
 
