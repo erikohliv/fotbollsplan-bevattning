@@ -1,13 +1,15 @@
 import logging
 import os
 import time
-from typing import Optional
+from typing import Optional, List
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
+import requests
 
 try:
     from pymodbus.client import ModbusTcpClient
@@ -1101,3 +1103,277 @@ async function resetErrors() {
 </body>
 </html>
 """
+
+
+# Pydantic models for new endpoints
+class ZoneControlCommand(BaseModel):
+    """Command for controlling individual zones"""
+    zone: int
+    action: str  # "start" or "stop"
+    duration_minutes: Optional[int] = None  # For start action
+
+
+@app.get("/rain-forecast")
+def get_rain_forecast(x_api_key: Optional[str] = Header(None)):
+    """
+    Hämta regnprognos från Open-Meteo.
+    Returnerar:
+    - Förväntad nederbörd nästa 24 timmar
+    - Historisk nederbörd senaste 7 dagarna
+    """
+    require_key(x_api_key)
+    
+    # Använd Malmö koordinater som standard (kan göras konfigurerbar)
+    latitude = float(os.getenv("LATITUDE", "55.6050"))
+    longitude = float(os.getenv("LONGITUDE", "13.0038"))
+    
+    try:
+        # Hämta prognos för nästa 24 timmar
+        forecast_url = (
+            f"https://api.open-meteo.com/v1/forecast?"
+            f"latitude={latitude}&longitude={longitude}"
+            f"&hourly=precipitation&timezone=Europe/Stockholm"
+            f"&forecast_days=2"
+        )
+        
+        forecast_response = requests.get(forecast_url, timeout=10)
+        forecast_response.raise_for_status()
+        forecast_data = forecast_response.json()
+        
+        # Hämta historisk data för senaste 7 dagarna
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=7)
+        
+        historical_url = (
+            f"https://archive-api.open-meteo.com/v1/archive?"
+            f"latitude={latitude}&longitude={longitude}"
+            f"&start_date={start_date.isoformat()}"
+            f"&end_date={end_date.isoformat()}"
+            f"&daily=precipitation_sum&timezone=Europe/Stockholm"
+        )
+        
+        historical_response = requests.get(historical_url, timeout=10)
+        historical_response.raise_for_status()
+        historical_data = historical_response.json()
+        
+        # Beräkna nästa 24h total nederbörd
+        now = datetime.now()
+        next_24h_precipitation = 0.0
+        hourly_forecast = []
+        
+        if "hourly" in forecast_data:
+            times = forecast_data["hourly"]["time"]
+            precip = forecast_data["hourly"]["precipitation"]
+            
+            for i, time_str in enumerate(times):
+                forecast_time = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+                if now <= forecast_time <= now + timedelta(hours=24):
+                    next_24h_precipitation += precip[i] or 0.0
+                    hourly_forecast.append({
+                        "time": time_str,
+                        "precipitation": precip[i] or 0.0
+                    })
+        
+        # Extrahera historisk data
+        daily_history = []
+        if "daily" in historical_data:
+            dates = historical_data["daily"]["time"]
+            precip_sum = historical_data["daily"]["precipitation_sum"]
+            
+            for i, date_str in enumerate(dates):
+                daily_history.append({
+                    "date": date_str,
+                    "precipitation": precip_sum[i] or 0.0
+                })
+        
+        logger.info("Regnprognos hämtad: nästa 24h=%.1fmm, historisk data=%d dagar", 
+                   next_24h_precipitation, len(daily_history))
+        
+        return {
+            "ok": True,
+            "forecast_24h": {
+                "total_mm": round(next_24h_precipitation, 1),
+                "hourly": hourly_forecast[:24]  # Begränsa till 24 timmar
+            },
+            "history_7d": {
+                "daily": daily_history
+            },
+            "location": {
+                "latitude": latitude,
+                "longitude": longitude
+            },
+            "timestamp": int(time.time())
+        }
+        
+    except requests.exceptions.RequestException as e:
+        logger.error("Fel vid hämtning av väderdata: %s", e)
+        raise HTTPException(
+            status_code=502, 
+            detail=f"Kunde inte hämta väderdata från Open-Meteo: {str(e)}"
+        )
+
+
+@app.get("/process-view")
+def get_process_view(x_api_key: Optional[str] = Header(None)):
+    """
+    Hämta live processtatus för grafisk visualisering.
+    Returnerar:
+    - Zonsstatus (aktiv/inaktiv) för alla zoner 1-7
+    - Pumpstatus (på/av)
+    - Felstatus (markfukt-block, regn-block, e-stop, etc.)
+    - Aktuellt steg i sekvensen
+    """
+    require_key(x_api_key)
+    
+    with get_modbus_connection() as client:
+        # Läs status-register
+        status_regs = client.read_holding_registers(MW_STATUS_ZONE, 4, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(status_regs, "read process view status")
+        
+        # Läs heartbeat och fel-register
+        heartbeat_regs = client.read_holding_registers(MW_HEARTBEAT, 4, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(heartbeat_regs, "read process view heartbeat")
+        
+        # Läs tröskelvärden och konfiguration
+        config_regs = client.read_holding_registers(MW_TID_CENTER, 2, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(config_regs, "read process view config")
+        
+        # Läs miljödata
+        env_regs = client.read_holding_registers(MW_MARKFUKT, 3, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(env_regs, "read process view environment")
+        
+        # Läs mode
+        mode_reg = client.read_holding_registers(MW_MODE, 1, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(mode_reg, "read process view mode")
+    
+    current_zone = status_regs.registers[0]
+    pump_on = status_regs.registers[1] == 1
+    steg = status_regs.registers[2]
+    selected_zone = status_regs.registers[3]
+    
+    eventmask = heartbeat_regs.registers[2]
+    block_reason = heartbeat_regs.registers[3]
+    
+    # Tolka zonsstatus - aktiv zon är den som körs just nu
+    zones_status = []
+    for zone_num in range(1, 8):
+        is_active = (current_zone == zone_num and pump_on)
+        zones_status.append({
+            "zone": zone_num,
+            "active": is_active,
+            "selected": (selected_zone == zone_num)
+        })
+    
+    # Tolka fel och blockeringar
+    errors = {
+        "e_stop": bool(eventmask & 0x01),
+        "moisture_block": bool(eventmask & 0x02) and block_reason == 2,
+        "rain_block": bool(eventmask & 0x02) and block_reason == 1,
+        "anti_collision": bool(eventmask & 0x08),
+        "sequence_active": bool(eventmask & 0x04)
+    }
+    
+    # Block reason text
+    block_reasons = {
+        0: "OK",
+        1: "Regn över tröskel",
+        2: "Markfukt över tröskel",
+        3: "Anti-kollision/Pump upptagen",
+        4: "E-stop aktiv"
+    }
+    
+    mode_value = mode_reg.registers[0]
+    mode_text = {
+        0: "Neutral",
+        1: "Lokalt läge",
+        2: "Fjärrläge"
+    }
+    
+    return {
+        "ok": True,
+        "zones": zones_status,
+        "pump": {
+            "on": pump_on,
+            "status": "Aktiv" if pump_on else "Inaktiv"
+        },
+        "sequence": {
+            "active": bool(eventmask & 0x04),
+            "current_step": steg,
+            "current_zone": current_zone
+        },
+        "errors": errors,
+        "block_status": {
+            "code": block_reason,
+            "text": block_reasons.get(block_reason, f"Okänd kod {block_reason}"),
+            "blocked": block_reason != 0
+        },
+        "environment": {
+            "moisture_percent": env_regs.registers[0],
+            "rain_24h_mm": env_regs.registers[1],
+            "temperature_c": env_regs.registers[2]
+        },
+        "configuration": {
+            "tid_center_min": config_regs.registers[0],
+            "tid_horn_min": config_regs.registers[1]
+        },
+        "mode": {
+            "value": mode_value,
+            "text": mode_text.get(mode_value, f"Okänt {mode_value}")
+        },
+        "timestamp": int(time.time())
+    }
+
+
+@app.post("/zone-control")
+def zone_control(cmd: ZoneControlCommand, x_api_key: Optional[str] = Header(None)):
+    """
+    Styr individuella zoner via webb-gränssnittet.
+    Åtgärder:
+    - start: Starta vald zon (kräver duration_minutes om inte default används)
+    - stop: Stoppa all bevattning
+    """
+    require_key(x_api_key)
+    
+    zone = validate_zone(cmd.zone)
+    
+    if cmd.action == "start":
+        logger.info("Zon %s startas via zone-control", zone)
+        
+        # Sätt vald zon och starta manuell körning
+        with get_modbus_connection() as client:
+            rr = client.write_register(MW_SET_SELECTED, zone, unit=MODBUS_UNIT)
+            _ensure_modbus_ok(rr, f"set zone {zone} via zone-control")
+            
+            # Pulsera manuell start
+            rr = client.write_register(MW_MANUAL_START, 1, unit=MODBUS_UNIT)
+            _ensure_modbus_ok(rr, f"start zone {zone} via zone-control")
+        
+        return {
+            "ok": True,
+            "action": "start",
+            "zone": zone,
+            "message": f"Zon {zone} startad (använder auto-tider)"
+        }
+    
+    elif cmd.action == "stop":
+        logger.info("Stopp-kommando för zon %s via zone-control", zone)
+        
+        with get_modbus_connection() as client:
+            rr = client.write_register(MW_REMOTE_CMD, 0, unit=MODBUS_UNIT)
+            _ensure_modbus_ok(rr, "stop via zone-control")
+            
+            rr = client.write_register(MW_MODE_OVERRIDE, 0, unit=MODBUS_UNIT)
+            _ensure_modbus_ok(rr, "reset mode override via zone-control")
+        
+        return {
+            "ok": True,
+            "action": "stop",
+            "zone": zone,
+            "message": "Bevattning stoppad"
+        }
+    
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ogiltig åtgärd '{cmd.action}'. Tillåtna: 'start', 'stop'"
+        )
