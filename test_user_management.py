@@ -30,7 +30,7 @@ def test_username_validation():
     assert validate_username("test_user")
     assert validate_username("admin-user")
     assert validate_username("a1b2c3")
-    assert validate_username("test")  # 4 chars - valid
+    assert validate_username("test")  # 4 chars - minimum is 3
     
     # Invalid usernames
     assert not validate_username("ab")  # Too short (< 3 chars)
