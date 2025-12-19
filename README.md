@@ -328,6 +328,150 @@ sudo systemctl start dash-process-view
 - Script: `python healthcheck.py`
 - Env: `API_URL` (default `http://127.0.0.1:8000/status`), `API_KEY`, `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_TO` (komma-separerad).
 
+## Automatic System Updates
+
+Systemet stöder automatisk deployment av kod-uppdateringar till Raspberry Pi via GitHub Actions. När ändringar pushas till `main`-branchen, deployas de automatiskt till produktionssystemet.
+
+### Hur det fungerar
+
+**GitHub Actions Workflow:**
+När kod pushas till `main`-branchen:
+1. GitHub Actions ansluter till Raspberry Pi via SSH
+2. Senaste koden hämtas från repository
+3. Python-beroenden uppdateras
+4. Systemtjänster startas om automatiskt
+
+**Deployment-processen:**
+- `bevattning-api` tjänsten startas om (REST API och Webb-UI)
+- `display-manager` tjänsten startas om (om den körs)
+- `bevattning-scheduler` tjänsten startas om (om den körs)
+
+### Förutsättningar för automatisk deployment
+
+#### 1. SSH-åtkomst till Raspberry Pi
+
+Generera ett SSH-nyckelpar för GitHub Actions (kör på din utvecklingsmaskin):
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/rpi_deploy_key -C "github-actions-deploy"
+```
+
+Kopiera den publika nyckeln till Raspberry Pi:
+```bash
+ssh-copy-id -i ~/.ssh/rpi_deploy_key.pub pi@<raspberry-pi-ip>
+```
+
+Testa SSH-anslutningen:
+```bash
+ssh -i ~/.ssh/rpi_deploy_key pi@<raspberry-pi-ip>
+```
+
+#### 2. Konfigurera GitHub Secrets
+
+Navigera till ditt GitHub repository → Settings → Secrets and variables → Actions
+
+Skapa följande secrets:
+
+| Secret Name | Beskrivning | Exempel |
+|-------------|-------------|---------|
+| `RPI_HOST` | IP-adress eller värdnamn för Raspberry Pi | `192.168.1.100` eller `bevattning.local` |
+| `RPI_USER` | Användarnamn på Raspberry Pi | `pi` |
+| `RPI_SSH_KEY` | Privat SSH-nyckel (hela innehållet i `~/.ssh/rpi_deploy_key`) | `-----BEGIN OPENSSH PRIVATE KEY-----\n...` |
+
+**Viktigt:** För `RPI_SSH_KEY`, kopiera hela innehållet i den privata nyckelfilen, inklusive headers:
+```bash
+cat ~/.ssh/rpi_deploy_key
+```
+
+#### 3. Tillåt sudo utan lösenord för systemctl-kommandon
+
+På Raspberry Pi, skapa en sudoers-fil för att tillåta `pi`-användaren att starta om tjänster utan lösenord:
+
+```bash
+sudo visudo -f /etc/sudoers.d/bevattning-deploy
+```
+
+Lägg till följande rader:
+```
+pi ALL=(ALL) NOPASSWD: /bin/systemctl restart bevattning-api
+pi ALL=(ALL) NOPASSWD: /bin/systemctl restart display-manager
+pi ALL=(ALL) NOPASSWD: /bin/systemctl restart bevattning-scheduler
+pi ALL=(ALL) NOPASSWD: /bin/systemctl is-active bevattning-api
+pi ALL=(ALL) NOPASSWD: /bin/systemctl is-active display-manager
+pi ALL=(ALL) NOPASSWD: /bin/systemctl is-active bevattning-scheduler
+```
+
+Spara och stäng filen (`:wq` i vi/vim).
+
+### Manuell deployment
+
+Om du behöver köra deployment manuellt på Raspberry Pi:
+
+```bash
+cd /home/pi/fotbollsplan-bevattning
+./scripts/deploy.sh
+```
+
+Deployment-scriptet utför:
+1. Hämtar senaste koden från git
+2. Aktiverar Python virtual environment
+3. Installerar/uppdaterar dependencies
+4. Startar om alla systemtjänster
+5. Verifierar att tjänsterna körs
+
+### Alternativ: Git Post-Receive Hook
+
+Om du föredrar att köra deployment direkt från Raspberry Pi (utan GitHub Actions), kan du använda en Git post-receive hook:
+
+**Installation:**
+```bash
+cd /home/pi/fotbollsplan-bevattning
+cp scripts/post-receive.sample .git/hooks/post-receive
+chmod +x .git/hooks/post-receive
+```
+
+**Användning:**
+Deployment sker automatiskt när du pushar till `main`-branchen från Raspberry Pi:
+```bash
+git push origin main
+```
+
+**OBS:** Git hook-metoden kräver att repository är konfigurerat som en git remote på Raspberry Pi.
+
+### Felsökning av deployment
+
+**Kontrollera GitHub Actions-loggar:**
+1. Gå till ditt repository på GitHub
+2. Klicka på "Actions"-fliken
+3. Välj den senaste workflow-körningen
+4. Granska loggarna för eventuella fel
+
+**Kontrollera tjänststatus på Raspberry Pi:**
+```bash
+# Kontrollera alla tjänster
+systemctl status bevattning-api
+systemctl status display-manager
+systemctl status bevattning-scheduler
+
+# Se loggar för en specifik tjänst
+journalctl -u bevattning-api -n 50
+```
+
+**Vanliga problem:**
+
+| Problem | Lösning |
+|---------|---------|
+| SSH-anslutning misslyckas | Kontrollera att `RPI_HOST` är korrekt och att Raspberry Pi är tillgänglig |
+| Permission denied | Kontrollera att SSH-nyckeln är korrekt konfigurerad och att sudoers-filen är rätt |
+| Service restart failed | Kontrollera att tjänsterna är installerade med `systemctl list-unit-files` |
+| Git pull fails | Kontrollera att git repository är korrekt konfigurerat på Raspberry Pi |
+
+### Säkerhetsöverväganden
+
+- **SSH-nycklar:** Håll privata SSH-nycklar hemliga. Lägg aldrig till dem i repository.
+- **GitHub Secrets:** Secrets är krypterade och exponeras aldrig i loggar.
+- **Sudo-begränsningar:** sudoers-konfigurationen tillåter endast specifika systemctl-kommandon, inte full root-åtkomst.
+- **Nätverkssäkerhet:** Använd VPN (t.ex. Tailscale) om Raspberry Pi är åtkomlig över internet.
+
 ## Säkerhet
 - API-nyckel krävs för alla anrop (`X-API-Key`).
 - Kör på lokalt nät; exponera externt endast via VPN eller reverse proxy med TLS.

@@ -206,7 +206,75 @@ sudo systemctl restart bevattning-api
 2. **Testa displayar**: Kontrollera att LCD-displayerna fungerar
 3. **Testa ventiler och pump**: Använd manuellt läge för att testa varje zon
 4. **Konfigurera bevattningsschema**: Justera tider och tröskelvärden
-5. **Se fullständig dokumentation**: README.md
+5. **Konfigurera automatisk deployment** (valfritt): Se avsnittet "Automatisk Deployment" nedan
+6. **Se fullständig dokumentation**: README.md
+
+### Automatisk Deployment (Valfritt)
+
+Efter installationen kan du konfigurera automatisk deployment för att automatiskt uppdatera systemet när ändringar pushas till GitHub.
+
+#### Fördelar med automatisk deployment:
+- Automatiska uppdateringar när kod pushas till `main`-branchen
+- Ingen manuell inloggning på Raspberry Pi behövs för uppdateringar
+- Konsistent deployment-process
+- Automatisk omstart av tjänster efter uppdatering
+
+#### Setup för automatisk deployment:
+
+**Steg 1: Generera SSH-nyckelpar**
+
+På din utvecklingsmaskin:
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/rpi_deploy_key -C "github-actions-deploy"
+```
+
+**Steg 2: Kopiera publik nyckel till Raspberry Pi**
+```bash
+ssh-copy-id -i ~/.ssh/rpi_deploy_key.pub pi@<raspberry-pi-ip>
+```
+
+**Steg 3: Konfigurera sudo för systemctl**
+
+På Raspberry Pi:
+```bash
+sudo visudo -f /etc/sudoers.d/bevattning-deploy
+```
+
+Lägg till:
+```
+pi ALL=(ALL) NOPASSWD: /bin/systemctl restart bevattning-api
+pi ALL=(ALL) NOPASSWD: /bin/systemctl restart display-manager
+pi ALL=(ALL) NOPASSWD: /bin/systemctl restart bevattning-scheduler
+pi ALL=(ALL) NOPASSWD: /bin/systemctl is-active bevattning-api
+pi ALL=(ALL) NOPASSWD: /bin/systemctl is-active display-manager
+pi ALL=(ALL) NOPASSWD: /bin/systemctl is-active bevattning-scheduler
+```
+
+**Steg 4: Konfigurera GitHub Secrets**
+
+Gå till ditt GitHub repository → Settings → Secrets and variables → Actions
+
+Skapa följande secrets:
+- **RPI_HOST**: IP-adress till Raspberry Pi (t.ex. `192.168.1.100`)
+- **RPI_USER**: Användarnamn (vanligtvis `pi`)
+- **RPI_SSH_KEY**: Innehållet i `~/.ssh/rpi_deploy_key` (hela den privata nyckeln)
+
+**Steg 5: Verifiera installation**
+
+GitHub Actions workflow är redan konfigurerad i `.github/workflows/deploy.yml`. 
+
+När du pushar ändringar till `main`-branchen:
+1. GitHub Actions ansluter till Raspberry Pi
+2. Senaste koden hämtas
+3. Dependencies uppdateras
+4. Tjänster startas om automatiskt
+
+**Kontrollera deployment:**
+- Gå till GitHub repository → Actions
+- Se status för senaste deployment
+- Kontrollera loggar vid fel
+
+Se README.md, avsnittet "Automatic System Updates" för fullständig dokumentation.
 
 ### Viktiga filer och platser
 
@@ -218,6 +286,11 @@ sudo systemctl restart bevattning-api
 ├── bevattning_scheduler.py     # Auto-scheduler
 ├── display_manager.py          # Display-hantering
 ├── .venv/                      # Python virtual environment
+├── scripts/                    # Deployment och automation scripts
+│   ├── deploy.sh               # Deployment script
+│   └── post-receive.sample     # Git hook exempel
+├── .github/workflows/          # GitHub Actions workflows
+│   └── deploy.yml              # Automatisk deployment workflow
 └── README.md                   # Fullständig dokumentation
 
 /etc/systemd/system/
