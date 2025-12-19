@@ -1548,6 +1548,8 @@ def create_user(
     
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("[SUPERADMIN] Failed to create user: %s", e)
         raise HTTPException(status_code=500, detail="Failed to create user")
