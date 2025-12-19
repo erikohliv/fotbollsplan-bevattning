@@ -15,6 +15,7 @@ import subprocess
 import re
 from pathlib import Path
 from typing import Tuple, Optional
+import getpass
 
 
 # Constants
@@ -417,6 +418,49 @@ def configure_ufw_for_tailscale() -> bool:
         return False
 
 
+def setup_superadmin_password() -> bool:
+    """Setup superadmin password for user management."""
+    print_header("Superadmin Password Setup")
+    
+    print("The superadmin password is required to create and manage user accounts.")
+    print("This password will be securely hashed and stored.\n")
+    
+    # Import user_management here to avoid issues if passlib is not yet installed
+    try:
+        from user_management import SuperAdminManager
+    except ImportError:
+        print_error("user_management module not available. Install dependencies first.")
+        return False
+    
+    superadmin = SuperAdminManager()
+    
+    if superadmin.is_configured():
+        print_success("Superadmin password is already configured")
+        if not get_yes_no("Do you want to change it?", default=False):
+            return True
+    
+    while True:
+        password = getpass.getpass("Enter superadmin password (min 8 characters): ")
+        
+        if len(password) < 8:
+            print_error("Password must be at least 8 characters long")
+            continue
+        
+        password_confirm = getpass.getpass("Confirm superadmin password: ")
+        
+        if password != password_confirm:
+            print_error("Passwords do not match. Please try again.")
+            continue
+        
+        try:
+            superadmin.set_password(password)
+            print_success("Superadmin password configured successfully")
+            return True
+        except Exception as e:
+            print_error(f"Failed to set superadmin password: {e}")
+            return False
+
+
 def setup_tailscale() -> bool:
     """Setup Tailscale installation and configuration."""
     print_header("Tailscale Installation and Configuration")
@@ -624,7 +668,18 @@ def main() -> int:
         if not get_yes_no("Do you want to continue anyway?", default=False):
             return 1
     
-    # Step 3: Tailscale setup (optional)
+    # Step 3: Superadmin password setup
+    print_header("Superadmin Password Setup")
+    if get_yes_no("Do you want to set up the superadmin password now?", default=True):
+        if not setup_superadmin_password():
+            print_error("Superadmin password setup failed")
+            if not get_yes_no("Do you want to continue anyway?", default=True):
+                return 1
+    else:
+        print_info("Skipping superadmin password setup")
+        print_info("You can run this setup later with: python3 setup.py")
+    
+    # Step 4: Tailscale setup (optional)
     if not setup_tailscale():
         print_error("Tailscale setup failed")
         if not get_yes_no("Do you want to continue anyway?", default=True):
@@ -647,6 +702,11 @@ def main() -> int:
         print("Tailscale is installed. To check status:")
         print("  sudo tailscale status")
         print("  sudo tailscale ip\n")
+    
+    print("User Management:")
+    print("  - Superadmin endpoints are available at /users/*")
+    print("  - Use HTTP Basic Auth with superadmin credentials")
+    print("  - See README.md for API documentation\n")
     
     print("För produktionsmiljö, överväg att sätta upp systemd services:")
     print("  - systemd_bevattning-api.service (FastAPI)")

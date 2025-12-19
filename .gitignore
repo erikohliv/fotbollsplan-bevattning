@@ -27,8 +27,14 @@ bevattning_log.csv
 
 # Environment files
 .env
+api_.env
+
+# User management - sensitive data
+superadmin.txt
+users.json
+demo_superadmin.txt
+demo_users.json
 
 # OS
 .DS_Store
 Thumbs.db
-api_.env
