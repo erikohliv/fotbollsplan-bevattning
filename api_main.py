@@ -5,9 +5,11 @@ import json
 from typing import Optional, List
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+import secrets
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.responses import HTMLResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import requests
@@ -79,11 +81,47 @@ MAX_ZONE = 7
 BLOCK_REASON_UNKNOWN = -1
 
 app = FastAPI(title="Bevattning API", version="0.3")
+security = HTTPBasic()
+
+# Import user management functionality
+try:
+    from user_management import SuperAdminManager, UserManager
+    user_manager = UserManager()
+    superadmin_manager = SuperAdminManager()
+except ImportError:
+    logger.warning("user_management module not available - user management endpoints will be disabled")
+    user_manager = None
+    superadmin_manager = None
 
 
 def require_key(x_api_key: Optional[str]):
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def require_superadmin(credentials: HTTPBasicCredentials = Depends(security)):
+    """Verify superadmin credentials using HTTP Basic Authentication."""
+    if superadmin_manager is None:
+        raise HTTPException(
+            status_code=503,
+            detail="User management not available - missing dependencies"
+        )
+    
+    if not superadmin_manager.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Superadmin not configured - run setup.py first"
+        )
+    
+    # Verify credentials
+    if not superadmin_manager.verify_password(credentials.password):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid superadmin credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    
+    return credentials.username
 
 
 def validate_zone(value: int) -> int:
@@ -1450,3 +1488,136 @@ def zone_control(cmd: ZoneControlCommand, x_api_key: Optional[str] = Header(None
             status_code=400,
             detail=f"Ogiltig åtgärd '{cmd.action}'. Tillåtna: 'start', 'stop'"
         )
+
+
+# ============================================================================
+# User Management Endpoints (Superadmin Only)
+# ============================================================================
+
+class CreateUserRequest(BaseModel):
+    """Request model for creating a user."""
+    username: str
+    password: str
+    is_admin: bool = False
+
+
+class DeleteUserRequest(BaseModel):
+    """Request model for deleting a user."""
+    username: str
+
+
+@app.post("/users/create")
+def create_user(
+    request: CreateUserRequest,
+    superadmin: str = Depends(require_superadmin)
+):
+    """
+    Create a new user account (superadmin only).
+    
+    Requires HTTP Basic Authentication with superadmin credentials.
+    Password must be at least 8 characters long.
+    """
+    if user_manager is None:
+        raise HTTPException(
+            status_code=503,
+            detail="User management not available - missing dependencies"
+        )
+    
+    logger.info("[SUPERADMIN] Creating user: %s (admin=%s)", request.username, request.is_admin)
+    
+    try:
+        success = user_manager.create_user(
+            username=request.username,
+            password=request.password,
+            is_admin=request.is_admin
+        )
+        
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail=f"User '{request.username}' already exists"
+            )
+        
+        logger.info("[SUPERADMIN] User created successfully: %s", request.username)
+        return {
+            "ok": True,
+            "message": f"User '{request.username}' created successfully",
+            "username": request.username,
+            "is_admin": request.is_admin
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("[SUPERADMIN] Failed to create user: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to create user")
+
+
+@app.post("/users/delete")
+def delete_user(
+    request: DeleteUserRequest,
+    superadmin: str = Depends(require_superadmin)
+):
+    """
+    Delete a user account (superadmin only).
+    
+    Requires HTTP Basic Authentication with superadmin credentials.
+    """
+    if user_manager is None:
+        raise HTTPException(
+            status_code=503,
+            detail="User management not available - missing dependencies"
+        )
+    
+    logger.info("[SUPERADMIN] Deleting user: %s", request.username)
+    
+    try:
+        success = user_manager.delete_user(request.username)
+        
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail=f"User '{request.username}' not found"
+            )
+        
+        logger.info("[SUPERADMIN] User deleted successfully: %s", request.username)
+        return {
+            "ok": True,
+            "message": f"User '{request.username}' deleted successfully",
+            "username": request.username
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[SUPERADMIN] Failed to delete user: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to delete user")
+
+
+@app.get("/users/list")
+def list_users(superadmin: str = Depends(require_superadmin)):
+    """
+    List all user accounts (superadmin only).
+    
+    Requires HTTP Basic Authentication with superadmin credentials.
+    Returns a list of users without password hashes.
+    """
+    if user_manager is None:
+        raise HTTPException(
+            status_code=503,
+            detail="User management not available - missing dependencies"
+        )
+    
+    logger.info("[SUPERADMIN] Listing all users")
+    
+    try:
+        users = user_manager.list_users()
+        return {
+            "ok": True,
+            "users": users,
+            "count": len(users)
+        }
+    
+    except Exception as e:
+        logger.error("[SUPERADMIN] Failed to list users: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to list users")

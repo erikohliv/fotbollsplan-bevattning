@@ -6,3 +6,4 @@ requests==2.32.3
 dash==2.14.2
 plotly==5.18.0
 pandas==2.1.4
+passlib[bcrypt]==1.7.4
