@@ -1,0 +1,82 @@
+name: Deploy to Raspberry Pi
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Deploy to Raspberry Pi
+        env:
+          RPI_HOST: ${{ secrets.RPI_HOST }}
+          RPI_USER: ${{ secrets.RPI_USER }}
+          RPI_SSH_KEY: ${{ secrets.RPI_SSH_KEY }}
+        run: |
+          # Setup SSH key
+          mkdir -p ~/.ssh
+          echo "$RPI_SSH_KEY" > ~/.ssh/rpi_key
+          chmod 600 ~/.ssh/rpi_key
+          
+          # Add host to known_hosts to avoid interactive prompt
+          ssh-keyscan -H $RPI_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
+          
+          # Deploy to Raspberry Pi
+          ssh -i ~/.ssh/rpi_key -o StrictHostKeyChecking=no ${RPI_USER}@${RPI_HOST} 'bash -s' << 'ENDSSH'
+          set -e
+          
+          echo "=== Starting deployment ==="
+          
+          # Navigate to project directory
+          cd /home/pi/fotbollsplan-bevattning || {
+            echo "Error: Project directory not found"
+            exit 1
+          }
+          
+          echo "=== Pulling latest changes ==="
+          git fetch origin
+          git reset --hard origin/main
+          
+          echo "=== Activating virtual environment ==="
+          source .venv/bin/activate
+          
+          echo "=== Installing/updating dependencies ==="
+          pip install --upgrade pip
+          pip install -r api_requirements.txt
+          pip install -r display_requirements.txt
+          
+          echo "=== Restarting services ==="
+          # Restart bevattning-api service
+          sudo systemctl restart bevattning-api || echo "Warning: bevattning-api service not running or not installed"
+          
+          # Restart display-manager if running
+          sudo systemctl is-active --quiet display-manager && sudo systemctl restart display-manager || echo "Info: display-manager service not running"
+          
+          # Restart bevattning-scheduler if running
+          sudo systemctl is-active --quiet bevattning-scheduler && sudo systemctl restart bevattning-scheduler || echo "Info: bevattning-scheduler service not running"
+          
+          echo "=== Deployment completed successfully ==="
+          echo "=== Service Status ==="
+          systemctl status bevattning-api --no-pager -l || true
+          ENDSSH
+          
+          echo "Deployment finished successfully!"
+      
+      - name: Verify Deployment
+        env:
+          RPI_HOST: ${{ secrets.RPI_HOST }}
+          RPI_USER: ${{ secrets.RPI_USER }}
+          RPI_SSH_KEY: ${{ secrets.RPI_SSH_KEY }}
+        run: |
+          ssh -i ~/.ssh/rpi_key -o StrictHostKeyChecking=no ${RPI_USER}@${RPI_HOST} 'bash -s' << 'ENDSSH'
+          echo "=== Verifying service status ==="
+          systemctl is-active bevattning-api && echo "✓ bevattning-api is running" || echo "✗ bevattning-api is not running"
+          systemctl is-active display-manager && echo "✓ display-manager is running" || echo "ℹ display-manager is not running (optional)"
+          ENDSSH
