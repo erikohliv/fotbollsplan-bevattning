@@ -1,0 +1,101 @@
+#!/bin/bash
+# Git post-receive hook for automatic deployment
+# 
+# This hook is triggered after a successful push to the repository.
+# It pulls the latest changes, installs dependencies, and restarts services.
+#
+# Installation:
+# 1. Copy this file to .git/hooks/post-receive on the Raspberry Pi
+# 2. Make it executable: chmod +x .git/hooks/post-receive
+# 3. Ensure the user running git has sudo privileges for systemctl commands
+#
+# Usage:
+#   This hook is automatically triggered after 'git push'
+
+# Read the standard input to get branch information
+while read oldrev newrev refname; do
+    # Get the branch name
+    branch=$(git rev-parse --symbolic --abbrev-ref $refname)
+    
+    # Only deploy when pushing to main branch
+    if [ "$branch" = "main" ]; then
+        echo "==================================================================="
+        echo "  Post-receive hook triggered for main branch"
+        echo "==================================================================="
+        echo ""
+        
+        # Set project directory (adjust if needed)
+        PROJECT_DIR="/home/pi/fotbollsplan-bevattning"
+        
+        # Navigate to project directory
+        cd $PROJECT_DIR || exit 1
+        
+        # Unset GIT_DIR to allow git commands to work properly
+        unset GIT_DIR
+        
+        echo "=== Pulling latest changes ==="
+        git fetch origin
+        git reset --hard origin/main
+        echo "✓ Code updated to latest version"
+        echo ""
+        
+        echo "=== Activating virtual environment ==="
+        source .venv/bin/activate
+        echo "✓ Virtual environment activated"
+        echo ""
+        
+        echo "=== Installing/updating dependencies ==="
+        pip install --upgrade pip --quiet
+        
+        if [ -f "api_requirements.txt" ]; then
+            pip install -r api_requirements.txt --quiet
+            echo "✓ API dependencies installed"
+        fi
+        
+        if [ -f "display_requirements.txt" ]; then
+            pip install -r display_requirements.txt --quiet
+            echo "✓ Display dependencies installed"
+        fi
+        echo ""
+        
+        echo "=== Restarting services ==="
+        
+        # Restart bevattning-api service
+        if sudo systemctl restart bevattning-api; then
+            echo "✓ bevattning-api service restarted"
+        else
+            echo "⚠ Failed to restart bevattning-api service"
+        fi
+        
+        # Restart display-manager if it's running
+        if sudo systemctl is-active --quiet display-manager; then
+            if sudo systemctl restart display-manager; then
+                echo "✓ display-manager service restarted"
+            else
+                echo "⚠ Failed to restart display-manager service"
+            fi
+        else
+            echo "ℹ display-manager service not running"
+        fi
+        
+        # Restart bevattning-scheduler if it's running
+        if sudo systemctl is-active --quiet bevattning-scheduler; then
+            if sudo systemctl restart bevattning-scheduler; then
+                echo "✓ bevattning-scheduler service restarted"
+            else
+                echo "⚠ Failed to restart bevattning-scheduler service"
+            fi
+        else
+            echo "ℹ bevattning-scheduler service not running"
+        fi
+        
+        echo ""
+        echo "==================================================================="
+        echo "  Deployment completed successfully!"
+        echo "==================================================================="
+        echo "  Last commit: $(git log -1 --oneline)"
+        echo "==================================================================="
+    else
+        echo "Post-receive hook: Ignoring push to branch '$branch' (only main triggers deployment)"
+    fi
+done
