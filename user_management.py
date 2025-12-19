@@ -11,6 +11,7 @@ This module provides functionality for:
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Optional, List, Dict
 from passlib.context import CryptContext
@@ -33,6 +34,23 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def validate_password_strength(password: str) -> bool:
     """Validate that a password meets minimum requirements (at least 8 characters)."""
     return len(password) >= 8
+
+
+def validate_username(username: str) -> bool:
+    """
+    Validate username format.
+    
+    Username must:
+    - Be 3-32 characters long
+    - Contain only alphanumeric characters, underscores, and hyphens
+    - Start with an alphanumeric character
+    """
+    if not username or len(username) < 3 or len(username) > 32:
+        return False
+    
+    # Check for valid characters and starting character
+    pattern = r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$'
+    return bool(re.match(pattern, username))
 
 
 class SuperAdminManager:
@@ -106,8 +124,11 @@ class UserManager:
             True if user was created, False if username already exists
         
         Raises:
-            ValueError: If password doesn't meet minimum requirements
+            ValueError: If password or username doesn't meet requirements
         """
+        if not validate_username(username):
+            raise ValueError("Username must be 3-32 characters, alphanumeric with underscores/hyphens, starting with alphanumeric")
+        
         if not validate_password_strength(password):
             raise ValueError("Password must be at least 8 characters long")
         

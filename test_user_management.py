@@ -18,8 +18,29 @@ from user_management import (
     UserManager,
     hash_password,
     verify_password,
-    validate_password_strength
+    validate_password_strength,
+    validate_username
 )
+
+
+def test_username_validation():
+    """Test username validation."""
+    # Valid usernames
+    assert validate_username("user123")
+    assert validate_username("test_user")
+    assert validate_username("admin-user")
+    assert validate_username("a1b2c3")
+    assert validate_username("test")  # 4 chars - valid
+    
+    # Invalid usernames
+    assert not validate_username("ab")  # Too short (< 3 chars)
+    assert not validate_username("a" * 33)  # Too long (> 32 chars)
+    assert not validate_username("_user")  # Starts with underscore
+    assert not validate_username("-user")  # Starts with hyphen
+    assert not validate_username("user name")  # Contains space
+    assert not validate_username("user@test")  # Contains @
+    assert not validate_username("")  # Empty
+    assert not validate_username("   ")  # Whitespace only
 
 
 def test_password_validation():
@@ -118,6 +139,23 @@ def test_user_manager_invalid_password():
         # Try to create user with weak password
         with pytest.raises(ValueError, match="at least 8 characters"):
             manager.create_user("testuser", "weak")
+
+
+def test_user_manager_invalid_username():
+    """Test UserManager rejects invalid usernames."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        users_file = Path(tmpdir) / "test_users.json"
+        manager = UserManager(str(users_file))
+        
+        # Try to create user with invalid username
+        with pytest.raises(ValueError, match="Username must be"):
+            manager.create_user("ab", "password123")  # Too short
+        
+        with pytest.raises(ValueError, match="Username must be"):
+            manager.create_user("_invalid", "password123")  # Starts with underscore
+        
+        with pytest.raises(ValueError, match="Username must be"):
+            manager.create_user("user name", "password123")  # Contains space
 
 
 def test_user_manager_delete_user():

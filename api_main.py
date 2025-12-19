@@ -5,7 +5,6 @@ import json
 from typing import Optional, List
 from contextlib import contextmanager
 from datetime import datetime, timedelta
-import secrets
 
 from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.responses import HTMLResponse
@@ -113,7 +112,14 @@ def require_superadmin(credentials: HTTPBasicCredentials = Depends(security)):
             detail="Superadmin not configured - run setup.py first"
         )
     
-    # Verify credentials
+    # Verify username is 'superadmin' and password is correct
+    if credentials.username != "superadmin":
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid superadmin credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    
     if not superadmin_manager.verify_password(credentials.password):
         raise HTTPException(
             status_code=401,
