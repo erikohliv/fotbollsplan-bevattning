@@ -31,108 +31,150 @@ Signal 0-10V,-,-,H05VV-F,0.5 mm²
 FÖRBINDNINGSTABELL - DETALJERAD
 ====================================================
 
-SEKTION 1: DIGITALA INGÅNGAR (DI)
+SEKTION 1: DIGITALA INGÅNGAR (DI) - INTERNA ANSLUTNINGAR
 --------------------------------------------------
 Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area (mm²),Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O
-1,Nödstopp:NC,UNIPI:DI8,0.75,Grå,H05VV-F (RKK),Nödstoppkoppling (NC - Normally Closed) - intern,MW73 (Stopfunktion),%IX0.7
-2,Startknapp:NO,UNIPI:DI2,0.75,Grå,H05VV-F (RKK),Startknappkoppling - intern,MW10 (Startfunktion),%IX0.1
-3,Stoppknapp:NO,UNIPI:DI1,0.75,Grå,H05VV-F (RKK),Stoppknappkoppling - intern,MW60 (Stop),%IX0.0
-4,Auto/Man-växel:NO,UNIPI:DI3,0.75,Grå,H05VV-F (RKK),Auto/Manuell lägesväxel - intern,MW60 (Mode),%IX0.2
-5,Nästa zon-knapp:NO,UNIPI:DI4,0.75,Grå,H05VV-F (RKK),Nästa zon (deprecated) - intern,MW63 (Zone Select),%IX0.3
-6,Display Knapp 1:NO,UNIPI:DI5,0.75,Grå,H05VV-F (RKK),Display öka zon - intern,MW63 (Zone Select),%IX0.4
-7,Display Knapp 2:NO,UNIPI:DI9,0.75,Grå,H05VV-F (RKK),Display minska zon - intern,MW63 (Zone Select),%IX1.0
-8,Test-knapp:NO,UNIPI:DI6,0.75,Grå,H05VV-F (RKK),Testfunktion - intern,Test Mode,%IX0.5
-9,Blow-knapp:NO,UNIPI:DI7,0.75,Grå,H05VV-F (RKK),Utblåsningsfunktion - intern,Blow Mode,%IX0.6
-10,Reserv DI:NO,UNIPI:DI10,-,Grå,H05VV-F (RKK),Reserv digital ingång 10,Reserved,%IX1.1
-11,Reserv DI:NO,UNIPI:DI11,-,Grå,H05VV-F (RKK),Reserv digital ingång 11,Reserved,%IX1.2
-12,Reserv DI:NO,UNIPI:DI12,-,Grå,H05VV-F (RKK),Reserv digital ingång 12,Reserved,%IX1.3
-13,Reserv DI:NO,UNIPI:DI13,-,Grå,H05VV-F (RKK),Reserv digital ingång 13,Reserved,%IX1.4
-14,Reserv DI:NO,UNIPI:DI14,-,Grå,H05VV-F (RKK),Reserv digital ingång 14,Reserved,%IX1.5
-15,Gemensam DI:0V,UNIPI:DI_COM,-,Grå,H05VV-F (RKK),Gemensam 0V för alla digitala ingångar (14st),-,-
+1,Nödstopp:NC,UNIPI:DI8,0.75,Svart,RKK,Nödstoppkoppling (NC - Normally Closed) - intern anslutning,MW73 (Stopfunktion),%IX0.7
+2,Startknapp:NO,UNIPI:DI2,0.75,Svart,RKK,Startknappkoppling - intern anslutning,MW10 (Startfunktion),%IX0.1
+3,Stoppknapp:NO,UNIPI:DI1,0.75,Svart,RKK,Stoppknappkoppling - intern anslutning,MW60 (Stop),%IX0.0
+4,Auto/Man-växel:NO,UNIPI:DI3,0.75,Svart,RKK,Auto/Manuell lägesväxel - intern anslutning,MW60 (Mode),%IX0.2
+5,Nästa zon-knapp:NO,UNIPI:DI4,0.75,Svart,RKK,Nästa zon (deprecated) - intern anslutning,MW63 (Zone Select),%IX0.3
+6,Display Knapp 1:NO,UNIPI:DI5,0.75,Svart,RKK,Display öka zon - intern anslutning,MW63 (Zone Select),%IX0.4
+7,Display Knapp 2:NO,UNIPI:DI9,0.75,Svart,RKK,Display minska zon - intern anslutning,MW63 (Zone Select),%IX1.0
+8,Test-knapp:NO,UNIPI:DI6,0.75,Svart,RKK,Testfunktion - intern anslutning,Test Mode,%IX0.5
+9,Blow-knapp:NO,UNIPI:DI7,0.75,Svart,RKK,Utblåsningsfunktion - intern anslutning,Blow Mode,%IX0.6
+10,Reserv DI:NO,UNIPI:DI10,0.75,Svart,RKK,Reserv digital ingång 10 - intern anslutning,Reserved,%IX1.1
+11,Reserv DI:NO,UNIPI:DI11,0.75,Svart,RKK,Reserv digital ingång 11 - intern anslutning,Reserved,%IX1.2
+12,Reserv DI:NO,UNIPI:DI12,0.75,Svart,RKK,Reserv digital ingång 12 - intern anslutning,Reserved,%IX1.3
+13,Reserv DI:NO,UNIPI:DI13,0.75,Svart,RKK,Reserv digital ingång 13 - intern anslutning,Reserved,%IX1.4
+14,Reserv DI:NO,UNIPI:DI14,0.75,Svart,RKK,Reserv digital ingång 14 - intern anslutning,Reserved,%IX1.5
+15,Gemensam DI:0V,UNIPI:DI_COM,0.75,Svart,RKK,Gemensam 0V för alla digitala ingångar (14st) - intern anslutning,-,-
 
 SEKTION 2: DIGITALA UTGÅNGAR (DO) - RELÄER
 --------------------------------------------------
+Del A: Interna anslutningar (PLC till Relä/Plint)
+Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area (mm²),Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O
+16a,UNIPI:Relä1,Plint X1:1,0.75,Svart,RKK,Intern anslutning från PLC-relä 1 till plint X1:1,MW20/Ventil_1,%QX0.0
+17a,UNIPI:Relä2,Plint X1:2,0.75,Svart,RKK,Intern anslutning från PLC-relä 2 till plint X1:2,MW21/Ventil_2,%QX0.1
+18a,UNIPI:Relä3,Plint X1:3,0.75,Svart,RKK,Intern anslutning från PLC-relä 3 till plint X1:3,MW22/Ventil_3,%QX0.2
+19a,UNIPI:Relä4,Plint X1:4,0.75,Svart,RKK,Intern anslutning från PLC-relä 4 till plint X1:4,MW23/Ventil_4,%QX0.3
+20a,UNIPI:Relä5,Plint X1:5,0.75,Svart,RKK,Intern anslutning från PLC-relä 5 till plint X1:5,MW24/Ventil_5,%QX0.4
+21a,UNIPI:Relä6,Plint X1:6,0.75,Svart,RKK,Intern anslutning från PLC-relä 6 till plint X1:6,MW25/Ventil_6,%QX0.5
+22a,UNIPI:Relä7,Plint X1:7,0.75,Svart,RKK,Intern anslutning från PLC-relä 7 till plint X1:7,MW26/Ventil_7,%QX0.6
+23a,UNIPI:Relä8,Plint X1:8,0.75,Svart,RKK,Intern anslutning från PLC-relä 8 till plint X1:8,MW100/Signal_Pump,%QX0.7
+--------------------------------------------------
+Del B: Externa anslutningar (Plint till fältenheter)
 Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area,Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O
-16,UNIPI:Relä1,Plint X1:1 → Ventil 1:+,Cat7,Svart,Cat7,+24VAC Styr ventilzon 1 (EXTERN via plint),MW20/Ventil_1,%QX0.0
-17,UNIPI:Relä2,Plint X1:2 → Ventil 2:+,Cat7,Svart,Cat7,+24VAC Styr ventilzon 2 (EXTERN via plint),MW21/Ventil_2,%QX0.1
-18,UNIPI:Relä3,Plint X1:3 → Ventil 3:+,Cat7,Svart,Cat7,+24VAC Styr ventilzon 3 (EXTERN via plint),MW22/Ventil_3,%QX0.2
-19,UNIPI:Relä4,Plint X1:4 → Ventil 4:+,Cat7,Svart,Cat7,+24VAC Styr ventilzon 4 (EXTERN via plint),MW23/Ventil_4,%QX0.3
-20,UNIPI:Relä5,Plint X1:5 → Ventil 5:+,Cat7,Svart,Cat7,+24VAC Styr ventilzon 5 (EXTERN via plint),MW24/Ventil_5,%QX0.4
-21,UNIPI:Relä6,Plint X1:6 → Ventil 6:+,Cat7,Svart,Cat7,+24VAC Styr ventilzon 6 (EXTERN via plint),MW25/Ventil_6,%QX0.5
-22,UNIPI:Relä7,Plint X1:7 → Ventil 7:+,Cat7,Svart,Cat7,+24VAC Styr ventilzon 7 (EXTERN via plint),MW26/Ventil_7,%QX0.6
-23,UNIPI:Relä8,Plint X1:8 → LOGO:PumpIn,Cat7,Svart,Cat7,+24VAC Pumpstyrning via Siemens LOGO (EXTERN via plint),MW100/Signal_Pump,%QX0.7
+16b,Plint X1:1,Ventil 1:+,Cat7 par1,Vit/Orange,Cat7,+24VAC till ventilzon 1 (EXTERN från plint till ventil),MW20/Ventil_1,%QX0.0
+17b,Plint X1:2,Ventil 2:+,Cat7 par2,Orange,Cat7,+24VAC till ventilzon 2 (EXTERN från plint till ventil),MW21/Ventil_2,%QX0.1
+18b,Plint X1:3,Ventil 3:+,Cat7 par3,Vit/Grön,Cat7,+24VAC till ventilzon 3 (EXTERN från plint till ventil),MW22/Ventil_3,%QX0.2
+19b,Plint X1:4,Ventil 4:+,Cat7 par4,Blå,Cat7,+24VAC till ventilzon 4 (EXTERN från plint till ventil),MW23/Ventil_4,%QX0.3
+20b,Plint X1:5,Ventil 5:+,Cat7 par5,Vit/Blå,Cat7,+24VAC till ventilzon 5 (EXTERN från plint till ventil),MW24/Ventil_5,%QX0.4
+21b,Plint X1:6,Ventil 6:+,Cat7 par6,Grön,Cat7,+24VAC till ventilzon 6 (EXTERN från plint till ventil),MW25/Ventil_6,%QX0.5
+22b,Plint X1:7,Ventil 7:+,Cat7 par7,Vit/Brun,Cat7,+24VAC till ventilzon 7 (EXTERN från plint till ventil),MW26/Ventil_7,%QX0.6
+23b,Plint X1:8,LOGO:PumpIn,Cat7 par8,Brun,Cat7,+24VAC pumpstyrning till Siemens LOGO (EXTERN från plint),MW100/Signal_Pump,%QX0.7
 
 SEKTION 3: STRÖMFÖRSÖRJNING
 --------------------------------------------------
+Del A: Interna anslutningar (PLC och interna komponenter)
 Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area (mm²),Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O
-24,230V:Fas,Matning:+230V,1.5,Brun,H07V-K,+230V Fas till UNIPI-matning (INTERN),-,-
-25,230V:Neutral,Matning:-230V,1.5,Blå,H07V-K,-230V Neutral till UNIPI-matning (INTERN),-,-
-26,24VAC:Fas,Plint X1:COM (alla),Cat7,Svart,Cat7,+24VAC gemensam fas till alla ventiler (EXTERN via plint),-,-
-27,24VAC:Neutral,Plint X1:COM2 → Ventiler:Common,Cat7,Svart,Cat7,-24VAC gemensam neutral till ventilspolar (EXTERN via plint),-,-
+24,230V:Fas,UNIPI:Matning +230V,1.5,Brun,H07V-K,+230V Fas till UNIPI-matning (INTERN),-,-
+25,230V:Neutral,UNIPI:Matning -230V,1.5,Blå,H07V-K,-230V Neutral till UNIPI-matning (INTERN),-,-
+26a,24VAC:Transformator Fas,Plint X1:COM,0.75,Svart,RKK,+24VAC från transformator till plint X1:COM (INTERN),-,-
+27a,24VAC:Transformator Neutral,Plint X1:COM2,0.75,Svart,RKK,-24VAC från transformator till plint X1:COM2 (INTERN),-,-
+--------------------------------------------------
+Del B: Externa anslutningar (Plint till fältenheter)
+Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area,Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O
+26b,Plint X1:COM,Ventiler 1-7:Common Fas,Cat7,Vit/Orange-Brun (multi),Cat7,+24VAC gemensam fas till alla ventiler (EXTERN från plint),-,-
+27b,Plint X1:COM2,Ventiler 1-7:Common Neutral,Cat7,Orange-Brun (multi),Cat7,-24VAC gemensam neutral till alla ventilspolar (EXTERN från plint),-,-
 
 SEKTION 4: ANALOGA INGÅNGAR (AI)
 --------------------------------------------------
+Del A: Interna anslutningar (Plint till PLC)
+Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area (mm²),Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O
+28a,Plint X1:9,UNIPI:AI1,0.5,Svart,RKK,Analog signal från plint till UNIPI AI1 (INTERN),%IW0,MW30
+29a,Plint X1:10,UNIPI:AGND,0.5,Svart,RKK,Analog jord från plint till UNIPI (INTERN),-,-
+30a,Plint X1:11,UNIPI:+24VDC,0.5,Röd,RKK,+24VDC matning från plint till UNIPI (INTERN),-,-
+31a,Plint X1:12,UNIPI:-24VDC,0.5,Svart,RKK,-24VDC jord från plint till UNIPI (INTERN),-,-
+--------------------------------------------------
+Del B: Externa anslutningar (Plint till sensorer)
 Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area,Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O
-28,Plint X1:9,Markfuktgivare:Signal,Cat7,Grå,Cat7,0-10V analog signal från markfuktsensor (EXTERN via plint),MW30 (Fuktnivå),%IW0
-29,Plint X1:10,Markfuktgivare:GND,Cat7,Grå,Cat7,Analog jord för markfuktsensor (EXTERN via plint),-,-
-30,Plint X1:11,Markfuktgivare:+24VDC,Cat7,Grå,Cat7,+24VDC matning till markfuktsensor (EXTERN via plint),-,-
-31,Plint X1:12,Markfuktgivare:-24VDC,Cat7,Grå,Cat7,-24VDC matningsjord för markfuktsensor (EXTERN via plint),-,-
-32,UNIPI:AI1,Plint X1:9,0.5,Grå,H05VV-F,Anslutning från plint till UNIPI AI1 (INTERN),%IW0,-
-33,UNIPI:AGND,Plint X1:10,0.5,Grå,H05VV-F,Analog jord från plint till UNIPI (INTERN),-,-
-34,Reserv sensor:Signal,UNIPI:AI2,-,Grå,H05VV-F,Reserv analog ingång 2 (0-10V),Reserved,%IW1
-35,Reserv sensor:GND,UNIPI:AGND,-,Grå,H05VV-F,Analog jord för AI2,-,-
+28b,Plint X1:9,Markfuktgivare:Signal,Cat7 par1,Vit/Orange,Cat7,0-10V analog signal från markfuktsensor (EXTERN från plint),MW30 (Fuktnivå),%IW0
+29b,Plint X1:10,Markfuktgivare:GND,Cat7 par2,Orange,Cat7,Analog jord för markfuktsensor (EXTERN från plint),-,-
+30b,Plint X1:11,Markfuktgivare:+24VDC,Cat7 par3,Vit/Grön,Cat7,+24VDC matning till markfuktsensor (EXTERN från plint),-,-
+31b,Plint X1:12,Markfuktgivare:-24VDC,Cat7 par4,Blå,Cat7,-24VDC matningsjord för markfuktsensor (EXTERN från plint),-,-
+--------------------------------------------------
+Del C: Reserv analog ingång (Intern)
+Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area (mm²),Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O
+32,Reserv sensor:Signal,UNIPI:AI2,0.5,Svart,RKK,Reserv analog ingång 2 (0-10V) - INTERN,Reserved,%IW1
+33,Reserv sensor:GND,UNIPI:AGND,0.5,Svart,RKK,Analog jord för AI2 - INTERN,-,-
 
-SEKTION 5: ANALOGA UTGÅNGAR (AO)
+SEKTION 5: ANALOGA UTGÅNGAR (AO) - INTERNA ANSLUTNINGAR
+--------------------------------------------------
+Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area (mm²),Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O
+34,UNIPI:AO1,Reserv aktuator:Signal,0.5,Svart,RKK,Analog utgång 1 (0-10V) - reserv (INTERN),Reserved,%QW0
+35,UNIPI:AO2,Reserv aktuator:Signal,0.5,Svart,RKK,Analog utgång 2 (0-10V) - reserv (INTERN),Reserved,%QW1
+36,UNIPI:AGND,Analoga enheter:GND,0.5,Svart,RKK,Gemensam analog jord för AO (INTERN),-,-
+
+SEKTION 6: I2C DISPLAYER - INTERNA ANSLUTNINGAR (VIA RASPBERRY PI)
 --------------------------------------------------
 Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area,Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O
-36,UNIPI:AO1,Reserv aktuator:Signal,-,Grå,H05VV-F,Analog utgång 1 (0-10V) - reserv,Reserved,%QW0
-37,UNIPI:AO2,Reserv aktuator:Signal,-,Grå,H05VV-F,Analog utgång 2 (0-10V) - reserv,Reserved,%QW1
-38,UNIPI:AGND,Analoga enheter:GND,-,Grå,H05VV-F,Gemensam analog jord för AO,-,-
+37,RaspberryPi:GPIO2 (SDA),Display1:SDA,-,Röd,Jumper/Dupont,I2C Data till Display 1 (20x4 LCD) - INTERN,Display Status,I2C 0x27
+38,RaspberryPi:GPIO3 (SCL),Display1:SCL,-,Gul,Jumper/Dupont,I2C Clock till Display 1 (20x4 LCD) - INTERN,Display Status,I2C 0x27
+39,RaspberryPi:+5V,Display1:VCC,-,Röd,Jumper/Dupont,5V matning till Display 1 - INTERN,-,-
+40,RaspberryPi:GND,Display1:GND,-,Svart,Jumper/Dupont,Jord till Display 1 - INTERN,-,-
+41,RaspberryPi:GPIO2 (SDA),Display2:SDA,-,Röd,Jumper/Dupont,I2C Data till Display 2 (2x8 LCD) - INTERN,Display Control,I2C 0x3F
+42,RaspberryPi:GPIO3 (SCL),Display2:SCL,-,Gul,Jumper/Dupont,I2C Clock till Display 2 (2x8 LCD) - INTERN,Display Control,I2C 0x3F
+43,RaspberryPi:+5V,Display2:VCC,-,Röd,Jumper/Dupont,5V matning till Display 2 - INTERN,-,-
+44,RaspberryPi:GND,Display2:GND,-,Svart,Jumper/Dupont,Jord till Display 2 - INTERN,-,-
 
-SEKTION 6: I2C DISPLAYER
---------------------------------------------------
-Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area,Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O
-39,RaspberryPi:GPIO2 (SDA),Display1:SDA,-,Grå,Jumper/Dupont,I2C Data till Display 1 (20x4 LCD) - intern,Display Status,I2C 0x27
-40,RaspberryPi:GPIO3 (SCL),Display1:SCL,-,Grå,Jumper/Dupont,I2C Clock till Display 1 (20x4 LCD) - intern,Display Status,I2C 0x27
-41,RaspberryPi:+5V,Display1:VCC,-,Grå,Jumper/Dupont,5V matning till Display 1 - intern,-,-
-42,RaspberryPi:GND,Display1:GND,-,Grå,Jumper/Dupont,Jord till Display 1 - intern,-,-
-43,RaspberryPi:GPIO2 (SDA),Display2:SDA,-,Grå,Jumper/Dupont,I2C Data till Display 2 (2x8 LCD) - intern,Display Control,I2C 0x3F
-44,RaspberryPi:GPIO3 (SCL),Display2:SCL,-,Grå,Jumper/Dupont,I2C Clock till Display 2 (2x8 LCD) - intern,Display Control,I2C 0x3F
-45,RaspberryPi:+5V,Display2:VCC,-,Grå,Jumper/Dupont,5V matning till Display 2 - intern,-,-
-46,RaspberryPi:GND,Display2:GND,-,Grå,Jumper/Dupont,Jord till Display 2 - intern,-,-
-
-SEKTION 7: DISPLAY 2 KNAPPAR (GPIO)
+SEKTION 7: DISPLAY 2 KNAPPAR (GPIO) - INTERNA ANSLUTNINGAR
 --------------------------------------------------
 Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area,Färg,Kabeltyp,Funktion,Modbus-Register,GPIO Pin
-47,Display2 UP-knapp:NO,RaspberryPi:GPIO17,-,Grå,Jumper/Dupont,UP-knapp för Display 2 navigation - intern,Zone Increase,GPIO 17
-48,Display2 DOWN-knapp:NO,RaspberryPi:GPIO27,-,Grå,Jumper/Dupont,DOWN-knapp för Display 2 navigation - intern,Zone Decrease,GPIO 27
-49,Display2 LEFT-knapp:NO,RaspberryPi:GPIO22,-,Grå,Jumper/Dupont,LEFT-knapp för Display 2 navigation - intern,Previous View,GPIO 22
-50,Display2 RIGHT-knapp:NO,RaspberryPi:GPIO23,-,Grå,Jumper/Dupont,RIGHT-knapp för Display 2 navigation - intern,Next View,GPIO 23
-51,Display2 Knappar:COM,RaspberryPi:GND,-,Grå,Jumper/Dupont,Gemensam jord för Display 2-knappar - intern,-,-
+45,Display2 UP-knapp:NO,RaspberryPi:GPIO17,-,Vit,Jumper/Dupont,UP-knapp för Display 2 navigation - INTERN,Zone Increase,GPIO 17
+46,Display2 DOWN-knapp:NO,RaspberryPi:GPIO27,-,Grön,Jumper/Dupont,DOWN-knapp för Display 2 navigation - INTERN,Zone Decrease,GPIO 27
+47,Display2 LEFT-knapp:NO,RaspberryPi:GPIO22,-,Gul,Jumper/Dupont,LEFT-knapp för Display 2 navigation - INTERN,Previous View,GPIO 22
+48,Display2 RIGHT-knapp:NO,RaspberryPi:GPIO23,-,Blå,Jumper/Dupont,RIGHT-knapp för Display 2 navigation - INTERN,Next View,GPIO 23
+49,Display2 Knappar:COM,RaspberryPi:GND,-,Svart,Jumper/Dupont,Gemensam jord för Display 2-knappar - INTERN,-,-
 
 SEKTION 8: JORDNING & SKÄRM
 --------------------------------------------------
+Del A: Interna anslutningar (Skyddsjord för interna komponenter)
 Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area (mm²),Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O
-52,Jordplint:Main,Plint X1:PE → Ventiler:PE (alla),2.5,Gul/Grön,Cat7,Skyddsjord för alla ventiler (EXTERN via plint),-,-
-53,Jordplint:Main,UNIPI:PE,2.5,Gul/Grön,H07V-K,Skyddsjord för UNIPI (INTERN),-,-
-54,Jordplint:Main,RaspberryPi:PE,2.5,Gul/Grön,H07V-K,Skyddsjord för Raspberry Pi (INTERN),-,-
-55,Kabelskärm:Shield,Jordplint:Shield,-,Metall,Cat7,Kabelskärm för Cat7 (anslutas i en ände),-,-
+50,Jordplint:Main,UNIPI:PE,2.5,Gul/Grön,H07V-K,Skyddsjord för UNIPI (INTERN),-,-
+51,Jordplint:Main,RaspberryPi:PE,2.5,Gul/Grön,H07V-K,Skyddsjord för Raspberry Pi (INTERN),-,-
+--------------------------------------------------
+Del B: Externa anslutningar (Skyddsjord för fältenheter)
+Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area,Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O
+52,Plint X1:PE,Ventiler 1-7:PE (alla),Cat7 skärm,Gul/Grön,Cat7,Skyddsjord för alla ventiler (EXTERN från plint),-,-
+53,Kabelskärm:Shield,Jordplint:Shield,-,Metall,Cat7,Kabelskärm för Cat7 (anslutas i en ände vid plint),-,-
 
-SEKTION 9: NÄTVERK & KOMMUNIKATION
+SEKTION 9: NÄTVERK & KOMMUNIKATION - INTERNA ANSLUTNINGAR
 --------------------------------------------------
 Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area,Färg,Kabeltyp,Funktion,Protokoll,Interface
-56,Nätverk Switch:RJ45-1,UNIPI:ETH,Cat7,Färgkodad,Cat7,Ethernet för Modbus TCP-kommunikation - intern,Modbus TCP,-
-57,Nätverk Switch:RJ45-2,RaspberryPi:ETH,Cat7,Färgkodad,Cat7,Ethernet för API och Modbus - intern,FastAPI/Modbus,-
-58,Nätverk Switch:RJ45-3,Plint X1:ETH → LOGO:ETH,Cat7,Färgkodad,Cat7,Ethernet för LOGO-kommunikation (EXTERN via plint),Pump Control,-
+54,Nätverk Switch:RJ45-1,UNIPI:ETH,Cat7,Standard RJ45,Cat7,Ethernet för Modbus TCP-kommunikation - INTERN,Modbus TCP,-
+55,Nätverk Switch:RJ45-2,RaspberryPi:ETH,Cat7,Standard RJ45,Cat7,Ethernet för API och Modbus - INTERN,FastAPI/Modbus,-
+56,Plint X1:ETH (intern),Nätverk Switch:RJ45-3,Cat7,Standard RJ45,Cat7,Ethernet från plint till switch - INTERN,-,-
+--------------------------------------------------
+Del B: Externa anslutningar (om tillämpligt)
+Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area,Färg,Kabeltyp,Funktion,Protokoll,Interface
+57,Plint X1:ETH (extern),LOGO:ETH,Cat7,Standard RJ45,Cat7,Ethernet för LOGO-kommunikation (EXTERN från plint om nödvändigt),Pump Control,-
 
 ====================================================
 CAT7 KABELFÖRDELNING - ÖVERSIKT
 ====================================================
 
-Kabel-ID,Från,Till,Ledare Använt,Funktion,Total Längd,Notering
-Cat7-A,Plint X1,Ventiler 1-5 + Markfukt,8 av 8,"5x ventil +24VAC, 1x markfukt signal, 1x markfukt +24VDC, 1x common",-,"En Cat7-kabel för zon 1-5 + markfuktgivare"
-Cat7-B,Plint X1,Ventiler 6-7,2 av 8,"2x ventil +24VAC + common",-,"En Cat7-kabel för zon 6-7"
-Cat7-C,Plint X1,Pump LOGO,1 av 8,"Pumpstyrning +24VAC",-,"En Cat7-kabel för pumpstyrning till Siemens LOGO"
+Kabel-ID,Från,Till,Ledare Använt,Cat7 Färgkodning,Funktion,Total Längd,Notering
+Cat7-A,Plint X1,Ventiler 1-5 + Markfukt,8 av 8,"Par1:Vit/Orange-Orange, Par2:Vit/Grön-Blå, Par3:Vit/Blå-Grön, Par4:Vit/Brun-Brun","5x ventil +24VAC (Vent1-5), 1x markfukt signal, 1x markfukt +24VDC, 1x common",-,"En Cat7-kabel för zon 1-5 + markfuktgivare"
+Cat7-B,Plint X1,Ventiler 6-7,2 av 8,"Par1:Grön, Par2:Vit/Brun","2x ventil +24VAC (Vent6-7) + common",-,"En Cat7-kabel för zon 6-7"
+Cat7-C,Plint X1,Pump LOGO,1 av 8,"Par1:Brun","Pumpstyrning +24VAC",-,"En Cat7-kabel för pumpstyrning till Siemens LOGO"
+--------------------------------------------------
+Cat7 Ledarkodning (Standard TIA/EIA-568-B):
+Par-nr,Funktion,Färgkod Ledare 1,Färgkod Ledare 2
+Par 1,Signal/Styr 1,Vit/Orange,Orange
+Par 2,Signal/Styr 2,Vit/Grön,Blå
+Par 3,Signal/Styr 3,Vit/Blå,Grön
+Par 4,Signal/Styr 4,Vit/Brun,Brun
 
 ====================================================
 MODBUS TCP REGISTER - ÖVERSIKT
@@ -219,16 +261,18 @@ TEKNISKA NOTER
 ====================================================
 
 Note ID,Kategori,Beskrivning
-N1,Färgkodning,"+230V=Brun, -230V=Blå, +24VDC=Grå, -24VDC=Grå, +24VAC=Svart, -24VAC=Svart, Signaler=Grå, Jord=Gul/Grön"
-N2,Installation,"INTERN vs EXTERN: Interna kablar (knappar, displayer) går direkt utan plint. Externa kablar (ventiler, sensorer) går via plintrad X1."
-N3,Plintrad X1,"Plintnummer 1-8 för ventiler, 9-12 för markfukt, PE för jord, COM/COM2 för 24VAC gemensam"
-N4,Kabeltyp,"Cat7 kablar har 4 par (8 ledare). Används för att minimera kabeldragning till fältet."
-N5,Display,"Displayer använder jumper/dupont-kablar för anslutning till Raspberry Pi GPIO."
-N6,Säkerhet,"Nödstopp är Normally Closed (NC) för säker konstruktion. Öppning av kontakt stoppar systemet."
-N7,Kommunikation,"All kommunikation mellan enheter sker via Modbus TCP över Ethernet. IP-konfiguration krävs."
-N8,Strömförsörjning,"230VAC huvudmatning till UNIPI. 24VAC transformator för ventiler. 24VDC för sensorer. 5VDC från Raspberry Pi för displayer."
-N9,Jordning,"All skyddsjord samlas i central jordplint. Cat7 kabelskärm anslutas i endast en ände för att undvika jordslinga."
-N10,Modbus,"Modbus TCP används för kommunikation mellan Raspberry Pi och UNIPI. Register MW10-MW100 används för styrning och övervakning."
+N1,Färgkodning Interna Kablar,"RKK-kablar (interna): Svart för signalkablar (DI/DO), Röd för +matning, Svart för jord/neutral. Jumper/Dupont: Röd=+5V/Data, Gul=Clock, Svart=GND, Vit/Grön/Gul/Blå för knappar"
+N2,Färgkodning Externa Kablar,"Cat7-kablar (externa): Standard TIA/EIA-568-B färgkodning - Par1:Vit/Orange-Orange, Par2:Vit/Grön-Blå, Par3:Vit/Blå-Grön, Par4:Vit/Brun-Brun"
+N3,Installation,"INTERN vs EXTERN uppdelning: Interna kablar (PLC till relä/plint, knappar, displayer) använder RKK eller Jumper/Dupont och går direkt utan fältdragning. Externa kablar (plint till ventiler, sensorer) använder Cat7 för fältdragning."
+N4,Plintrad X1,"Plintnummer 1-8 för ventilstyrning (DO), 9-12 för markfukt (AI), PE för skyddsjord, COM/COM2 för 24VAC gemensam, ETH för nätverkskommunikation"
+N5,Kabeltyp RKK,"RKK-kablar (H05VV-F eller liknande) används för alla interna anslutningar mellan PLC, reläer, plintar och interna knappar. Area 0.75mm² för signaler, 0.5mm² för analog."
+N6,Kabeltyp Cat7,"Cat7 kablar har 4 par (8 ledare) med skärm. Används för externa anslutningar från plint till fältenheter för att minimera kabeldragning och ge EMC-skydd."
+N7,Display,"Displayer använder jumper/dupont-kablar för anslutning till Raspberry Pi GPIO. Färgkodning: Röd=+5V/SDA, Gul=SCL, Svart=GND."
+N8,Säkerhet,"Nödstopp är Normally Closed (NC) för säker konstruktion. Öppning av kontakt stoppar systemet omedelbart."
+N9,Kommunikation,"All kommunikation mellan enheter sker via Modbus TCP över Ethernet. IP-konfiguration krävs för UNIPI, Raspberry Pi och LOGO."
+N10,Strömförsörjning,"230VAC huvudmatning till UNIPI (H07V-K 1.5mm²). 24VAC transformator för ventiler (RKK intern, Cat7 extern). 24VDC för sensorer (RKK intern, Cat7 extern). 5VDC från Raspberry Pi för displayer."
+N11,Jordning,"All skyddsjord samlas i central jordplint. Intern jordning använder H07V-K 2.5mm². Cat7 kabelskärm anslutas i endast en ände (vid plint) för att undvika jordslinga."
+N12,Modbus,"Modbus TCP används för kommunikation mellan Raspberry Pi och UNIPI. Register MW10-MW100 används för styrning och övervakning."
 
 ====================================================
 ÄNDRINGSHISTORIK
@@ -237,6 +281,7 @@ N10,Modbus,"Modbus TCP används för kommunikation mellan Raspberry Pi och UNIPI
 Version,Datum,Ändring,Utförd av
 1.0,2024-01-01,Initial version,System
 2.0,2025-12-19,Omstrukturering med tydliga rubriker och sektioner,Automatisk uppdatering
+3.0,2025-12-19,Tydlig uppdelning mellan interna (RKK) och externa (Cat7) anslutningar med korrekt kabeltyp och färgkodning,Automatisk uppdatering
 
 ====================================================
 SLUT PÅ DOKUMENT
