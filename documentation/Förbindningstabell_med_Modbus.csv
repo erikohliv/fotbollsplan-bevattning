@@ -1,15 +1,77 @@
-Kabelnr, Partnr, Från (Komp:Plint),Till (Komp:Plint),Area (mm2),Färg,Kabeltyp,Notering,Modbus-Register
-10,1,Nödstopp:S1:1,UNIPI:X1:1,"0,75",Röd,H07V-K (RK),Nödstoppkoppling till UNIPI-ingång,MW73 (Stopfunktion)
-11,Startknapp:S2:1,UNIPI:X2:1,"0,75",Röd,H07V-K (RK),Startknappkoppling till UNIPI-ingång,MW10 (Startfunktion)
-12,UNIPI:Relä1+,SolenoidVentil 1:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 1,MW20
-12,UNIPI:Relä2+,SolenoidVentil 2:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 2,MW21
-12,UNIPI:Relä3+,SolenoidVentil 3:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 3,MW22
-12,UNIPI:Relä4+,SolenoidVentil 4:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 4,MW23
-12,UNIPI:Relä5+,SolenoidVentil 5:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 5,MW24
-13,UNIPI:Relä6+,SolenoidVentil 6:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 6,MW25
-13,UNIPI:Relä7+,SolenoidVentil 7:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 7,MW26
-19,Pumpstyrning:Relä+,Siemens LOGO:PumpIn,"1,5",Röd,H07V-K (RK),Pumpstyrning via Siemens LOGO,MW100
-20,Trycksensor:AnalogOut,UNIPI:AnalogIn1,"0,5",Vit,SYV-K,Tryckmätning kopplat till UNIPI,MW30 (Fuktnivå)
-21,RaspberryPi:GPIO7,UNIPI:DigitalIn1,"0,5",Svart,H05VV-F,Styrsignal från Raspberry Pi (zonkontroll),MW82 (ErrorReset)
-22,Jordplint:Main,SolenoidVentiler:Jord,"1,5",Gul/Grön,H07V-K (MK),Skyddsjord för alla ventiler,-
-23,UNIPI:Relä_Common,SolenoidVentiler:Common,"1,5",Svart,H05VV-F (RKK),Gemensam anslutning till ventilspolar,Common Ground
+Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area (mm2),Färg,Kabeltyp,Notering,Modbus-Register,PLC I/O
+,,,,,,DIGITALA INGÅNGAR (INTERNA - ingen plint),,
+1,Nödstopp:NC,UNIPI:DI8,"0,75",Grå,H05VV-F (RKK),Nödstoppkoppling (NC - Normally Closed) - intern,MW73 (Stopfunktion),%IX0.7
+2,Startknapp:NO,UNIPI:DI2,"0,75",Grå,H05VV-F (RKK),Startknappkoppling till UNIPI-ingång - intern,MW10 (Startfunktion),%IX0.1
+3,Stoppknapp:NO,UNIPI:DI1,"0,75",Grå,H05VV-F (RKK),Stoppknappkoppling till UNIPI-ingång - intern,MW60 (Stop),%IX0.0
+4,Auto/Man-växel:NO,UNIPI:DI3,"0,75",Grå,H05VV-F (RKK),Auto/Manuell lägesväxel - intern,MW60 (Mode),%IX0.2
+5,Nästa zon-knapp:NO,UNIPI:DI4,"0,75",Grå,H05VV-F (RKK),Nästa zon (deprecated - använd display) - intern,MW63 (Zone Select),%IX0.3
+6,Display Knapp 1:NO,UNIPI:DI5,"0,75",Grå,H05VV-F (RKK),Display öka zon (från Display 2) - intern,MW63 (Zone Select),%IX0.4
+7,Display Knapp 2:NO,UNIPI:DI9,"0,75",Grå,H05VV-F (RKK),Display minska zon (från Display 2) - intern,MW63 (Zone Select),%IX1.0
+8,Test-knapp:NO,UNIPI:DI6,"0,75",Grå,H05VV-F (RKK),Testfunktion - intern,Test Mode,%IX0.5
+9,Blow-knapp:NO,UNIPI:DI7,"0,75",Grå,H05VV-F (RKK),Utblåsningsfunktion - intern,Blow Mode,%IX0.6
+10,Reserv DI:NO,UNIPI:DI10,-,Grå,H05VV-F (RKK),Reserv digital ingång 10,Reserved,%IX1.1
+11,Reserv DI:NO,UNIPI:DI11,-,Grå,H05VV-F (RKK),Reserv digital ingång 11,Reserved,%IX1.2
+12,Reserv DI:NO,UNIPI:DI12,-,Grå,H05VV-F (RKK),Reserv digital ingång 12,Reserved,%IX1.3
+13,Reserv DI:NO,UNIPI:DI13,-,Grå,H05VV-F (RKK),Reserv digital ingång 13,Reserved,%IX1.4
+14,Reserv DI:NO,UNIPI:DI14,-,Grå,H05VV-F (RKK),Reserv digital ingång 14,Reserved,%IX1.5
+15,Gemensam DI:0V,UNIPI:DI_COM,-,Grå,H05VV-F (RKK),Gemensam 0V för alla digitala ingångar (14st),-,-
+,,,,,,DIGITALA UTGÅNGAR (RELÄER - 8st via PLINT X1),,
+16,UNIPI:Relä1,Plint X1:1 → Ventil 1:+,Cat7,Svart,Cat7,+24VAC Styr ventilzon 1 (EXTERN via plint - samma Cat7 som zon 2-5),MW20/Ventil_1,%QX0.0
+17,UNIPI:Relä2,Plint X1:2 → Ventil 2:+,Cat7,Svart,Cat7,+24VAC Styr ventilzon 2 (EXTERN via plint - samma Cat7 som zon 1),MW21/Ventil_2,%QX0.1
+18,UNIPI:Relä3,Plint X1:3 → Ventil 3:+,Cat7,Svart,Cat7,+24VAC Styr ventilzon 3 (EXTERN via plint - samma Cat7 som zon 1-2),MW22/Ventil_3,%QX0.2
+19,UNIPI:Relä4,Plint X1:4 → Ventil 4:+,Cat7,Svart,Cat7,+24VAC Styr ventilzon 4 (EXTERN via plint - samma Cat7 som zon 1-3),MW23/Ventil_4,%QX0.3
+20,UNIPI:Relä5,Plint X1:5 → Ventil 5:+,Cat7,Svart,Cat7,+24VAC Styr ventilzon 5 (EXTERN via plint - samma Cat7 som zon 1-4),MW24/Ventil_5,%QX0.4
+21,UNIPI:Relä6,Plint X1:6 → Ventil 6:+,Cat7,Svart,Cat7,+24VAC Styr ventilzon 6 (EXTERN via plint - samma Cat7 som zon 7),MW25/Ventil_6,%QX0.5
+22,UNIPI:Relä7,Plint X1:7 → Ventil 7:+,Cat7,Svart,Cat7,+24VAC Styr ventilzon 7 (EXTERN via plint - samma Cat7 som zon 6),MW26/Ventil_7,%QX0.6
+23,UNIPI:Relä8,Plint X1:8 → LOGO:PumpIn,Cat7,Svart,Cat7,+24VAC Pumpstyrning via Siemens LOGO (EXTERN via plint),MW100/Signal_Pump,%QX0.7
+24,230V:Fas,Matning:+230V,"1,5",Brun,H07V-K,+230V Fas till UNIPI-matning (INTERN),-,-
+25,230V:Neutral,Matning:-230V,"1,5",Blå,H07V-K,-230V Neutral till UNIPI-matning (INTERN),-,-
+26,24VAC:Fas,Plint X1:COM (alla),Cat7,Svart,Cat7,+24VAC gemensam fas från transformator till alla ventiler (EXTERN via plint),-,-
+27,24VAC:Neutral,Plint X1:COM2 → Ventiler:Common,Cat7,Svart,Cat7,-24VAC gemensam neutral till alla ventilspolar (EXTERN via plint),-,-
+,,,,,,ANALOGA INGÅNGAR (AI via PLINT X1),,
+28,Plint X1:9,Markfuktgivare:Signal,Cat7,Grå,Cat7,0-10V analog signal från markfuktsensor (EXTERN via plint - samma Cat7 som zon 1-5),MW30 (Fuktnivå),%IW0
+29,Plint X1:10,Markfuktgivare:GND,Cat7,Grå,Cat7,Analog jord för markfuktsensor (EXTERN via plint - samma Cat7 som zon 1-5),-,-
+30,Plint X1:11,Markfuktgivare:+24VDC,Cat7,Grå,Cat7,+24VDC matning till markfuktsensor (EXTERN via plint - samma Cat7 som zon 1-5),-,-
+31,Plint X1:12,Markfuktgivare:-24VDC,Cat7,Grå,Cat7,-24VDC matningsjord för markfuktsensor (EXTERN via plint - samma Cat7 som zon 1-5),-,-
+32,UNIPI:AI1,Plint X1:9,"0,5",Grå,H05VV-F,Anslutning från plint till UNIPI AI1 (INTERN),%IW0,-
+33,UNIPI:AGND,Plint X1:10,"0,5",Grå,H05VV-F,Analog jord från plint till UNIPI (INTERN),-,-
+34,Reserv sensor:Signal,UNIPI:AI2,-,Grå,H05VV-F,Reserv analog ingång 2 (0-10V),Reserved,%IW1
+35,Reserv sensor:GND,UNIPI:AGND,-,Grå,H05VV-F,Analog jord för AI2,-,-
+,,,,,,ANALOGA UTGÅNGAR (AO),,
+36,UNIPI:AO1,Reserv aktuator:Signal,-,Grå,H05VV-F,Analog utgång 1 (0-10V) - reserv,Reserved,%QW0
+37,UNIPI:AO2,Reserv aktuator:Signal,-,Grå,H05VV-F,Analog utgång 2 (0-10V) - reserv,Reserved,%QW1
+38,UNIPI:AGND,Analoga enheter:GND,-,Grå,H05VV-F,Gemensam analog jord för AO,-,-
+,,,,,,I2C DISPLAYER (via Raspberry Pi - INTERNA),,
+39,RaspberryPi:GPIO2 (SDA),Display1:SDA,-,Grå,Jumper/Dupont,I2C Data till Display 1 (20x4 LCD) - intern,Display Status,I2C 0x27
+40,RaspberryPi:GPIO3 (SCL),Display1:SCL,-,Grå,Jumper/Dupont,I2C Clock till Display 1 (20x4 LCD) - intern,Display Status,I2C 0x27
+41,RaspberryPi:+5V,Display1:VCC,-,Grå,Jumper/Dupont,5V matning till Display 1 - intern,-,-
+42,RaspberryPi:GND,Display1:GND,-,Grå,Jumper/Dupont,Jord till Display 1 - intern,-,-
+43,RaspberryPi:GPIO2 (SDA),Display2:SDA,-,Grå,Jumper/Dupont,I2C Data till Display 2 (2x8 LCD) - intern,Display Control,I2C 0x3F
+44,RaspberryPi:GPIO3 (SCL),Display2:SCL,-,Grå,Jumper/Dupont,I2C Clock till Display 2 (2x8 LCD) - intern,Display Control,I2C 0x3F
+45,RaspberryPi:+5V,Display2:VCC,-,Grå,Jumper/Dupont,5V matning till Display 2 - intern,-,-
+46,RaspberryPi:GND,Display2:GND,-,Grå,Jumper/Dupont,Jord till Display 2 - intern,-,-
+,,,,,,DISPLAY 2 KNAPPAR (GPIO - INTERNA),,
+47,Display2 UP-knapp:NO,RaspberryPi:GPIO17,-,Grå,Jumper/Dupont,UP-knapp för Display 2 navigation - intern,Zone Increase,GPIO 17
+48,Display2 DOWN-knapp:NO,RaspberryPi:GPIO27,-,Grå,Jumper/Dupont,DOWN-knapp för Display 2 navigation - intern,Zone Decrease,GPIO 27
+49,Display2 LEFT-knapp:NO,RaspberryPi:GPIO22,-,Grå,Jumper/Dupont,LEFT-knapp för Display 2 navigation - intern,Previous View,GPIO 22
+50,Display2 RIGHT-knapp:NO,RaspberryPi:GPIO23,-,Grå,Jumper/Dupont,RIGHT-knapp för Display 2 navigation - intern,Next View,GPIO 23
+51,Display2 Knappar:COM,RaspberryPi:GND,-,Grå,Jumper/Dupont,Gemensam jord för alla Display 2-knappar - intern,-,-
+,,,,,,JORDNING & SKÄRM,,
+52,Jordplint:Main,Plint X1:PE → Ventiler:PE (alla),"2,5",Gul/Grön,Cat7,Skyddsjord för alla ventiler (EXTERN via plint),-,-
+53,Jordplint:Main,UNIPI:PE,"2,5",Gul/Grön,H07V-K,Skyddsjord för UNIPI (INTERN),-,-
+54,Jordplint:Main,RaspberryPi:PE,"2,5",Gul/Grön,H07V-K,Skyddsjord för Raspberry Pi (INTERN),-,-
+55,Kabelskärm:Shield,Jordplint:Shield,-,Metall,Cat7,Kabelskärm för Cat7 (anslutas i en ände),-,-
+,,,,,,NÄTVERK & KOMMUNIKATION (INTERNA),,
+56,Nätverk Switch:RJ45-1,UNIPI:ETH,Cat7,Färgkodad,Cat7,Ethernet för Modbus TCP-kommunikation - intern,Modbus TCP,-
+57,Nätverk Switch:RJ45-2,RaspberryPi:ETH,Cat7,Färgkodad,Cat7,Ethernet för API och Modbus-kommunikation - intern,FastAPI/Modbus,-
+58,Nätverk Switch:RJ45-3,Plint X1:ETH → LOGO:ETH,Cat7,Färgkodad,Cat7,Ethernet för LOGO-kommunikation (EXTERN via plint om tillämpligt),Pump Control,-
+,,,,,,CAT7 KABELFÖRDELNING,,
+Cat7-A,Plint X1,Ventiler 1-5 + Markfukt,Cat7,Svart/Grå,Cat7,"En Cat7-kabel för zon 1-5 + markfuktgivare (8 ledare: 5x ventil +24VAC, 1x markfukt signal, 1x markfukt +24VDC, 1x common)",-,-
+Cat7-B,Plint X1,Ventiler 6-7,Cat7,Svart,Cat7,"En Cat7-kabel för zon 6-7 (2 ledare: 2x ventil +24VAC + common)",-,-
+Cat7-C,Plint X1,Pump LOGO,Cat7,Svart,Cat7,"En Cat7-kabel för pumpstyrning till Siemens LOGO",-,-
+,,,,,,NOTER,,
+N1,-,-,-,-,-,"FÄRGKODNING: +230V=Brun, -230V=Blå, +24VDC=Grå, -24VDC=Grå, +24VAC=Svart, -24VAC=Svart, Övriga signaler=Grå, Jord=Gul/Grön",-,-
+N2,-,-,-,-,-,"INTERN vs EXTERN: Interna kablar (knappar, displayer) går direkt utan plint. Externa kablar (ventiler, sensorer) går via plintrad X1.",-,-
+N3,-,-,-,-,-,"PLINTRAD X1: Plintnummer 1-8 för ventiler, 9-12 för markfukt, PE för jord, COM/COM2 för 24VAC gemensam",-,-
+N4,-,-,-,-,-,"Cat7 kablar har 4 par (8 ledare). Används för att minimera kabeldragning till fältet.",-,-
+N5,-,-,-,-,-,"Displayer använder jumper/dupont-kablar för anslutning till Raspberry Pi GPIO.",-,-
