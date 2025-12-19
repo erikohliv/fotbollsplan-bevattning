@@ -1,4 +1,4 @@
-Kabelnr,Från (Komp:Plint),Till (Komp:Plint),Area (mm2),Färg,Kabeltyp,Notering,Modbus-Register
+Kabelnr, Partnr, Från (Komp:Plint),Till (Komp:Plint),Area (mm2),Färg,Kabeltyp,Notering,Modbus-Register
 10,Nödstopp:S1:1,UNIPI:X1:1,"0,75",Röd,H07V-K (RK),Nödstoppkoppling till UNIPI-ingång,MW73 (Stopfunktion)
 11,Startknapp:S2:1,UNIPI:X2:1,"0,75",Röd,H07V-K (RK),Startknappkoppling till UNIPI-ingång,MW10 (Startfunktion)
 12,UNIPI:Relä1+,SolenoidVentil 1:1,"1,5",Blå,H05VV-F (RKK),Styr ventilzon 1,MW20
