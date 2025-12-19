@@ -141,7 +141,7 @@ def test_deploy_script_content():
     
     # Check for essential commands
     assert 'git fetch' in content, "deploy.sh should fetch from git"
-    assert 'source .venv/bin/activate' in content or '. .venv/bin/activate' in content, "deploy.sh should activate venv"
+    assert 'source .venv/bin/activate' in content or '. .venv/bin/activate' in content, "deploy.sh should activate venv (using source or . command)"
     assert 'pip install -r api_requirements.txt' in content, "deploy.sh should install API requirements"
     assert 'pip install -r display_requirements.txt' in content, "deploy.sh should install display requirements"
     assert ('systemctl restart bevattning-api' in content or 'restart_service "bevattning-api"' in content), "deploy.sh should restart bevattning-api"

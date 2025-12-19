@@ -50,7 +50,9 @@ jobs:
           echo "=== Installing/updating dependencies ==="
           pip install --upgrade pip
           pip install -r api_requirements.txt
-          pip install -r display_requirements.txt
+          if [ -f "display_requirements.txt" ]; then
+            pip install -r display_requirements.txt
+          fi
           
           echo "=== Restarting services ==="
           # Restart bevattning-api service

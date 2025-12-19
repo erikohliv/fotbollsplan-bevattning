@@ -98,7 +98,8 @@ print_header "Restarting systemd services"
 # Function to restart a service if it exists
 restart_service() {
     local service_name=$1
-    if systemctl list-unit-files | grep -q "^${service_name}.service"; then
+    # Use systemctl cat to check if service exists (more efficient than list-unit-files)
+    if systemctl cat "${service_name}.service" &>/dev/null; then
         if sudo systemctl restart "$service_name"; then
             print_success "$service_name restarted successfully"
         else
