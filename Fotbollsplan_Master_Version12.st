@@ -1,5 +1,10 @@
 (*
   Fotbollsplan_Master_Version12.st
+  - HÅRDVARUUPPDATERING: Siemens LOGO borttagen. Pump styrs direkt av UNIPI Relä 8 via Mjukstartare.
+  - Menyknappar flyttade från Raspberry Pi GPIO till UNIPI PLC-ingångar (DI11-DI14, läses via MW64).
+  - Flödesvakt (DI6) via Terminal X3: Ger torrkörsningsskydd för pump.
+  - Tryckgivare (AI2) via Terminal X3: Övervakar pumptryck (MW33).
+  - Auto/Man-brytare: Delad i två separata ingångar DI3 (Auto) och DI10 (Manual) för 1-0-2 brytare.
   - Ventiler öppnas före pumpstart.
   - Pump stängs av först vid stop/zonbyte, därefter ventiler efter CloseDelay, för att minimera vattenslag.
   - Heartbeat (1s) bit+counter: MW70 (bit0 toggle), MW71 counter.
@@ -7,15 +12,14 @@
   - Block reason: MW73 (0=OK, 1=Regen>thr, 2=Moisture>thr, 3=Anti-kollision/Pump upptagen, 4=E-stop).
   - ManualRunTime REMOVED: Manual mode nu använder samma tider som auto mode (Set_Tid_Center/Set_Tid_Horn).
   - LED outputs REMOVED: Aktiv zon och återstående tid visas på display istället.
-  - Display Button 1/2: Öka/minska zon, håll 3s för att bekräfta.
   - Manual mode: Kör endast den valda zonen (inte full sekvens som auto mode).
   - 21:00 auto mode transition: Hanteras av Python display_manager, inte PLC.
   - Anti-kollision: Om sekvens redan kör/pump aktiv blockeras ny start (sätter bit3/code 3).
-  - Next-knapp: DEPRECATED, använd display-knappar istället.
   - Mode Switch (MW100): 0=Neutral, 1=Lokalt läge, 2=Fjärrläge. Fysisk 1-0-2 switch och API.
   - Test Mode (MW80): 1=Test mode active för försäsongskontroll.
   - ErrorReset (MW82): Skriv 1 för att återställa fel (PLC nollar automatiskt).
   - Markfuktgivare: Analog input %IW0 (0-10V) skalas till MW30 (0-100%).
+  - Flödesvakt: DI6 läses till MW55 för övervakning och torrkörsningsskydd.
 *)
 
 PROGRAM Fotbollsplan_Master
@@ -23,21 +27,25 @@ PROGRAM Fotbollsplan_Master
     (* UTGÅNGAR - ventiler och pump *)
     Ventil_1 : BOOL; Ventil_2 : BOOL; Ventil_3 : BOOL;
     Ventil_4 : BOOL; Ventil_5 : BOOL; Ventil_6 : BOOL; Ventil_7 : BOOL;
-    Signal_Pump : BOOL; (* Går till Siemens LOGO/VFD-ingång *)
+    Signal_Pump : BOOL; (* Går till Mjukstartare (Soft Starter) via Relä 8 *)
 
     (* FYSISKA KNAPPAR / SWITCHAR *)
-    Stop_Puls        : BOOL; (* %IX0.0 *)
-    Start_Puls       : BOOL; (* %IX0.1 *)
-    Mode_AutoManual  : BOOL; (* %IX0.2 *)
-    Manual_NextZone  : BOOL; (* %IX0.3 - deprecated, use display buttons *)
-    Display_Button_1 : BOOL; (* %IX0.4 - Display increase zone *)
+    Stop_Puls        : BOOL; (* %IX0.0 - DI1 *)
+    Start_Puls       : BOOL; (* %IX0.1 - DI2 *)
+    Mode_Auto        : BOOL; (* %IX0.2 - DI3 Auto läge från 1-0-2 brytare *)
+    Reset_Button     : BOOL; (* %IX0.3 - DI4 Reset/Kvittera larm *)
     Test_Button      : BOOL; (* %IX0.5 *)
-    Blow_Button      : BOOL; (* %IX0.6 *)
-    EStop_NC         : BOOL; (* %IX0.7 *)
-    Display_Button_2 : BOOL; (* %IX1.0 - Display decrease zone *)
+    Flow_Switch      : BOOL; (* %IX0.6 - DI6 Flödesvakt via Terminal X3 *)
+    EStop_NC         : BOOL; (* %IX0.7 - DI8 Nödstopp *)
+    Mode_Manual      : BOOL; (* %IX1.1 - DI10 Manuell läge från 1-0-2 brytare *)
+    Menu_Left        : BOOL; (* %IX1.2 - DI11 Meny Vänster/Upp *)
+    Menu_Right       : BOOL; (* %IX1.3 - DI12 Meny Höger/Ner *)
+    Menu_OK          : BOOL; (* %IX1.4 - DI13 Meny OK/Välj *)
+    Menu_Back        : BOOL; (* %IX1.5 - DI14 Meny Tillbaka *)
 
     (* ANALOG INPUTS *)
     Analog_Markfukt_Raw : INT; (* %IW0 - 0-10V analog input from soil moisture sensor *)
+    Analog_Pressure_Raw : INT; (* %IW1 - 0-10V/4-20mA pressure sensor via Terminal X3 *)
 
     (* MODBUS / HOLDING REGISTER *)
     Remote_Command : INT; (* %MW10 *)
@@ -47,10 +55,11 @@ PROGRAM Fotbollsplan_Master
     Markfukt       : INT; (* %MW30 *)
     Regen_24h_mm   : INT; (* %MW31 *)
     Temp_C         : INT; (* %MW32 *)
-    AutoOverride   : INT; (* %MW33 *)
+    Pressure_Value : INT; (* %MW33 - Tryckgivare värde (0-100% eller skalat) *)
+    AutoOverride   : INT; (* %MW34 *)
 
-    RegenThreshold_mm : INT; (* %MW34 *)
-    MoistureThreshold : INT; (* %MW35 *)
+    RegenThreshold_mm : INT; (* %MW35 *)
+    MoistureThreshold : INT; (* %MW36 *)
 
     OpenDelaySec  : INT; (* %MW40 *)
     PauseDelaySec : INT; (* %MW41 *)
@@ -59,13 +68,14 @@ PROGRAM Fotbollsplan_Master
     Status_CurrentZone : INT; (* %MW50 *)
     Status_PumpOn      : INT; (* %MW51 *)
     Status_Steg        : INT; (* %MW52 *)
-
+    
     SelectedZoneReg    : INT; (* %MW53 - vald zon *)
+    FlowSwitchStatus   : INT; (* %MW55 - Flödesvakt status (0=ingen flöde, 1=flöde OK) *)
     ModeRegister       : INT; (* %MW60 - 1=Auto, 0=Manual override *)
     ManualStartReg     : INT; (* %MW61 - skriv 1 för manual start (PLC nollar) *)
     SetSelectedZoneReg : INT; (* %MW63 - skriv 1..7 för direktval (PLC nollar) *)
 
-    ManualRunTimeReg   : INT; (* %MW64 - minuter, 1..240 *)
+    MenuButtonsReg     : INT; (* %MW64 - Menu buttons status bitmask: bit0=Left, bit1=Right, bit2=OK, bit3=Back *)
 
     HeartbeatReg       : INT; (* %MW70 - bit0 togglar 1s *)
     HeartbeatCountReg  : INT; (* %MW71 - räknare ++ per 1s, wrap 0..65535 *)
@@ -200,6 +210,34 @@ PROGRAM Fotbollsplan_Master
   IF Markfukt > MOISTURE_PERCENT_MAX THEN Markfukt := MOISTURE_PERCENT_MAX; END_IF;
   IF Markfukt < 0 THEN Markfukt := 0; END_IF;
 
+  (* TRYCKGIVARE: Scale analog input 0-10V (0-27648) to 0-100% *)
+  (* Similar scaling as soil moisture sensor *)
+  IF Analog_Pressure_Raw < 0 THEN
+    Pressure_Value := 0;
+  ELSIF Analog_Pressure_Raw > ANALOG_INPUT_MAX THEN
+    Pressure_Value := MOISTURE_PERCENT_MAX;
+  ELSE
+    Pressure_Value := (Analog_Pressure_Raw * MOISTURE_PERCENT_MAX) / ANALOG_INPUT_MAX;
+  END_IF;
+  IF Pressure_Value > MOISTURE_PERCENT_MAX THEN Pressure_Value := MOISTURE_PERCENT_MAX; END_IF;
+  IF Pressure_Value < 0 THEN Pressure_Value := 0; END_IF;
+
+  (* FLÖDESVAKT: Läs status från DI6 och skriv till MW55 *)
+  (* Flow_Switch är Active High: 1=flöde OK, 0=ingen flöde *)
+  IF Flow_Switch THEN
+    FlowSwitchStatus := 1;
+  ELSE
+    FlowSwitchStatus := 0;
+  END_IF;
+
+  (* MENYKNAPPAR: Läs status från DI11-DI14 och bygg bitmask i MW64 *)
+  (* bit0=Left (DI11), bit1=Right (DI12), bit2=OK (DI13), bit3=Back (DI14) *)
+  MenuButtonsReg := 0;
+  IF Menu_Left THEN MenuButtonsReg := MenuButtonsReg OR 1; END_IF;
+  IF Menu_Right THEN MenuButtonsReg := MenuButtonsReg OR 2; END_IF;
+  IF Menu_OK THEN MenuButtonsReg := MenuButtonsReg OR 4; END_IF;
+  IF Menu_Back THEN MenuButtonsReg := MenuButtonsReg OR 8; END_IF;
+
   (* ERROR RESET: Handle reset pulse from Modbus or physical button *)
   IF ErrorResetReg = 1 THEN
     (* Clear block reason if not E-stop (E-stop must be physically cleared) *)
@@ -245,7 +283,16 @@ PROGRAM Fotbollsplan_Master
   IF ModeRegister <> 0 THEN
     ModeIsAuto := (ModeRegister = 1);
   ELSE
-    ModeIsAuto := Mode_AutoManual;
+    (* Läs från fysiska 1-0-2 brytaren: DI3 (Auto) och DI10 (Manual) *)
+    (* Om båda är FALSE = Neutral position (0) *)
+    (* Om Mode_Auto (DI3) = TRUE = Auto läge *)
+    (* Om Mode_Manual (DI10) = TRUE = Manual läge *)
+    IF Mode_Auto THEN
+      ModeIsAuto := TRUE;
+    ELSIF Mode_Manual THEN
+      ModeIsAuto := FALSE;
+    (* ELSE: Neutral position, keep current mode *)
+    END_IF;
   END_IF;
 
   (* Mode Switch Logic - Lokal/Fjärr styrning *)
@@ -613,16 +660,20 @@ CONFIGURATION Config0
 
     Stop_Puls AT %IX0.0 : BOOL;
     Start_Puls AT %IX0.1 : BOOL;
-    Mode_AutoManual AT %IX0.2 : BOOL;
-    Manual_NextZone AT %IX0.3 : BOOL;
-    Display_Button_1 AT %IX0.4 : BOOL;
+    Mode_Auto AT %IX0.2 : BOOL;
+    Reset_Button AT %IX0.3 : BOOL;
     Test_Button AT %IX0.5 : BOOL;
-    Blow_Button AT %IX0.6 : BOOL;
+    Flow_Switch AT %IX0.6 : BOOL;
     EStop_NC AT %IX0.7 : BOOL;
-    Display_Button_2 AT %IX1.0 : BOOL;
+    Mode_Manual AT %IX1.1 : BOOL;
+    Menu_Left AT %IX1.2 : BOOL;
+    Menu_Right AT %IX1.3 : BOOL;
+    Menu_OK AT %IX1.4 : BOOL;
+    Menu_Back AT %IX1.5 : BOOL;
 
     (* ANALOG INPUTS *)
     Analog_Markfukt_Raw AT %IW0 : INT;  (* 0-10V soil moisture sensor *)
+    Analog_Pressure_Raw AT %IW1 : INT;  (* 0-10V/4-20mA pressure sensor *)
 
     Remote_Command AT %MW10 : INT;
     Set_Tid_Center AT %MW20 : INT;
@@ -631,10 +682,11 @@ CONFIGURATION Config0
     Markfukt AT %MW30 : INT;
     Regen_24h_mm AT %MW31 : INT;
     Temp_C AT %MW32 : INT;
-    AutoOverride AT %MW33 : INT;
+    Pressure_Value AT %MW33 : INT;
+    AutoOverride AT %MW34 : INT;
 
-    RegenThreshold_mm AT %MW34 : INT;
-    MoistureThreshold AT %MW35 : INT;
+    RegenThreshold_mm AT %MW35 : INT;
+    MoistureThreshold AT %MW36 : INT;
 
     OpenDelaySec AT %MW40 : INT;
     PauseDelaySec AT %MW41 : INT;
@@ -645,12 +697,13 @@ CONFIGURATION Config0
     Status_Steg AT %MW52 : INT;
 
     SelectedZoneReg AT %MW53 : INT;
-
+    FlowSwitchStatus AT %MW55 : INT;
+    
     ModeRegister AT %MW60 : INT;
     ManualStartReg AT %MW61 : INT;
     SetSelectedZoneReg AT %MW63 : INT;
 
-    ManualRunTimeReg AT %MW64 : INT;
+    MenuButtonsReg AT %MW64 : INT;
 
     HeartbeatReg AT %MW70 : INT;
     HeartbeatCountReg AT %MW71 : INT;

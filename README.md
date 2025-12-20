@@ -1,11 +1,11 @@
 # Fotbollsplan bevattning
 
 ## Arkitektur
-- **PLC (ST):** Säker/sekvenslogik, anti-vattenslag, E-stop, zonbyte.
+- **PLC (ST):** Säker/sekvenslogik, anti-vattenslag, E-stop, zonbyte, flödesvaktsskydd.
 - **Python controller:** Hämtar Open-Meteo, markfukt (valfritt), skriver Modbus-register, pulserar start.
 - **FastAPI-backend:** API/Webb-UI + Modbus-brygga. Skyddas med API-nyckel.
-- **Display Manager:** Hanterar två I2C LCD-displayer för status och manuell styrning.
-- **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump_enable styr Siemens LOGO → VFD (mjukstart).
+- **Display Manager:** Hanterar två I2C LCD-displayer för status och manuell styrning. Menyknappar läses från PLC via Modbus.
+- **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump styrs direkt via Relä 8 → Mjukstartare. Flödesvakt (DI6) och Tryckgivare (AI2) via Terminal X3.
 
 ## Installation på Raspberry Pi
 
@@ -132,9 +132,10 @@ sudo systemctl start bevattning-api
   - Värdeområde: 0-100%
 - **MW31** Regen_24h_mm (skrivs av Python/extern).
 - **MW32** Temp_C (skrivs av Python/extern).
-- **MW33** AutoOverride (1=forcera körning, hoppa fukt/regn-block).
-- **MW34** RegenThreshold_mm (default 5 om 0).
-- **MW35** MoistureThreshold (default 80 om 0).
+- **MW33** Pressure_Value (0-100%, skalas från analog input %IW1 - Tryckgivare via Terminal X3).
+- **MW34** AutoOverride (1=forcera körning, hoppa fukt/regn-block).
+- **MW35** RegenThreshold_mm (default 5 om 0).
+- **MW36** MoistureThreshold (default 80 om 0).
 - **MW40** OpenDelaySec (default 5 om 0) – ventiler öppnar, pump startar efter denna.
 - **MW41** PauseDelaySec (default 10 om 0) – paus mellan zoner.
 - **MW42** CloseDelaySec (default 10 om 0) – pump av, vänta, stäng ventiler.
@@ -142,10 +143,15 @@ sudo systemctl start bevattning-api
 - **MW51** Status_PumpOn (1/0)
 - **MW52** Status_Steg
 - **MW53** SelectedZoneReg (vald zon)
+- **MW55** FlowSwitchStatus (0=ingen flöde, 1=flöde OK - från DI6 via Terminal X3)
 - **MW60** ModeRegister (1=Auto, 0=Manual override)
 - **MW61** ManualStartReg (skriv 1 för manuell start, PLC nollar)
 - **MW63** SetSelectedZoneReg (skriv 1..7, PLC nollar)
-- **MW64** ManualRunTimeReg (DEPRECATED - manuellt läge använder nu auto-tider)
+- **MW64** MenuButtonsReg (bitmask för menyknappar från DI11-DI14)
+  - bit0: Vänster (DI11)
+  - bit1: Höger (DI12)
+  - bit2: OK (DI13)
+  - bit3: Tillbaka (DI14)
 - **MW70** HeartbeatReg (bit0 togglar varje ~1s)
 - **MW71** HeartbeatCountReg (0..65535, ++ varje ~1s)
 - **MW72** EventMaskReg (bitmask)
@@ -170,13 +176,14 @@ sudo systemctl start bevattning-api
   - 0=Neutral (ingen ändring, default)
   - 1=Lokalt läge (fysisk styrning aktiverad, fjärrkommandon blockerade)
   - 2=Fjärrläge (fjärrkommandon aktiverade)
-  - Fysisk 1-0-2 switch skriver värde och återgår automatiskt till 0
+  - Fysisk 1-0-2 switch har två separata ingångar: DI3 (Auto) och DI10 (Manual)
 
 ## Sekvens & anti-vattenslag
 - **Start (auto):** Ventil för zon öppnas, OpenDelay löper, därefter pump på och kör-timer. Auto-läge kör alla zoner 1-7.
-- **Start (manual):** Välj zon med display-knappar (Button 1 ökar, Button 2 minskar, håll 3s för att bekräfta). Tryck fysisk Start-knapp. Manual-läge kör **endast den valda zonen**, med samma tider som auto-läge.
+- **Start (manual):** Välj zon med menyknappar (DI11-DI14 läses via MW64). Manual-läge kör **endast den valda zonen**, med samma tider som auto-läge.
 - **Zonbyte:** När körtid är slut: pump av först, CloseDelay, stäng ventiler, PauseDelay, nästa zon, OpenDelay, pump på.
 - **Stop/E-stop:** Pump av direkt, CloseDelay, stäng ventiler. E-stop nollar sekvens och blockreason=4.
+- **Flödesvaktsskydd:** Flödesvakt (DI6) via Terminal X3 ger torrkörsningsskydd för pump. Status läses till MW55.
 - **LED-indikatorer:** BORTTAGNA - aktiv zon och återstående tid visas på system-display istället.
 - **Display-knappar:** Button 1 (öka zon), Button 2 (minska zon). Håll knapp i 3 sekunder för att bekräfta val.
 - **21:00 auto-läge övergång:** Systemet övergår passivt till auto-läge kl 21:00 dagligen. Om en sekvens körs fortsätter den utan avbrott och övergången sker efteråt.
@@ -478,22 +485,26 @@ journalctl -u bevattning-api -n 50
 - Rate-limit på reverse proxy om utsatt.
 - Pythonlager är icke-realtid; säkerhetskritiska delar ligger i PLC/ST.
 
-## I/O-mappning (UNIPI 1.1, förslag)
+## I/O-mappning (UNIPI 1.1, uppdaterad hårdvara)
 - Ventil_1..7: `%QX0.0`..`%QX0.6`
-- Pump_enable (till LOGO/VFD): `%QX0.7`
+- Pump_enable (till Mjukstartare via Relä 8): `%QX0.7`
 - LED_1..7: **BORTTAGNA** (aktiv zon visas på display istället)
 - Analog In:
   - Markfuktgivare: `%IW0` (0-10V analog input, skalas till 0-100% i PLC)
-- Ingångar: 
-  - Stop `%IX0.0`
-  - Start `%IX0.1`
-  - Auto/Man `%IX0.2`
-  - Next `%IX0.3` (deprecated)
-  - Display_Button_1 `%IX0.4` (öka zon)
-  - Test `%IX0.5`
-  - Blow `%IX0.6`
-  - E-Stop NC `%IX0.7`
-  - Display_Button_2 `%IX1.0` (minska zon)
+  - Tryckgivare: `%IW1` (0-10V/4-20mA via Terminal X3, skalas till 0-100% i PLC)
+- Digitala Ingångar: 
+  - Stop `%IX0.0` (DI1)
+  - Start `%IX0.1` (DI2)
+  - Auto-läge `%IX0.2` (DI3 - från 1-0-2 brytare)
+  - Reset `%IX0.3` (DI4)
+  - Test `%IX0.5` (DI5)
+  - Flödesvakt `%IX0.6` (DI6 - via Terminal X3)
+  - E-Stop NC `%IX0.7` (DI8)
+  - Manual-läge `%IX1.1` (DI10 - från 1-0-2 brytare)
+  - Meny Vänster `%IX1.2` (DI11 - PLC-knapp)
+  - Meny Höger `%IX1.3` (DI12 - PLC-knapp)
+  - Meny OK `%IX1.4` (DI13 - PLC-knapp)
+  - Meny Tillbaka `%IX1.5` (DI14 - PLC-knapp)
 
 ## Snabbtest av API
 ```bash

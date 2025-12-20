@@ -42,10 +42,11 @@ MW_STATUS_ZONE = 50
 MW_STATUS_PUMP = 51
 MW_STATUS_STEG = 52
 MW_SELECTED_ZONE = 53
+MW_FLOW_SWITCH = 55         # Flödesvakt status
 MW_MODE_OVERRIDE = 60
 MW_MANUAL_START = 61
 MW_SET_SELECTED = 63
-MW_MANUAL_TIME = 64
+MW_MENU_BUTTONS = 64        # Menu buttons bitmask
 MW_HEARTBEAT = 70
 MW_HEARTBEAT_CNT = 71
 MW_EVENTMASK = 72
@@ -53,7 +54,8 @@ MW_BLOCK_REASON = 73
 MW_MARKFUKT = 30
 MW_REGEN24 = 31
 MW_TEMP = 32
-MW_MODE = 100  # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
+MW_PRESSURE = 33            # Tryckgivare värde
+MW_MODE = 100               # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
 
 
 logger = logging.getLogger("display_manager")
@@ -624,7 +626,7 @@ class Display2Manager:
             i2c_addr: I2C address of the 2x8 display
             modbus_host: Modbus TCP host
             modbus_port: Modbus TCP port
-            button_pins: GPIO pin mapping for buttons {'up': pin, 'down': pin, 'left': pin, 'right': pin}
+            button_pins: DEPRECATED - Buttons now read from PLC via Modbus (DI11-DI14)
         """
         self.lcd = LCD_I2C(i2c_addr, rows=2, cols=8)
         self.modbus = ModbusReader(modbus_host, modbus_port)
@@ -633,82 +635,77 @@ class Display2Manager:
         # selected_time removed - manual mode uses auto times
         self.running = False
         self.thread = None
-        self.button_pins = button_pins or {'up': 17, 'down': 27, 'left': 22, 'right': 23}
-        self.gpio_available = False
         
         # Hold-to-confirm for zone selection
         self.button_hold_start = None
         self.hold_duration = 3.0  # 3 seconds
         self.zone_confirmed = False
         
-        # Try to initialize GPIO for buttons
-        try:
-            import RPi.GPIO as GPIO
-            GPIO.setmode(GPIO.BCM)
-            GPIO.setwarnings(False)
-            for pin in self.button_pins.values():
-                GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-            self.GPIO = GPIO
-            self.gpio_available = True
-            logger.info("GPIO initialized for Display 2 buttons")
-        except Exception as e:
-            logger.warning(f"GPIO not available: {e}")
-            self.GPIO = None
+        # Button state tracking for edge detection
+        self.prev_buttons = {'left': False, 'right': False, 'ok': False, 'back': False}
+        
+        logger.info("Display 2 Manager initialized - buttons read from Modbus MW64 (DI11-DI14)")
     
     def read_buttons(self) -> Dict[str, bool]:
-        """Read current state of all buttons"""
-        buttons = {'up': False, 'down': False, 'left': False, 'right': False}
+        """
+        Read current state of all buttons from Modbus register MW64
+        MW64 bitmask: bit0=Left (DI11), bit1=Right (DI12), bit2=OK (DI13), bit3=Back (DI14)
+        """
+        buttons = {'left': False, 'right': False, 'ok': False, 'back': False}
         
-        if self.gpio_available and self.GPIO:
-            try:
-                for name, pin in self.button_pins.items():
-                    # Active low (pressed = 0)
-                    buttons[name] = self.GPIO.input(pin) == 0
-            except Exception as e:
-                logger.warning(f"Error reading buttons: {e}")
+        try:
+            # Read menu buttons register from PLC
+            reg_value = self.modbus.read_register(MW_MENU_BUTTONS)
+            if reg_value is not None:
+                # Extract button states from bitmask
+                buttons['left'] = bool(reg_value & 0x01)
+                buttons['right'] = bool(reg_value & 0x02)
+                buttons['ok'] = bool(reg_value & 0x04)
+                buttons['back'] = bool(reg_value & 0x08)
+        except Exception as e:
+            logger.warning(f"Error reading menu buttons from Modbus: {e}")
         
         return buttons
     
     def handle_button_press(self, button: str, is_held: bool = False):
-        """Handle button press event"""
+        """Handle button press event
+        
+        Button mapping from CSV:
+        - Left (DI11): Navigate Up/Previous or decrease zone
+        - Right (DI12): Navigate Down/Next or increase zone  
+        - OK (DI13): Confirm selection (long press >2s)
+        - Back (DI14): Cancel/Back
+        """
         logger.debug(f"Button {'held' if is_held else 'pressed'}: {button}")
         
-        if button == 'left':
-            # Navigate to previous view (only 2 views now)
-            self.current_view = Display2View((self.current_view - 1) % 2)
+        if button == 'back':
+            # Navigate back or cancel - go to overview
+            self.current_view = Display2View.OVERVIEW
             self.button_hold_start = None
             self.zone_confirmed = False
+        elif button == 'ok':
+            if self.current_view == Display2View.OVERVIEW:
+                # Go to zone selection view
+                self.current_view = Display2View.ZONE_SELECTION
+                self.zone_confirmed = False
+            elif self.current_view == Display2View.ZONE_SELECTION:
+                if is_held:
+                    # Confirm zone selection after long press
+                    if not self.zone_confirmed:
+                        logger.info(f"Zone {self.selected_zone} confirmed by holding OK button")
+                        self.zone_confirmed = True
+                        # Write selected zone to Modbus
+                        self.modbus.write_register(MW_SET_SELECTED, self.selected_zone)
+        elif button == 'left':
+            if self.current_view == Display2View.ZONE_SELECTION:
+                # Decrement zone (1-7)
+                self.selected_zone = ((self.selected_zone - 2) % 7) + 1
+                self.zone_confirmed = False
         elif button == 'right':
-            # Navigate to next view (only 2 views now)
-            self.current_view = Display2View((self.current_view + 1) % 2)
-            self.button_hold_start = None
-            self.zone_confirmed = False
-        elif button == 'up':
             if self.current_view == Display2View.ZONE_SELECTION:
-                if is_held:
-                    # Confirm zone selection after 3 second hold
-                    if not self.zone_confirmed:
-                        logger.info(f"Zone {self.selected_zone} confirmed by holding UP button")
-                        self.zone_confirmed = True
-                        # Write selected zone to Modbus
-                        self.modbus.write_register(MW_SET_SELECTED, self.selected_zone)
-                else:
-                    # Increment zone (1-7)
-                    self.selected_zone = (self.selected_zone % 7) + 1
-                    self.zone_confirmed = False
-        elif button == 'down':
-            if self.current_view == Display2View.ZONE_SELECTION:
-                if is_held:
-                    # Confirm zone selection after 3 second hold
-                    if not self.zone_confirmed:
-                        logger.info(f"Zone {self.selected_zone} confirmed by holding DOWN button")
-                        self.zone_confirmed = True
-                        # Write selected zone to Modbus
-                        self.modbus.write_register(MW_SET_SELECTED, self.selected_zone)
-                else:
-                    # Decrement zone (1-7)
-                    self.selected_zone = ((self.selected_zone - 2) % 7) + 1
-                    self.zone_confirmed = False
+                # Increment zone (1-7)
+                self.selected_zone = (self.selected_zone % 7) + 1
+                self.zone_confirmed = False
         
         # Update display immediately
         self.update_display()
@@ -770,14 +767,14 @@ class Display2Manager:
     
     def _update_loop(self):
         """Background thread for button handling and display updates"""
-        last_buttons = {'up': False, 'down': False, 'left': False, 'right': False}
-        button_hold_timers = {'up': None, 'down': None, 'left': None, 'right': None}
+        last_buttons = {'left': False, 'right': False, 'ok': False, 'back': False}
+        button_hold_timers = {'left': False, 'right': False, 'ok': False, 'back': False}
         update_counter = 0
         display_update_interval = 10  # Update display every 10 cycles (1 second)
         
         while self.running:
             try:
-                # Read buttons
+                # Read buttons from Modbus
                 buttons = self.read_buttons()
                 
                 # Handle button state changes and hold detection
@@ -791,10 +788,10 @@ class Display2Manager:
                         button_hold_timers[name] = time.time()
                     elif pressed and last_buttons[name]:
                         # Button is being held
-                        if button_hold_timers[name] and name in {'up', 'down'}:
+                        if button_hold_timers[name] and name == 'ok':
                             hold_time = time.time() - button_hold_timers[name]
                             if hold_time >= self.hold_duration:
-                                # Button held for required duration
+                                # OK button held for required duration (>2s for confirmation)
                                 self.handle_button_press(name, is_held=True)
                                 button_hold_timers[name] = None  # Prevent repeated triggers
                                 button_pressed = True
@@ -833,12 +830,6 @@ class Display2Manager:
             self.lcd.clear()
             self.lcd.close()
             self.modbus.close()
-            
-            if self.gpio_available and self.GPIO:
-                try:
-                    self.GPIO.cleanup()
-                except Exception:
-                    pass
 
 
 class AutoModeTransitionScheduler:
