@@ -7,7 +7,7 @@ Bevattning_controller.py (uppdaterad)
 - Fallback och begränsning av rimliga värden.
 - Kan köras en gång eller i loop.
 """
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 import os
 import csv
@@ -327,7 +327,7 @@ def main_once(args):
 
     try:
         os.makedirs(os.path.dirname(LOG_FIL), exist_ok=True)
-        with open(LOG_FIL, "a", newline="") as f:
+        with open(LOG_FIL, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                              f"temp={temp:.1f}", f"rain24h={regn_safe:.1f}",
