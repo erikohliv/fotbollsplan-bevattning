@@ -173,7 +173,8 @@ PROGRAM Fotbollsplan_Master
   IF OpenDelaySec = 0 THEN OpenDelaySec := 5; END_IF;
   IF PauseDelaySec = 0 THEN PauseDelaySec := 10; END_IF;
   IF CloseDelaySec = 0 THEN CloseDelaySec := 10; END_IF;
-  (* ManualRunTimeReg is deprecated - manual mode uses auto times *)
+  (* ManualRunTimeReg (MW65) can be set via display for custom manual runtime (1-240 min) *)
+  (* If not set, manual mode falls back to Set_Tid_Center/Horn based on zone *)
 
   OpenDelayTIME := T#1s * OpenDelaySec;
   PauseDelayTIME := T#1s * PauseDelaySec;

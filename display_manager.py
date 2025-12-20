@@ -619,8 +619,17 @@ class Display1Manager:
 class Display2Manager:
     """
     Manages Display 2: 2x8 LCD with 4 buttons (Up, Down, Left, Right)
-    Interactive manual control interface
+    Interactive manual control interface with complete menu system
     """
+    
+    # Mode constants
+    MODE_AUTO = 0
+    MODE_MANUAL = 1
+    MODE_TEST = 2
+    MODE_BLOW = 3
+    
+    MODE_NAMES = ["Auto", "Manual", "Test", "Blow"]
+    MODE_ABBR = ["A", "M", "T", "B"]
     
     def __init__(self, i2c_addr: int = 0x3F, modbus_host: str = "127.0.0.1",
                  modbus_port: int = 502, button_pins: Dict[str, int] = None):
@@ -645,9 +654,9 @@ class Display2Manager:
         self.running = False
         self.thread = None
         
-        # Hold-to-confirm for OK button
+        # Hold-to-confirm for OK button on CONFIRM view
         self.button_hold_start = None
-        self.hold_duration = 2.0  # 2 seconds for OK button hold
+        self.hold_duration = 2.0  # 2 seconds for OK button long press on CONFIRM view
         self.confirmed = False
         
         # Button state tracking for edge detection
@@ -702,9 +711,9 @@ class Display2Manager:
                 self.current_view = Display2View.ZONE_SELECT
             elif self.current_view == Display2View.CONFIRM:
                 # Go back based on mode
-                if self.selected_mode == 0:  # Auto - go back to mode selection
+                if self.selected_mode == self.MODE_AUTO:  # Auto - go back to mode selection
                     self.current_view = Display2View.MODE_SELECT
-                elif self.selected_mode == 1:  # Manual - go back to time
+                elif self.selected_mode == self.MODE_MANUAL:  # Manual - go back to time
                     self.current_view = Display2View.TIME_SELECT
                 else:  # Test/Blow - go back to zone
                     self.current_view = Display2View.ZONE_SELECT
@@ -719,14 +728,14 @@ class Display2Manager:
                 
             elif self.current_view == Display2View.MODE_SELECT:
                 # Advance based on mode
-                if self.selected_mode == 0:  # Auto - skip zone selection, go to confirm
+                if self.selected_mode == self.MODE_AUTO:  # Auto - skip zone selection, go to confirm
                     self.current_view = Display2View.CONFIRM
                 else:  # Manual/Test/Blow - need zone selection
                     self.current_view = Display2View.ZONE_SELECT
                 
             elif self.current_view == Display2View.ZONE_SELECT:
                 # Advance based on mode
-                if self.selected_mode == 1:  # Manual - needs time selection
+                if self.selected_mode == self.MODE_MANUAL:  # Manual - needs time selection
                     self.current_view = Display2View.TIME_SELECT
                 else:  # Auto/Test/Blow - go to confirm
                     self.current_view = Display2View.CONFIRM
@@ -771,28 +780,26 @@ class Display2Manager:
     def _execute_selection(self):
         """Execute the confirmed selection by writing to PLC"""
         logger.info(f"Executing: Mode={self.selected_mode}, Zone={self.selected_zone}, Time={self.selected_time}")
+        logger.info(f"Starting {self.MODE_NAMES[self.selected_mode]} mode")
         
-        mode_names = ["Auto", "Manual", "Test", "Blow"]
-        logger.info(f"Starting {mode_names[self.selected_mode]} mode")
-        
-        if self.selected_mode == 0:
+        if self.selected_mode == self.MODE_AUTO:
             # Auto mode - set mode and trigger remote command
             self.modbus.write_register(MW_MODE_OVERRIDE, 1)  # Auto
             self.modbus.write_register(MW_REMOTE_CMD, 50)  # Auto start command
             
-        elif self.selected_mode == 1:
+        elif self.selected_mode == self.MODE_MANUAL:
             # Manual mode - set zone, time, mode, and pulse start
             self.modbus.write_register(MW_SET_SELECTED, self.selected_zone)
             self.modbus.write_register(MW_MANUAL_TIME, self.selected_time)
             self.modbus.write_register(MW_MODE_OVERRIDE, 0)  # Manual
             self.modbus.write_register(MW_MANUAL_START, 1)  # Pulse start
             
-        elif self.selected_mode == 2:
+        elif self.selected_mode == self.MODE_TEST:
             # Test mode - set zone and trigger test
             self.modbus.write_register(MW_SET_SELECTED, self.selected_zone)
             self.modbus.write_register(MW_SPECIAL_MODE, 1)  # Test trigger
             
-        elif self.selected_mode == 3:
+        elif self.selected_mode == self.MODE_BLOW:
             # Blow mode - set zone and trigger blow
             self.modbus.write_register(MW_SET_SELECTED, self.selected_zone)
             self.modbus.write_register(MW_SPECIAL_MODE, 2)  # Blow trigger
@@ -820,11 +827,10 @@ class Display2Manager:
     
     def _render_mode_select(self):
         """Render mode selection view"""
-        mode_names = ["Auto", "Manual", "Test", "Blow"]
         # Line 0: Label
         line0 = "Mode"
         # Line 1: Current selection
-        line1 = mode_names[self.selected_mode]
+        line1 = self.MODE_NAMES[self.selected_mode]
         
         self.lcd.write_line(0, line0, align='center')
         self.lcd.write_line(1, line1, align='center')
@@ -851,16 +857,13 @@ class Display2Manager:
     
     def _render_confirm(self):
         """Render confirmation view"""
-        mode_names = ["Auto", "Manual", "Test", "Blow"]
-        mode_abbr = ["A", "M", "T", "B"]
-        
         # Line 0: Mode abbreviation + Zone (+ Time for Manual)
-        if self.selected_mode == 1:  # Manual
-            line0 = f"{mode_abbr[self.selected_mode]} Z{self.selected_zone} {self.selected_time}m"
-        elif self.selected_mode == 0:  # Auto (no zone needed)
-            line0 = f"{mode_abbr[self.selected_mode]} All"
+        if self.selected_mode == self.MODE_MANUAL:
+            line0 = f"{self.MODE_ABBR[self.selected_mode]} Z{self.selected_zone} {self.selected_time}m"
+        elif self.selected_mode == self.MODE_AUTO:
+            line0 = f"{self.MODE_ABBR[self.selected_mode]} All"
         else:  # Test/Blow
-            line0 = f"{mode_abbr[self.selected_mode]} Z{self.selected_zone}"
+            line0 = f"{self.MODE_ABBR[self.selected_mode]} Z{self.selected_zone}"
         
         # Line 1: Hold OK to start
         line1 = "Hold OK"

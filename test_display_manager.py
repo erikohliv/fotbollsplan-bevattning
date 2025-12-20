@@ -47,6 +47,11 @@ class MockModbusClient:
         self.timeout = timeout
         self.connected = False
         
+        # Special mode constants
+        self.SPECIAL_MODE_NONE = 0
+        self.SPECIAL_MODE_TEST = 1
+        self.SPECIAL_MODE_BLOW = 2
+        
         # Simulated register values
         self.registers = {
             50: 2,    # Current zone
@@ -59,7 +64,7 @@ class MockModbusClient:
             63: 0,    # Set selected zone
             64: 0,    # Menu buttons (bitmask)
             65: 15,   # Manual runtime (minutes)
-            66: 0,    # Special mode (0=none, 1=Test, 2=Blow)
+            66: self.SPECIAL_MODE_NONE,  # Special mode (0=none, 1=Test, 2=Blow)
             70: 1,    # Heartbeat bit
             71: 123,  # Heartbeat counter
             72: 0,    # Event mask
