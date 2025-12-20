@@ -79,7 +79,6 @@ MW_MODE = 100               # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrl�
 # Säkerhetströsklar för tryck/flöde
 PRESSURE_LOW_THRESHOLD = 20       # % - lågt tryck när flöde detekteras
 PRESSURE_HIGH_THRESHOLD = 90      # % - nära maxtryck utan flöde indikerar blockering
-PRESSURE_GHOST_THRESHOLD = 5      # % - tryck när pumpen är av tyder på givarfel
 
 # Zone constants
 MIN_ZONE = 1
@@ -312,11 +311,13 @@ def status(x_api_key: Optional[str] = Header(None)):
     pump_on = rr1.registers[1] == 1
     pressure_value = int(rr_pressure.registers[0])
     flow_ok = rr_flow.registers[0] == 1
+    blockering = pump_on and (not flow_ok) and pressure_value >= PRESSURE_HIGH_THRESHOLD
+    torrkorning = pump_on and (not flow_ok) and not blockering
     safety_flags = {
-        "slangbrott": flow_ok and pressure_value < PRESSURE_LOW_THRESHOLD,
-        "torrkorning": pump_on and not flow_ok,
-        "givarkontroll": (not pump_on) and pressure_value > PRESSURE_GHOST_THRESHOLD,
-        "blockering": (not flow_ok) and pressure_value >= PRESSURE_HIGH_THRESHOLD,
+        "slangbrott": pump_on and flow_ok and pressure_value < PRESSURE_LOW_THRESHOLD,
+        "torrkorning": torrkorning,
+        "givarkontroll": (not pump_on) and pressure_value >= PRESSURE_HIGH_THRESHOLD,
+        "blockering": blockering,
     }
     
     return {

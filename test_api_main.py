@@ -22,7 +22,6 @@ sys.modules['pymodbus.client'] = MagicMock()
 from api_main import (
     API_KEY,
     API_LOGGER_NAME,
-    PRESSURE_GHOST_THRESHOLD,
     PRESSURE_HIGH_THRESHOLD,
     PRESSURE_LOW_THRESHOLD,
     MW_BLOCK_REASON,
@@ -113,9 +112,9 @@ def test_status_authorized(client, mock_modbus):
         # Torrkörning: pump på men inget flöde
         (10, 0, 1, {"slangbrott": False, "torrkorning": True, "givarkontroll": False, "blockering": False}),
         # Givarfel: tryck trots att pumpen är av
-        (PRESSURE_GHOST_THRESHOLD + 10, 0, 0, {"slangbrott": False, "torrkorning": False, "givarkontroll": True, "blockering": False}),
+        (PRESSURE_HIGH_THRESHOLD, 0, 0, {"slangbrott": False, "torrkorning": False, "givarkontroll": True, "blockering": False}),
         # Blockering: maxtryck men inget flöde
-        (PRESSURE_HIGH_THRESHOLD, 0, 1, {"slangbrott": False, "torrkorning": True, "givarkontroll": False, "blockering": True}),
+        (PRESSURE_HIGH_THRESHOLD, 0, 1, {"slangbrott": False, "torrkorning": False, "givarkontroll": False, "blockering": True}),
     ],
 )
 def test_status_safety_flags(client, mock_modbus, pressure, flow, pump_on, expected_flags):
