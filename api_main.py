@@ -76,6 +76,11 @@ MW_TEST_ZONE_RESULT = 81    # Test resultat för aktuell zon (bitmask för zoner
 MW_ERROR_RESET = 82         # Error reset trigger (skriv 1 för att nollställa fel)
 MW_MODE = 100               # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
 
+# Säkerhetströsklar för tryck/flöde
+PRESSURE_LOW_THRESHOLD = 20       # % - lågt tryck när flöde detekteras
+PRESSURE_HIGH_THRESHOLD = 90      # % - nära maxtryck utan flöde indikerar blockering
+PRESSURE_GHOST_THRESHOLD = 5      # % - tryck när pumpen är av tyder på givarfel
+
 # Zone constants
 MIN_ZONE = 1
 MAX_ZONE = 7
@@ -293,6 +298,10 @@ def status(x_api_key: Optional[str] = Header(None)):
         _ensure_modbus_ok(rr2, "read heartbeat registers MW70-73")
         rr3 = client.read_holding_registers(MW_MODE, 1, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr3, f"read mode register MW{MW_MODE}")
+        rr_pressure = client.read_holding_registers(MW_PRESSURE, 1, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr_pressure, f"read pressure register MW{MW_PRESSURE}")
+        rr_flow = client.read_holding_registers(MW_FLOW_SWITCH, 1, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr_flow, f"read flow switch register MW{MW_FLOW_SWITCH}")
     
     mode_value = rr3.registers[0]
     mode_text = {
@@ -300,10 +309,19 @@ def status(x_api_key: Optional[str] = Header(None)):
         1: "Lokalt läge aktivt",
         2: "Fjärrläge aktivt"
     }
+    pump_on = rr1.registers[1] == 1
+    pressure_value = int(rr_pressure.registers[0])
+    flow_ok = rr_flow.registers[0] == 1
+    safety_flags = {
+        "slangbrott": flow_ok and pressure_value < PRESSURE_LOW_THRESHOLD,
+        "torrkorning": pump_on and not flow_ok,
+        "givarkontroll": (not pump_on) and pressure_value > PRESSURE_GHOST_THRESHOLD,
+        "blockering": (not flow_ok) and pressure_value >= PRESSURE_HIGH_THRESHOLD,
+    }
     
     return {
         "zone": rr1.registers[0],
-        "pump_on": rr1.registers[1] == 1,
+        "pump_on": pump_on,
         "steg": rr1.registers[2],
         "selected_zone": rr1.registers[3],
         "heartbeat_bit": rr2.registers[0],
@@ -312,6 +330,9 @@ def status(x_api_key: Optional[str] = Header(None)):
         "block_reason": rr2.registers[3],
         "mode": mode_value,
         "mode_text": mode_text.get(mode_value, f"Okänt läge {mode_value}"),
+        "pressure": pressure_value,
+        "flow_ok": flow_ok,
+        "safety": safety_flags,
         "timestamp": int(time.time())
     }
 
