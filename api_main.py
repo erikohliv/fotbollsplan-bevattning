@@ -903,7 +903,7 @@ async function startManual() {
     }
     
     const result = await r.json();
-    showMessage(`Zon ${zone} startad (${result.note || 'använder auto-tider'})`);
+    showMessage(`Zon ${zone} startad (${result.note})`);
     setTimeout(loadStatus, 500);
   } catch (err) {
     showMessage('Nätverksfel: ' + err.message, true);
