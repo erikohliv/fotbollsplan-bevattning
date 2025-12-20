@@ -19,7 +19,22 @@ mock_modbus_client = MagicMock()
 sys.modules['pymodbus'] = MagicMock()
 sys.modules['pymodbus.client'] = MagicMock()
 
-from api_main import app, API_KEY, USER_MODBUS_ERROR, API_LOGGER_NAME
+from api_main import (
+    API_KEY,
+    API_LOGGER_NAME,
+    PRESSURE_HIGH_THRESHOLD,
+    PRESSURE_LOW_THRESHOLD,
+    MW_BLOCK_REASON,
+    MW_FLOW_SWITCH,
+    MW_HEARTBEAT,
+    MW_MODE,
+    MW_MODE_OVERRIDE,
+    MW_PRESSURE,
+    MW_STATUS_ZONE,
+    MW_TEST_ZONE_RESULT,
+    USER_MODBUS_ERROR,
+    app,
+)
 
 
 @pytest.fixture
@@ -36,11 +51,30 @@ def mock_modbus():
         mock_client_instance.connect.return_value = True
         mock_client_instance.close.return_value = None
         
-        # Mock successful read
-        mock_read_result = MagicMock()
-        mock_read_result.isError.return_value = False
-        mock_read_result.registers = [1, 0, 0, 1, 0, 0, 0, 0]  # Sample registers
-        mock_client_instance.read_holding_registers.return_value = mock_read_result
+        # Mock successful read with address-aware side effect
+        def _make_result(values):
+            result = MagicMock()
+            result.isError.return_value = False
+            result.registers = values
+            return result
+
+        def _read_side_effect(address, count=1, unit=None):
+            defaults = {
+                MW_STATUS_ZONE: [1, 0, 0, 1],
+                MW_HEARTBEAT: [0, 0, 0, 0],
+                MW_MODE: [0],
+                MW_MODE_OVERRIDE: [1],
+                MW_PRESSURE: [50],
+                MW_FLOW_SWITCH: [1],
+                MW_BLOCK_REASON: [0],
+                MW_TEST_ZONE_RESULT: [0],
+            }
+            values = defaults.get(address, [0] * count)
+            if len(values) < count:
+                values = values + [0] * (count - len(values))
+            return _make_result(values[:count])
+
+        mock_client_instance.read_holding_registers.side_effect = _read_side_effect
         
         # Mock successful write
         mock_write_result = MagicMock()
@@ -49,7 +83,7 @@ def mock_modbus():
         mock_client_instance.write_registers.return_value = mock_write_result
         
         mock.return_value = mock_client_instance
-        yield mock
+        yield mock_client_instance
 
 
 def test_status_unauthorized(client):
@@ -66,6 +100,57 @@ def test_status_authorized(client, mock_modbus):
     assert "zone" in data
     assert "pump_on" in data
     assert "block_reason" in data
+    assert "safety" in data
+    assert "pressure" in data
+
+
+@pytest.mark.parametrize(
+    "pressure, flow, pump_on, expected_flags",
+    [
+        # Slangbrott: flöde finns men trycket är lågt
+        (PRESSURE_LOW_THRESHOLD - 1, 1, 1, {"slangbrott": True, "torrkorning": False, "givarkontroll": False, "blockering": False}),
+        # Torrkörning: pump på men inget flöde
+        (10, 0, 1, {"slangbrott": False, "torrkorning": True, "givarkontroll": False, "blockering": False}),
+        # Givarfel: tryck trots att pumpen är av
+        (PRESSURE_HIGH_THRESHOLD, 0, 0, {"slangbrott": False, "torrkorning": False, "givarkontroll": True, "blockering": False}),
+        # Blockering: maxtryck men inget flöde
+        (PRESSURE_HIGH_THRESHOLD, 0, 1, {"slangbrott": False, "torrkorning": False, "givarkontroll": False, "blockering": True}),
+    ],
+)
+def test_status_safety_flags(client, mock_modbus, pressure, flow, pump_on, expected_flags):
+    """Validate computed safety flags for flow/pressure edge cases."""
+
+    def _result(values):
+        result = MagicMock()
+        result.isError.return_value = False
+        result.registers = values
+        return result
+
+    def _side_effect(address, count=1, unit=None):
+        mapping = {
+            MW_STATUS_ZONE: [0, pump_on, 0, 0],
+            MW_HEARTBEAT: [0, 0, 0, 0],
+            MW_MODE: [0],
+            MW_MODE_OVERRIDE: [1],
+            MW_PRESSURE: [pressure],
+            MW_FLOW_SWITCH: [flow],
+            MW_BLOCK_REASON: [0],
+        }
+        values = mapping.get(address, [0] * count)
+        if len(values) < count:
+            values = values + [0] * (count - len(values))
+        return _result(values[:count])
+
+    mock_modbus.read_holding_registers.side_effect = _side_effect
+
+    response = client.get("/status", headers={"X-API-Key": API_KEY})
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["pressure"] == pressure
+    assert payload["flow_ok"] is (flow == 1)
+    for key, value in expected_flags.items():
+        assert payload["safety"][key] is value
 
 
 def test_status_modbus_failure_is_sanitized(client, caplog):
