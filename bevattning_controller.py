@@ -238,11 +238,14 @@ def main_once(args):
     temp, regn = hamta_vader(args.lat, args.lon)
     
     # Use fallback values if weather fetch failed
-    if temp is None:
-        temp = 15.0
-        regn = 0.0
+    if temp is None or regn is None:
+        logger.warning("Väderdata ej tillgänglig, använder fallback-värden")
+        if temp is None:
+            temp = 15.0
+        if regn is None:
+            regn = 0.0
     
-    # Safe rain value for logging (handles None)
+    # Safe rain value for logging (handles None case even though we set fallback above)
     regn_safe = regn if regn is not None else 0.0
 
     markfukt = args.simulate_markfukt_value if args.simulate else 30
@@ -261,7 +264,7 @@ def main_once(args):
 
     faktor = 1.0
     anledning = "Normal drift"
-    if regn is not None and regn > args.rain_threshold:
+    if regn > args.rain_threshold:
         faktor = 0.0
         anledning = f"Regn {regn:.1f}mm > {args.rain_threshold}"
         logger.warning("BEVATTNING BLOCKERAD: %s", anledning)
@@ -273,7 +276,7 @@ def main_once(args):
         faktor = 0.5
         anledning = f"Kallt ({temp:.1f}C)"
         logger.info("BEVATTNING REDUCERAD: %s", anledning)
-    elif regn is not None and regn > 1.0:
+    elif regn > 1.0:
         faktor = 0.7
         anledning = f"Litet regn ({regn:.1f}mm)"
         logger.info("BEVATTNING REDUCERAD: %s", anledning)
@@ -303,7 +306,7 @@ def main_once(args):
                         logger.info("Bevattningstider skrivna: Center=%d min, Hörn=%d min", tid_center, tid_horn)
                     # Group 2: MW30-32 (markfukt, regen, temp)
                     ok2 = write_registers_bulk(client, MW_MARKFUKT, 
-                                              [int(markfukt), int(regn if regn is not None else 0), int(temp)], 
+                                              [int(markfukt), int(regn), int(temp)], 
                                               unit=args.unit)
                     if ok2:
                         logger.info("Miljödata skrivna: Markfukt=%d%%, Regn=%.1fmm, Temp=%.1fC", 

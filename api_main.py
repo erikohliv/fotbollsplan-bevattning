@@ -761,14 +761,10 @@ label { font-weight: bold; margin-right: 5px; }
         <option value="7">Zon 7</option>
       </select>
       
-      <label>Körtid:</label>
-      <input type="number" id="minutes" value="5" min="1" max="240" style="width: 80px;">
-      <span>minuter</span>
-      
       <button onclick="startManual()">Starta Zon</button>
     </div>
     <p style="font-size: 12px; color: #666; margin-top: 10px;">
-      Standard körtid är 5 minuter. Justera innan start om annat önskas.
+      Använder automatiska tider: Center-zoner (1-3) och Hörn-zoner (4-7) enligt konfiguration.
     </p>
   </div>
   
@@ -892,18 +888,12 @@ async function loadStatus() {
 
 async function startManual() {
   const zone = parseInt(document.getElementById('zone').value);
-  const minutes = parseInt(document.getElementById('minutes').value);
-  
-  if (minutes < 1 || minutes > 240) {
-    showMessage('Körtid måste vara 1-240 minuter', true);
-    return;
-  }
   
   try {
     const r = await fetch('/command/manual', {
       method: 'POST',
       headers: {'X-API-Key': key, 'Content-Type': 'application/json'},
-      body: JSON.stringify({zone, minutes})
+      body: JSON.stringify({zone})
     });
     
     if (!r.ok) {
@@ -912,7 +902,8 @@ async function startManual() {
       return;
     }
     
-    showMessage(`Zon ${zone} startad för ${minutes} minuter`);
+    const result = await r.json();
+    showMessage(`Zon ${zone} startad (${result.note || 'använder auto-tider'})`);
     setTimeout(loadStatus, 500);
   } catch (err) {
     showMessage('Nätverksfel: ' + err.message, true);
