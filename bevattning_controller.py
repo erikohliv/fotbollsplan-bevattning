@@ -7,7 +7,7 @@ Bevattning_controller.py (uppdaterad)
 - Fallback och begränsning av rimliga värden.
 - Kan köras en gång eller i loop.
 """
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 import os
 import csv
@@ -238,12 +238,12 @@ def main_once(args):
     temp, regn = hamta_vader(args.lat, args.lon)
     
     # Use fallback values if weather fetch failed
-    if temp is None:
-        temp = 15.0
-        regn = 0.0
-    
-    # Safe rain value for logging (handles None)
-    regn_safe = regn if regn is not None else 0.0
+    if temp is None or regn is None:
+        logger.warning("Väderdata ej tillgänglig, använder fallback-värden")
+        if temp is None:
+            temp = 15.0
+        if regn is None:
+            regn = 0.0
 
     markfukt = args.simulate_markfukt_value if args.simulate else 30
     if args.read_markfukt and not args.simulate:
@@ -261,7 +261,7 @@ def main_once(args):
 
     faktor = 1.0
     anledning = "Normal drift"
-    if regn is not None and regn > args.rain_threshold:
+    if regn > args.rain_threshold:
         faktor = 0.0
         anledning = f"Regn {regn:.1f}mm > {args.rain_threshold}"
         logger.warning("BEVATTNING BLOCKERAD: %s", anledning)
@@ -273,7 +273,7 @@ def main_once(args):
         faktor = 0.5
         anledning = f"Kallt ({temp:.1f}C)"
         logger.info("BEVATTNING REDUCERAD: %s", anledning)
-    elif regn is not None and regn > 1.0:
+    elif regn > 1.0:
         faktor = 0.7
         anledning = f"Litet regn ({regn:.1f}mm)"
         logger.info("BEVATTNING REDUCERAD: %s", anledning)
@@ -284,7 +284,7 @@ def main_once(args):
     tid_horn = int(BASE_TID_HORN * faktor)
 
     logger.info("Väder: temp=%.1fC regn24h=%.1fmm markfukt=%s%% => %s => tider %d/%d min",
-                temp, regn_safe, markfukt, anledning, tid_center, tid_horn)
+                temp, regn, markfukt, anledning, tid_center, tid_horn)
 
     wrote = False
     if not args.dry_run:
@@ -303,11 +303,11 @@ def main_once(args):
                         logger.info("Bevattningstider skrivna: Center=%d min, Hörn=%d min", tid_center, tid_horn)
                     # Group 2: MW30-32 (markfukt, regen, temp)
                     ok2 = write_registers_bulk(client, MW_MARKFUKT, 
-                                              [int(markfukt), int(regn if regn is not None else 0), int(temp)], 
+                                              [int(markfukt), int(regn), int(temp)], 
                                               unit=args.unit)
                     if ok2:
                         logger.info("Miljödata skrivna: Markfukt=%d%%, Regn=%.1fmm, Temp=%.1fC", 
-                                  markfukt, regn_safe, temp)
+                                  markfukt, regn, temp)
                     client.close()
                     wrote = ok1 and ok2
                     if wrote:
@@ -327,10 +327,10 @@ def main_once(args):
 
     try:
         os.makedirs(os.path.dirname(LOG_FIL), exist_ok=True)
-        with open(LOG_FIL, "a", newline="") as f:
+        with open(LOG_FIL, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                             f"temp={temp:.1f}", f"rain24h={regn_safe:.1f}",
+                             f"temp={temp:.1f}", f"rain24h={regn:.1f}",
                              f"moisture={markfukt}", anledning, tid_center, tid_horn, "written" if wrote else "not_written"])
     except Exception as e:
         logger.warning("Kunde inte skriva loggfil: %s", e)

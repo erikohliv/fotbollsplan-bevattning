@@ -1,8 +1,7 @@
 import logging
 import os
 import time
-import json
-from typing import Optional, List
+from typing import Optional
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
@@ -210,7 +209,7 @@ def get_modbus_connection():
         raise
     except Exception as exc:
         logger.warning("Modbus-undantag: %s", exc)
-        raise HTTPException(status_code=502, detail=USER_MODBUS_ERROR)
+        raise HTTPException(status_code=502, detail=USER_MODBUS_ERROR) from exc
     finally:
         try:
             client.close()
@@ -676,7 +675,7 @@ def set_mode(mode: int, x_api_key: Optional[str] = Header(None)):
             detail="mode must be 0 (Neutral), 1 (Lokalt läge), or 2 (Fjärrläge)"
         )
     
-    logger.info(f"Ställer läge till {mode} (0=Neutral, 1=Lokalt, 2=Fjärr)")
+    logger.info("Ställer läge till %s (0=Neutral, 1=Lokalt, 2=Fjärr)", mode)
     write_reg(MW_MODE, mode)
     
     mode_text = {
@@ -762,14 +761,10 @@ label { font-weight: bold; margin-right: 5px; }
         <option value="7">Zon 7</option>
       </select>
       
-      <label>Körtid:</label>
-      <input type="number" id="minutes" value="5" min="1" max="240" style="width: 80px;">
-      <span>minuter</span>
-      
       <button onclick="startManual()">Starta Zon</button>
     </div>
     <p style="font-size: 12px; color: #666; margin-top: 10px;">
-      Standard körtid är 5 minuter. Justera innan start om annat önskas.
+      Använder automatiska tider: Center-zoner (1-3) och Hörn-zoner (4-7) enligt konfiguration.
     </p>
   </div>
   
@@ -893,18 +888,12 @@ async function loadStatus() {
 
 async function startManual() {
   const zone = parseInt(document.getElementById('zone').value);
-  const minutes = parseInt(document.getElementById('minutes').value);
-  
-  if (minutes < 1 || minutes > 240) {
-    showMessage('Körtid måste vara 1-240 minuter', true);
-    return;
-  }
   
   try {
     const r = await fetch('/command/manual', {
       method: 'POST',
       headers: {'X-API-Key': key, 'Content-Type': 'application/json'},
-      body: JSON.stringify({zone, minutes})
+      body: JSON.stringify({zone})
     });
     
     if (!r.ok) {
@@ -913,7 +902,8 @@ async function startManual() {
       return;
     }
     
-    showMessage(`Zon ${zone} startad för ${minutes} minuter`);
+    const result = await r.json();
+    showMessage(`Zon ${zone} startad (${result.note})`);
     setTimeout(loadStatus, 500);
   } catch (err) {
     showMessage('Nätverksfel: ' + err.message, true);
@@ -1227,7 +1217,7 @@ def get_rain_forecast(x_api_key: Optional[str] = Header(None)):
                         time_str = time_str[:-1] + '+00:00'
                     forecast_time = datetime.fromisoformat(time_str)
                 except (ValueError, AttributeError) as e:
-                    logger.warning(f"Kunde inte tolka tidsstämpel '{time_str}': {e}")
+                    logger.warning("Kunde inte tolka tidsstämpel '%s': %s", time_str, e)
                     continue
                 
                 if now <= forecast_time <= now + timedelta(hours=24):
@@ -1273,7 +1263,7 @@ def get_rain_forecast(x_api_key: Optional[str] = Header(None)):
         raise HTTPException(
             status_code=502, 
             detail=f"Kunde inte hämta väderdata från Open-Meteo: {str(e)}"
-        )
+        ) from e
 
 
 @app.get("/process-view")
@@ -1519,7 +1509,7 @@ class DeleteUserRequest(BaseModel):
 @app.post("/users/create")
 def create_user(
     request: CreateUserRequest,
-    superadmin: str = Depends(require_superadmin)
+    _superadmin: str = Depends(require_superadmin)
 ):
     """
     Create a new user account (superadmin only).
@@ -1557,18 +1547,18 @@ def create_user(
         }
     
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except HTTPException:
         raise
     except Exception as e:
         logger.error("[SUPERADMIN] Failed to create user: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to create user")
+        raise HTTPException(status_code=500, detail="Failed to create user") from e
 
 
 @app.post("/users/delete")
 def delete_user(
     request: DeleteUserRequest,
-    superadmin: str = Depends(require_superadmin)
+    _superadmin: str = Depends(require_superadmin)
 ):
     """
     Delete a user account (superadmin only).
@@ -1603,11 +1593,11 @@ def delete_user(
         raise
     except Exception as e:
         logger.error("[SUPERADMIN] Failed to delete user: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to delete user")
+        raise HTTPException(status_code=500, detail="Failed to delete user") from e
 
 
 @app.get("/users/list")
-def list_users(superadmin: str = Depends(require_superadmin)):
+def list_users(_superadmin: str = Depends(require_superadmin)):
     """
     List all user accounts (superadmin only).
     
@@ -1632,4 +1622,4 @@ def list_users(superadmin: str = Depends(require_superadmin)):
     
     except Exception as e:
         logger.error("[SUPERADMIN] Failed to list users: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to list users")
+        raise HTTPException(status_code=500, detail="Failed to list users") from e

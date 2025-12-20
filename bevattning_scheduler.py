@@ -3,12 +3,10 @@
 Bevattning Scheduler
 Runs the bevattning controller at scheduled times (01:00 daily)
 """
-import argparse
 import logging
 import time
 from datetime import datetime, timedelta
 import sys
-import os
 
 # Import the controller
 import bevattning_controller
