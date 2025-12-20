@@ -26,7 +26,7 @@
       "type": "Feature",
       "properties": {
         "name": "Stamledning (Ring)",
-        "rortyp": "PEM 75",
+        "pipe_type": "PEM 75",
         "stroke": "#0000FF",
         "stroke-width": 4
       },
@@ -46,9 +46,9 @@
       "properties": {
         "name": "Ventil Zon 4 (Övre Höger)",
         "typ": "Hunter PGV 1.5",
-        "status": "WARNING: High Pressure",
+        "status": "WARNING",
         "marker-color": "#ff0000",
-        "marker-symbol": "fuel"
+        "marker-symbol": "industrial"
       },
       "geometry": {
         "type": "Point",
@@ -60,7 +60,6 @@
       "properties": {
         "name": "Ventil Zon 1 (Mitten)",
         "typ": "Hunter PGV 1.5",
-        "status": "OPTIMAL",
         "marker-color": "#00FF00",
         "marker-symbol": "star"
       },
