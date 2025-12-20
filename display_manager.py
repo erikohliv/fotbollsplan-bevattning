@@ -38,6 +38,7 @@ except ImportError:
 
 
 # Modbus register addresses (from existing system)
+MW_REMOTE_CMD = 10
 MW_STATUS_ZONE = 50
 MW_STATUS_PUMP = 51
 MW_STATUS_STEG = 52
@@ -701,9 +702,11 @@ class Display2Manager:
                 self.current_view = Display2View.ZONE_SELECT
             elif self.current_view == Display2View.CONFIRM:
                 # Go back based on mode
-                if self.selected_mode == 1:  # Manual
+                if self.selected_mode == 0:  # Auto - go back to mode selection
+                    self.current_view = Display2View.MODE_SELECT
+                elif self.selected_mode == 1:  # Manual - go back to time
                     self.current_view = Display2View.TIME_SELECT
-                else:
+                else:  # Test/Blow - go back to zone
                     self.current_view = Display2View.ZONE_SELECT
             self.confirmed = False
             
@@ -715,8 +718,11 @@ class Display2Manager:
                 self.confirmed = False
                 
             elif self.current_view == Display2View.MODE_SELECT:
-                # Advance to zone selection
-                self.current_view = Display2View.ZONE_SELECT
+                # Advance based on mode
+                if self.selected_mode == 0:  # Auto - skip zone selection, go to confirm
+                    self.current_view = Display2View.CONFIRM
+                else:  # Manual/Test/Blow - need zone selection
+                    self.current_view = Display2View.ZONE_SELECT
                 
             elif self.current_view == Display2View.ZONE_SELECT:
                 # Advance based on mode
@@ -770,9 +776,9 @@ class Display2Manager:
         logger.info(f"Starting {mode_names[self.selected_mode]} mode")
         
         if self.selected_mode == 0:
-            # Auto mode - just set mode and pulse start
+            # Auto mode - set mode and trigger remote command
             self.modbus.write_register(MW_MODE_OVERRIDE, 1)  # Auto
-            # Write remote command for auto start (handled by controller)
+            self.modbus.write_register(MW_REMOTE_CMD, 50)  # Auto start command
             
         elif self.selected_mode == 1:
             # Manual mode - set zone, time, mode, and pulse start
