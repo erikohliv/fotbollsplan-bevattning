@@ -1,0 +1,68 @@
+FÖRBINDNINGSTABELL - FOTBOLLSPLAN BEVATTNINGSSYSTEM
+====================================================
+SEKTION 1: DIGITALA INGÅNGAR (DI) - KNAPPAR & SENSORER
+--------------------------------------------------
+Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area (mm²),Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O,Hardware_Type,Logic_Requirement,AI_Note
+1,Nödstopp:NC,UNIPI:DI8,0.75,Svart,RKK,Nödstopp - Bryter all drift,MW73 (Stopfunktion),%IX0.7,Nödstoppsknapp (NC),Active Low (Safe),Safety Critical. Must cut HW outputs immediately.
+2,Startknapp:NO,UNIPI:DI2,0.75,Svart,RKK,Start - Startar vald sekvens,MW10 (Startfunktion),%IX0.1,Tryckknapp (NO),Pulse (Rising Edge),Only active IF selection is confirmed (Armed state).
+3,Stoppknapp:NO,UNIPI:DI1,0.75,Svart,RKK,Stopp - Avbryter körning,MW60 (Stop),%IX0.0,Tryckknapp (NO),Pulse (Rising Edge),Abort sequence / Normal stop.
+4a,Auto-läge:NO,UNIPI:DI3,0.75,Svart,RKK,Auto-läge (från 1-0-2 brytare),MW60 (Mode),%IX0.2,Vred 1-0-2 (Återfjädrande pos 1),Pulse sets Auto Mode,Part of 1-0-2 switch. Needs latching logic.
+4b,Manuell-läge:NO,UNIPI:DI10,0.75,Svart,RKK,Manuell-läge (från 1-0-2 brytare),MW60 (Mode),%IX1.1,Vred 1-0-2 (Återfjädrande pos 2),Pulse sets Manual Mode,Part of 1-0-2 switch. Needs latching logic.
+5,Reset-knapp:NO,UNIPI:DI4,0.75,Svart,RKK,Reset / Kvittera larm,MW72 (Ack),%IX0.3,Tryckknapp (NO),Pulse (Rising Edge),Fault Acknowledge / System Reset.
+6,Meny Vänster/Upp:NO,UNIPI:DI11,0.5,Svart,RKK,Meny - Navigera Upp/Vänster,MW64 (Menu),%IX1.2,Tryckknapp (NO),Pulse,UI Navigation via Modbus.
+7,Meny Höger/Ner:NO,UNIPI:DI12,0.5,Svart,RKK,Meny - Navigera Ner/Höger,MW64 (Menu),%IX1.3,Tryckknapp (NO),Pulse,UI Navigation via Modbus.
+8,Meny OK/Välj:NO,UNIPI:DI13,0.5,Svart,RKK,Meny - Bekräfta val,MW64 (Menu),%IX1.4,Tryckknapp (NO),Long Press (>2s),Logic: Hold to Confirm. Visual: Blink selected item.
+9,Meny Tillbaka:NO,UNIPI:DI14,0.5,Svart,RKK,Meny - Backa/Avbryt,MW64 (Menu),%IX1.5,Tryckknapp (NO),Pulse,UI Navigation via Modbus.
+10a,Plint X3:02,UNIPI:DI6,0.75,Svart,RK (Intern),Flödesvakt Signal (från X3),MW55 (Flow),%IX0.6,Flödesvakt,Active High,Signal from Flow Switch via Terminal X3.
+15,Gemensam DI:0V,UNIPI:DI_COM,0.75,Svart,RKK,Gemensam 0V för alla knappar,-,-,-,-,-
+
+SEKTION 2: DIGITALA UTGÅNGAR (DO) - VENTILER & PUMP
+--------------------------------------------------
+Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area (mm²),Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O,Hardware_Type,Logic,AI_Note
+16a,UNIPI:Relä1,Plint X1:1,0.75,Svart,RKK,Ventil 1,MW20,%QX0.0,Relä (NO),Active High,Controls 24VAC Valve
+17a,UNIPI:Relä2,Plint X1:2,0.75,Svart,RKK,Ventil 2,MW21,%QX0.1,Relä (NO),Active High,Controls 24VAC Valve
+18a,UNIPI:Relä3,Plint X1:3,0.75,Svart,RKK,Ventil 3,MW22,%QX0.2,Relä (NO),Active High,Controls 24VAC Valve
+19a,UNIPI:Relä4,Plint X1:4,0.75,Svart,RKK,Ventil 4,MW23,%QX0.3,Relä (NO),Active High,Controls 24VAC Valve
+20a,UNIPI:Relä5,Plint X1:5,0.75,Svart,RKK,Ventil 5,MW24,%QX0.4,Relä (NO),Active High,Controls 24VAC Valve
+21a,UNIPI:Relä6,Plint X1:6,0.75,Svart,RKK,Ventil 6,MW25,%QX0.5,Relä (NO),Active High,Controls 24VAC Valve
+22a,UNIPI:Relä7,Plint X1:7,0.75,Svart,RKK,Ventil 7,MW26,%QX0.6,Relä (NO),Active High,Controls 24VAC Valve
+23,UNIPI:Relä8,Mjukstart:Start,0.75,Svart,RK (Intern),Startsignal Mjukstartare,MW100,%QX0.7,Relä (NO),Active High,Direct to Soft Starter.
+
+SEKTION 4: ANALOGA INGÅNGAR (AI)
+--------------------------------------------------
+Trådnr,Från (Komp:Plint),Till (Komp:Plint),Area (mm²),Färg,Kabeltyp,Funktion,Modbus-Register,PLC I/O,Hardware_Type,Logic,AI_Note
+28a,Plint X1:9,UNIPI:AI1,0.5,Svart,RKK,Markfuktgivare,MW30,%IW0,Sensor 0-10V,Scale 0-100%,Soil Moisture
+32a,Plint X3:05,UNIPI:AI2,0.5,Svart,RK (Intern),Tryckgivare Signal (från X3),MW33,%IW1,Sensor 4-Wire,0-10V/4-20mA,Pressure Feedback from Terminal X3.
+
+SEKTION 6: DISPLAY (I2C) - VIA UNIPI RJ11 PORT
+--------------------------------------------------
+Trådnr,Från (Komp:Port),Till (Komp:Pin),Funktion,Protokoll,Adress,AI_Note
+37,UNIPI:RJ11,Display 20x4:SDA/SCL,I2C Bus,-,0x27,Main Display
+41,Display 20x4,Display 2x8,I2C Daisy Chain,-,0x3F,Menu Display
+
+SEKTION 10: PLINTRAD X3 (SENSORER) - EXTERNA KABLAR
+--------------------------------------------------
+Rad,Kabel,Färg/Part,Plint X3,Funktion,Internt Kablage (X3 till...),AI_Note
+1,Grå (Skärmad),Svart (1),X3:01,+24VDC Matning,Matning +24V,Flow Switch Power Out
+2,Grå (Skärmad),Svart (2),X3:02,Flödessignal,UNIPI DI6,Flow Switch Return Signal
+3,Orange (Skärmad),Brun,X3:03,+24VDC Matning,Matning +24V,Pressure Sensor Power
+4,Orange (Skärmad),Blå,X3:04,GND (0V),Matning GND,Pressure Sensor Ground
+5,Orange (Skärmad),Svart,X3:05,Signal (AI),UNIPI AI2,Pressure Sensor Signal Input
+6,Orange (Skärmad),Vit,X3:06,Ej ansluten,-,Spare wire
+7,Skärm,Skärmfläta,X3:PE,Jordning,Jordskena,Connect Shield to PE rail.
+
+====================================================
+PLC I/O MAPPNING - SAMMANFATTNING
+====================================================
+I/O Address,Typ,Beskrivning,Hårdvara
+%IX0.0,DI,Stopp,Tryckknapp
+%IX0.1,DI,Start,Tryckknapp
+%IX0.2,DI,Auto-läge,Brytare Pos 1
+%IX0.3,DI,Reset,Tryckknapp
+%IX0.6,DI,Flödesvakt,Via X3:02 (Grå kabel)
+%IX0.7,DI,Nödstopp,Svampknapp
+%IX1.1,DI,Manuell-läge,Brytare Pos 2
+%IW0,AI,Markfukt,0-10V
+%IW1,AI,Pumptryck,Via X3:05 (Orange kabel)
+%QX0.0-6,DO,Ventiler,Relä
+%QX0.7,DO,Mjukstart,Relä
