@@ -47,6 +47,8 @@ MW_MODE_OVERRIDE = 60
 MW_MANUAL_START = 61
 MW_SET_SELECTED = 63
 MW_MENU_BUTTONS = 64        # Menu buttons bitmask
+MW_MANUAL_TIME = 65         # Manual runtime (minutes)
+MW_SPECIAL_MODE = 66        # Special mode: 0=none, 1=Test, 2=Blow
 MW_HEARTBEAT = 70
 MW_HEARTBEAT_CNT = 71
 MW_EVENTMASK = 72
@@ -87,8 +89,10 @@ class Display1View(IntEnum):
 class Display2View(IntEnum):
     """Views for Display 2 (2x8)"""
     OVERVIEW = 0
-    ZONE_SELECTION = 1
-    # TIME_SELECTION removed - manual mode now uses auto times
+    MODE_SELECT = 1      # Select mode: Auto/Manual/Test/Blow
+    ZONE_SELECT = 2      # Select zone (for Manual/Test/Blow)
+    TIME_SELECT = 3      # Select runtime (for Manual only)
+    CONFIRM = 4          # Confirm and start
 
 
 class LCD_I2C:
@@ -631,15 +635,19 @@ class Display2Manager:
         self.lcd = LCD_I2C(i2c_addr, rows=2, cols=8)
         self.modbus = ModbusReader(modbus_host, modbus_port)
         self.current_view = Display2View.OVERVIEW
-        self.selected_zone = 1
-        # selected_time removed - manual mode uses auto times
+        
+        # Selection state
+        self.selected_mode = 0      # 0=Auto, 1=Manual, 2=Test, 3=Blow
+        self.selected_zone = 1      # 1-7
+        self.selected_time = 15     # minutes (1-240)
+        
         self.running = False
         self.thread = None
         
-        # Hold-to-confirm for zone selection
+        # Hold-to-confirm for OK button
         self.button_hold_start = None
-        self.hold_duration = 3.0  # 3 seconds
-        self.zone_confirmed = False
+        self.hold_duration = 2.0  # 2 seconds for OK button hold
+        self.confirmed = False
         
         # Button state tracking for edge detection
         self.prev_buttons = {'left': False, 'right': False, 'ok': False, 'back': False}
@@ -668,47 +676,120 @@ class Display2Manager:
         return buttons
     
     def handle_button_press(self, button: str, is_held: bool = False):
-        """Handle button press event
+        """Handle button press event with new menu workflow
         
-        Button mapping from CSV:
-        - Left (DI11): Navigate Up/Previous or decrease zone
-        - Right (DI12): Navigate Down/Next or increase zone  
-        - OK (DI13): Confirm selection (long press >2s)
-        - Back (DI14): Cancel/Back
+        Workflow:
+        OVERVIEW -> MODE_SELECT -> ZONE_SELECT -> TIME_SELECT (if Manual) -> CONFIRM -> Execute
+        
+        Button mapping:
+        - Left (DI11): Decrease value / Previous
+        - Right (DI12): Increase value / Next
+        - OK (DI13): Confirm and advance (hold >2s on CONFIRM to execute)
+        - Back (DI14): Go back / Cancel
         """
         logger.debug(f"Button {'held' if is_held else 'pressed'}: {button}")
         
         if button == 'back':
-            # Navigate back or cancel - go to overview
-            self.current_view = Display2View.OVERVIEW
-            self.button_hold_start = None
-            self.zone_confirmed = False
-        elif button == 'ok':
+            # Back button: go to previous view or cancel to overview
             if self.current_view == Display2View.OVERVIEW:
-                # Go to zone selection view
-                self.current_view = Display2View.ZONE_SELECTION
-                self.zone_confirmed = False
-            elif self.current_view == Display2View.ZONE_SELECTION:
+                pass  # Already at overview
+            elif self.current_view == Display2View.MODE_SELECT:
+                self.current_view = Display2View.OVERVIEW
+            elif self.current_view == Display2View.ZONE_SELECT:
+                self.current_view = Display2View.MODE_SELECT
+            elif self.current_view == Display2View.TIME_SELECT:
+                self.current_view = Display2View.ZONE_SELECT
+            elif self.current_view == Display2View.CONFIRM:
+                # Go back based on mode
+                if self.selected_mode == 1:  # Manual
+                    self.current_view = Display2View.TIME_SELECT
+                else:
+                    self.current_view = Display2View.ZONE_SELECT
+            self.confirmed = False
+            
+        elif button == 'ok':
+            # OK button: confirm and advance
+            if self.current_view == Display2View.OVERVIEW:
+                # Enter menu system
+                self.current_view = Display2View.MODE_SELECT
+                self.confirmed = False
+                
+            elif self.current_view == Display2View.MODE_SELECT:
+                # Advance to zone selection
+                self.current_view = Display2View.ZONE_SELECT
+                
+            elif self.current_view == Display2View.ZONE_SELECT:
+                # Advance based on mode
+                if self.selected_mode == 1:  # Manual - needs time selection
+                    self.current_view = Display2View.TIME_SELECT
+                else:  # Auto/Test/Blow - go to confirm
+                    self.current_view = Display2View.CONFIRM
+                    
+            elif self.current_view == Display2View.TIME_SELECT:
+                # Advance to confirm
+                self.current_view = Display2View.CONFIRM
+                
+            elif self.current_view == Display2View.CONFIRM:
                 if is_held:
-                    # Confirm zone selection after long press
-                    if not self.zone_confirmed:
-                        logger.info(f"Zone {self.selected_zone} confirmed by holding OK button")
-                        self.zone_confirmed = True
-                        # Write selected zone to Modbus
-                        self.modbus.write_register(MW_SET_SELECTED, self.selected_zone)
+                    # Long press on CONFIRM - execute!
+                    self._execute_selection()
+                    self.current_view = Display2View.OVERVIEW
+                    
         elif button == 'left':
-            if self.current_view == Display2View.ZONE_SELECTION:
-                # Decrement zone (1-7)
+            # Decrease value
+            if self.current_view == Display2View.MODE_SELECT:
+                # Cycle modes: Auto(0) <- Manual(1) <- Test(2) <- Blow(3)
+                self.selected_mode = (self.selected_mode - 1) % 4
+            elif self.current_view == Display2View.ZONE_SELECT:
+                # Decrease zone: 7 <- 1 <- 2 <- ...
                 self.selected_zone = ((self.selected_zone - 2) % 7) + 1
-                self.zone_confirmed = False
+            elif self.current_view == Display2View.TIME_SELECT:
+                # Decrease time by 1 minute (min 1)
+                self.selected_time = max(1, self.selected_time - 1)
+                
         elif button == 'right':
-            if self.current_view == Display2View.ZONE_SELECTION:
-                # Increment zone (1-7)
+            # Increase value
+            if self.current_view == Display2View.MODE_SELECT:
+                # Cycle modes: Auto(0) -> Manual(1) -> Test(2) -> Blow(3)
+                self.selected_mode = (self.selected_mode + 1) % 4
+            elif self.current_view == Display2View.ZONE_SELECT:
+                # Increase zone: 1 -> 2 -> ... -> 7 -> 1
                 self.selected_zone = (self.selected_zone % 7) + 1
-                self.zone_confirmed = False
+            elif self.current_view == Display2View.TIME_SELECT:
+                # Increase time by 1 minute (max 240)
+                self.selected_time = min(240, self.selected_time + 1)
         
         # Update display immediately
         self.update_display()
+    
+    def _execute_selection(self):
+        """Execute the confirmed selection by writing to PLC"""
+        logger.info(f"Executing: Mode={self.selected_mode}, Zone={self.selected_zone}, Time={self.selected_time}")
+        
+        mode_names = ["Auto", "Manual", "Test", "Blow"]
+        logger.info(f"Starting {mode_names[self.selected_mode]} mode")
+        
+        if self.selected_mode == 0:
+            # Auto mode - just set mode and pulse start
+            self.modbus.write_register(MW_MODE_OVERRIDE, 1)  # Auto
+            # Write remote command for auto start (handled by controller)
+            
+        elif self.selected_mode == 1:
+            # Manual mode - set zone, time, mode, and pulse start
+            self.modbus.write_register(MW_SET_SELECTED, self.selected_zone)
+            self.modbus.write_register(MW_MANUAL_TIME, self.selected_time)
+            self.modbus.write_register(MW_MODE_OVERRIDE, 0)  # Manual
+            self.modbus.write_register(MW_MANUAL_START, 1)  # Pulse start
+            
+        elif self.selected_mode == 2:
+            # Test mode - set zone and trigger test
+            self.modbus.write_register(MW_SET_SELECTED, self.selected_zone)
+            self.modbus.write_register(MW_SPECIAL_MODE, 1)  # Test trigger
+            
+        elif self.selected_mode == 3:
+            # Blow mode - set zone and trigger blow
+            self.modbus.write_register(MW_SET_SELECTED, self.selected_zone)
+            self.modbus.write_register(MW_SPECIAL_MODE, 2)  # Blow trigger
     
     def _render_overview(self):
         """Render overview view (2x8)"""
@@ -722,32 +803,78 @@ class Display2Manager:
         
         # Line 0: Mode and Zone
         line0 = f"{mode} Z:{zone}"
-        # Line 1: Pump status
-        line1 = "P:ON " if pump_on else "P:OFF"
+        # Line 1: Pump status / Press OK to enter menu
+        if pump_on:
+            line1 = "P:ON"
+        else:
+            line1 = "OK:Menu"
         
         self.lcd.write_line(0, line0)
         self.lcd.write_line(1, line1)
     
-    def _render_zone_selection(self):
-        """Render zone selection view with hold-to-confirm indicator"""
-        # Line 0: Label and confirmation indicator
-        if self.zone_confirmed:
-            line0 = "Zone OK"
-        else:
-            line0 = "Zone"
+    def _render_mode_select(self):
+        """Render mode selection view"""
+        mode_names = ["Auto", "Manual", "Test", "Blow"]
+        # Line 0: Label
+        line0 = "Mode"
+        # Line 1: Current selection
+        line1 = mode_names[self.selected_mode]
+        
+        self.lcd.write_line(0, line0, align='center')
+        self.lcd.write_line(1, line1, align='center')
+    
+    def _render_zone_select(self):
+        """Render zone selection view"""
+        # Line 0: Label
+        line0 = "Zone"
         # Line 1: Selected zone
         line1 = f"  {self.selected_zone}"
         
         self.lcd.write_line(0, line0, align='center')
         self.lcd.write_line(1, line1)
     
+    def _render_time_select(self):
+        """Render time selection view (Manual mode only)"""
+        # Line 0: Label
+        line0 = "Time"
+        # Line 1: Selected time
+        line1 = f"{self.selected_time:3d}min"
+        
+        self.lcd.write_line(0, line0, align='center')
+        self.lcd.write_line(1, line1, align='center')
+    
+    def _render_confirm(self):
+        """Render confirmation view"""
+        mode_names = ["Auto", "Manual", "Test", "Blow"]
+        mode_abbr = ["A", "M", "T", "B"]
+        
+        # Line 0: Mode abbreviation + Zone (+ Time for Manual)
+        if self.selected_mode == 1:  # Manual
+            line0 = f"{mode_abbr[self.selected_mode]} Z{self.selected_zone} {self.selected_time}m"
+        elif self.selected_mode == 0:  # Auto (no zone needed)
+            line0 = f"{mode_abbr[self.selected_mode]} All"
+        else:  # Test/Blow
+            line0 = f"{mode_abbr[self.selected_mode]} Z{self.selected_zone}"
+        
+        # Line 1: Hold OK to start
+        line1 = "Hold OK"
+        
+        self.lcd.write_line(0, line0, align='center')
+        self.lcd.write_line(1, line1, align='center')
+    
     def update_display(self):
         """Update display based on current view"""
         try:
             if self.current_view == Display2View.OVERVIEW:
                 self._render_overview()
-            elif self.current_view == Display2View.ZONE_SELECTION:
-                self._render_zone_selection()
+            elif self.current_view == Display2View.MODE_SELECT:
+                self._render_mode_select()
+            elif self.current_view == Display2View.ZONE_SELECT:
+                self._render_zone_select()
+            elif self.current_view == Display2View.TIME_SELECT:
+                self._render_time_select()
+            elif self.current_view == Display2View.CONFIRM:
+                self._render_confirm()
         except Exception as e:
             logger.error(f"Error updating Display 2: {e}")
     

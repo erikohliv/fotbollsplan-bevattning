@@ -58,6 +58,8 @@ class MockModbusClient:
             61: 0,    # Manual start
             63: 0,    # Set selected zone
             64: 0,    # Menu buttons (bitmask)
+            65: 15,   # Manual runtime (minutes)
+            66: 0,    # Special mode (0=none, 1=Test, 2=Blow)
             70: 1,    # Heartbeat bit
             71: 123,  # Heartbeat counter
             72: 0,    # Event mask
@@ -204,10 +206,23 @@ def test_display2_buttons():
         assert display.current_view == Display2View.OVERVIEW
         display.update_display()
         
-        # Test OK button (navigate to zone selection)
-        logger.info("\nSimulating OK button press...")
+        # Test OK button (navigate to mode selection)
+        logger.info("\nSimulating OK button press (enter menu)...")
         display.handle_button_press('ok')
-        assert display.current_view == Display2View.ZONE_SELECTION
+        assert display.current_view == Display2View.MODE_SELECT
+        logger.info(f"Current view: {display.current_view.name}")
+        
+        # Test RIGHT button (change mode)
+        logger.info("\nSimulating RIGHT button press (change mode)...")
+        initial_mode = display.selected_mode
+        display.handle_button_press('right', is_held=False)
+        logger.info(f"Mode changed from {initial_mode} to {display.selected_mode}")
+        assert display.selected_mode == (initial_mode + 1) % 4
+        
+        # Test OK button (advance to zone selection)
+        logger.info("\nSimulating OK button press (to zone selection)...")
+        display.handle_button_press('ok')
+        assert display.current_view == Display2View.ZONE_SELECT
         logger.info(f"Current view: {display.current_view.name}")
         
         # Test RIGHT button (increment zone)
@@ -224,15 +239,14 @@ def test_display2_buttons():
         logger.info(f"Zone changed from {current_zone} to {display.selected_zone}")
         assert display.selected_zone == current_zone - 1
         
-        # Test hold-to-confirm
-        logger.info("\nSimulating OK button hold (confirm zone)...")
-        display.zone_confirmed = False
-        display.handle_button_press('ok', is_held=True)
-        logger.info(f"Zone confirmed: {display.zone_confirmed}")
-        assert display.zone_confirmed, "Zone should be confirmed after holding button"
-        
-        # Test BACK button (navigate back to overview)
+        # Test BACK button (navigate back to mode select)
         logger.info("\nSimulating BACK button press...")
+        display.handle_button_press('back', is_held=False)
+        assert display.current_view == Display2View.MODE_SELECT
+        logger.info(f"Current view: {display.current_view.name}")
+        
+        # Test BACK button again (navigate back to overview)
+        logger.info("\nSimulating BACK button press (to overview)...")
         display.handle_button_press('back', is_held=False)
         assert display.current_view == Display2View.OVERVIEW
         logger.info(f"Current view: {display.current_view.name}")
@@ -338,7 +352,7 @@ def test_display_rendering():
         d2 = Display2Manager(i2c_addr=0x3F)
         
         # Switch to zone selection view
-        d2.current_view = Display2View.ZONE_SELECTION
+        d2.current_view = Display2View.ZONE_SELECT
         
         # Test zone boundaries
         d2.selected_zone = 7
@@ -349,11 +363,11 @@ def test_display_rendering():
         d2.handle_button_press('left', is_held=False)  # LEFT decreases zone
         assert d2.selected_zone == 7, "Zone should wrap from 1 to 7"
         
-        # Test hold-to-confirm (long press OK button)
-        d2.selected_zone = 3
-        d2.zone_confirmed = False
-        d2.handle_button_press('ok', is_held=True)  # OK with long press confirms
-        assert d2.zone_confirmed, "Zone should be confirmed after holding button"
+        # Test mode selection
+        d2.current_view = Display2View.MODE_SELECT
+        d2.selected_mode = 0
+        d2.handle_button_press('right', is_held=False)
+        assert d2.selected_mode == 1, "Mode should change from Auto to Manual"
         
         logger.info("\nDisplay rendering test completed successfully!")
 

@@ -76,6 +76,8 @@ PROGRAM Fotbollsplan_Master
     SetSelectedZoneReg : INT; (* %MW63 - skriv 1..7 för direktval (PLC nollar) *)
 
     MenuButtonsReg     : INT; (* %MW64 - Menu buttons status bitmask: bit0=Left, bit1=Right, bit2=OK, bit3=Back *)
+    ManualRunTimeReg   : INT; (* %MW65 - Manuell körtid i minuter (1..240) *)
+    SpecialModeReg     : INT; (* %MW66 - Special mode trigger: 0=none, 1=Test, 2=Blow (PLC nollar) *)
 
     HeartbeatReg       : INT; (* %MW70 - bit0 togglar 1s *)
     HeartbeatCountReg  : INT; (* %MW71 - räknare ++ per 1s, wrap 0..65535 *)
@@ -327,6 +329,17 @@ PROGRAM Fotbollsplan_Master
     ManualStartReg := 0;
   END_IF;
 
+  (* Handle SpecialModeReg: 1=Test, 2=Blow *)
+  IF SpecialModeReg = 1 THEN
+    (* Test mode requested *)
+    Test_Request := TRUE;
+    SpecialModeReg := 0;  (* Clear the register *)
+  ELSIF SpecialModeReg = 2 THEN
+    (* Blow mode requested *)
+    Blow_Request := TRUE;
+    SpecialModeReg := 0;  (* Clear the register *)
+  END_IF;
+
   (* Display Button 1: Increase zone (hold 3s to confirm) *)
   IF Display_Button_1 AND NOT DisplayBtn1_Prev THEN
     (* Button just pressed - increment zone *)
@@ -488,22 +501,31 @@ PROGRAM Fotbollsplan_Master
       Tmr_CloseDelay(IN := FALSE, PT := CloseDelayTIME);
 
     10: (* Förbered zon: ventil först, pump efter OpenDelay *)
-      (* Both auto and manual mode use Set_Tid_Center/Set_Tid_Horn *)
-      IF Nuvarande_Zon <= 3 THEN
-        mins := Set_Tid_Center;
-        IF mins <= 0 THEN
-          Tid_Att_Kora := T#30m;
-        ELSE
-          IF mins > 240 THEN mins := 240; END_IF;
-          Tid_Att_Kora := T#1m * mins;
-        END_IF;
+      (* Manual mode uses ManualRunTimeReg if set, otherwise uses Set_Tid_Center/Set_Tid_Horn *)
+      (* Auto mode always uses Set_Tid_Center/Set_Tid_Horn *)
+      IF (System_Mode = 2) AND (ManualRunTimeReg > 0) THEN
+        (* Manual mode with explicit runtime setting *)
+        mins := ManualRunTimeReg;
+        IF mins > 240 THEN mins := 240; END_IF;
+        Tid_Att_Kora := T#1m * mins;
       ELSE
-        mins := Set_Tid_Horn;
-        IF mins <= 0 THEN
-          Tid_Att_Kora := T#15m;
+        (* Auto mode or manual mode without explicit runtime *)
+        IF Nuvarande_Zon <= 3 THEN
+          mins := Set_Tid_Center;
+          IF mins <= 0 THEN
+            Tid_Att_Kora := T#30m;
+          ELSE
+            IF mins > 240 THEN mins := 240; END_IF;
+            Tid_Att_Kora := T#1m * mins;
+          END_IF;
         ELSE
-          IF mins > 240 THEN mins := 240; END_IF;
-          Tid_Att_Kora := T#1m * mins;
+          mins := Set_Tid_Horn;
+          IF mins <= 0 THEN
+            Tid_Att_Kora := T#15m;
+          ELSE
+            IF mins > 240 THEN mins := 240; END_IF;
+            Tid_Att_Kora := T#1m * mins;
+          END_IF;
         END_IF;
       END_IF;
 
@@ -704,6 +726,8 @@ CONFIGURATION Config0
     SetSelectedZoneReg AT %MW63 : INT;
 
     MenuButtonsReg AT %MW64 : INT;
+    ManualRunTimeReg AT %MW65 : INT;
+    SpecialModeReg AT %MW66 : INT;
 
     HeartbeatReg AT %MW70 : INT;
     HeartbeatCountReg AT %MW71 : INT;

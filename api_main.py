@@ -66,6 +66,8 @@ MW_MODE_OVERRIDE = 60
 MW_MANUAL_START = 61
 MW_SET_SELECTED = 63
 MW_MENU_BUTTONS = 64        # Menu buttons bitmask (bit0=Left, bit1=Right, bit2=OK, bit3=Back)
+MW_MANUAL_TIME = 65         # Manual runtime in minutes (1-240)
+MW_SPECIAL_MODE = 66        # Special mode trigger: 0=none, 1=Test, 2=Blow (PLC clears)
 MW_HEARTBEAT = 70
 MW_HEARTBEAT_CNT = 71
 MW_EVENTMASK = 72
