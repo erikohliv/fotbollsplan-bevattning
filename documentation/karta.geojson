@@ -1,0 +1,73 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Fotbollsplan (Håkanryds IP)",
+        "fill": "#355e3b",
+        "stroke-width": 2,
+        "description": "Hemmaplan för IK Kamp"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [14.5335, 56.0938], 
+            [14.5355, 56.0938], 
+            [14.5355, 56.0928], 
+            [14.5335, 56.0928], 
+            [14.5335, 56.0938]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Stamledning (Ring)",
+        "rortyp": "PEM 75",
+        "stroke": "#0000FF",
+        "stroke-width": 4
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+            [14.5335, 56.0938],
+            [14.5355, 56.0938],
+            [14.5355, 56.0928],
+            [14.5335, 56.0928],
+            [14.5335, 56.0938]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Ventil Zon 4 (Övre Höger)",
+        "typ": "Hunter PGV 1.5",
+        "status": "WARNING: High Pressure",
+        "marker-color": "#ff0000",
+        "marker-symbol": "fuel"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [14.5354, 56.0937]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Ventil Zon 1 (Mitten)",
+        "typ": "Hunter PGV 1.5",
+        "status": "OPTIMAL",
+        "marker-color": "#00FF00",
+        "marker-symbol": "star"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [14.5345, 56.0933]
+      }
+    }
+  ]
+}
