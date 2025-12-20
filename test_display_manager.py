@@ -47,16 +47,24 @@ class MockModbusClient:
         self.timeout = timeout
         self.connected = False
         
+        # Special mode constants
+        self.SPECIAL_MODE_NONE = 0
+        self.SPECIAL_MODE_TEST = 1
+        self.SPECIAL_MODE_BLOW = 2
+        
         # Simulated register values
         self.registers = {
             50: 2,    # Current zone
             51: 1,    # Pump on
             52: 3,    # Stage
             53: 2,    # Selected zone
+            55: 1,    # Flow switch (1=flow OK)
             60: 1,    # Mode (1=Auto)
             61: 0,    # Manual start
             63: 0,    # Set selected zone
-            64: 5,    # Manual time
+            64: 0,    # Menu buttons (bitmask)
+            65: 15,   # Manual runtime (minutes)
+            66: self.SPECIAL_MODE_NONE,  # Special mode (0=none, 1=Test, 2=Blow)
             70: 1,    # Heartbeat bit
             71: 123,  # Heartbeat counter
             72: 0,    # Event mask
@@ -64,6 +72,7 @@ class MockModbusClient:
             30: 45,   # Moisture
             31: 2,    # Rain 24h
             32: 18,   # Temperature
+            33: 75,   # Pressure
         }
     
     def connect(self):
@@ -181,7 +190,7 @@ def test_display2_buttons():
     
     mock_gpio = MockGPIO()
     
-    # Mock both the module and the import
+    # Mock both the module and the import (no longer needed for GPIO but kept for compatibility)
     import sys
     sys.modules['RPi'] = type(sys)('RPi')
     sys.modules['RPi.GPIO'] = mock_gpio
@@ -191,7 +200,7 @@ def test_display2_buttons():
         
         from display_manager import Display2Manager, Display2View
         
-        # Initialize display
+        # Initialize display (button_pins parameter is deprecated but still accepted)
         display = Display2Manager(
             i2c_addr=0x3F,
             modbus_host="127.0.0.1"
@@ -202,36 +211,48 @@ def test_display2_buttons():
         assert display.current_view == Display2View.OVERVIEW
         display.update_display()
         
-        # Test RIGHT button (navigate to next view)
-        logger.info("\nSimulating RIGHT button press...")
-        display.handle_button_press('right')
-        assert display.current_view == Display2View.ZONE_SELECTION
+        # Test OK button (navigate to mode selection)
+        logger.info("\nSimulating OK button press (enter menu)...")
+        display.handle_button_press('ok')
+        assert display.current_view == Display2View.MODE_SELECT
         logger.info(f"Current view: {display.current_view.name}")
         
-        # Test UP button (increment zone)
-        logger.info("\nSimulating UP button press (increment zone)...")
+        # Test RIGHT button (change mode)
+        logger.info("\nSimulating RIGHT button press (change mode)...")
+        initial_mode = display.selected_mode
+        display.handle_button_press('right', is_held=False)
+        logger.info(f"Mode changed from {initial_mode} to {display.selected_mode}")
+        assert display.selected_mode == (initial_mode + 1) % 4
+        
+        # Test OK button (advance to zone selection)
+        logger.info("\nSimulating OK button press (to zone selection)...")
+        display.handle_button_press('ok')
+        assert display.current_view == Display2View.ZONE_SELECT
+        logger.info(f"Current view: {display.current_view.name}")
+        
+        # Test RIGHT button (increment zone)
+        logger.info("\nSimulating RIGHT button press (increment zone)...")
         initial_zone = display.selected_zone
-        display.handle_button_press('up', is_held=False)
+        display.handle_button_press('right', is_held=False)
         logger.info(f"Zone changed from {initial_zone} to {display.selected_zone}")
         assert display.selected_zone == initial_zone + 1
         
-        # Test DOWN button (decrement zone)
-        logger.info("\nSimulating DOWN button press (decrement zone)...")
+        # Test LEFT button (decrement zone)
+        logger.info("\nSimulating LEFT button press (decrement zone)...")
         current_zone = display.selected_zone
-        display.handle_button_press('down', is_held=False)
+        display.handle_button_press('left', is_held=False)
         logger.info(f"Zone changed from {current_zone} to {display.selected_zone}")
         assert display.selected_zone == current_zone - 1
         
-        # Test hold-to-confirm
-        logger.info("\nSimulating UP button hold (confirm zone)...")
-        display.zone_confirmed = False
-        display.handle_button_press('up', is_held=True)
-        logger.info(f"Zone confirmed: {display.zone_confirmed}")
-        assert display.zone_confirmed, "Zone should be confirmed after holding button"
+        # Test BACK button (navigate back to mode select)
+        logger.info("\nSimulating BACK button press...")
+        display.handle_button_press('back', is_held=False)
+        assert display.current_view == Display2View.MODE_SELECT
+        logger.info(f"Current view: {display.current_view.name}")
         
-        # Test RIGHT button (navigate back to overview - only 2 views now)
-        logger.info("\nSimulating RIGHT button press...")
-        display.handle_button_press('right', is_held=False)
+        # Test BACK button again (navigate back to overview)
+        logger.info("\nSimulating BACK button press (to overview)...")
+        display.handle_button_press('back', is_held=False)
         assert display.current_view == Display2View.OVERVIEW
         logger.info(f"Current view: {display.current_view.name}")
         
@@ -336,22 +357,22 @@ def test_display_rendering():
         d2 = Display2Manager(i2c_addr=0x3F)
         
         # Switch to zone selection view
-        d2.current_view = Display2View.ZONE_SELECTION
+        d2.current_view = Display2View.ZONE_SELECT
         
         # Test zone boundaries
         d2.selected_zone = 7
-        d2.handle_button_press('up', is_held=False)
+        d2.handle_button_press('right', is_held=False)  # RIGHT increases zone
         assert d2.selected_zone == 1, "Zone should wrap from 7 to 1"
         
         d2.selected_zone = 1
-        d2.handle_button_press('down', is_held=False)
+        d2.handle_button_press('left', is_held=False)  # LEFT decreases zone
         assert d2.selected_zone == 7, "Zone should wrap from 1 to 7"
         
-        # Test hold-to-confirm (3 second hold)
-        d2.selected_zone = 3
-        d2.zone_confirmed = False
-        d2.handle_button_press('up', is_held=True)
-        assert d2.zone_confirmed, "Zone should be confirmed after holding button"
+        # Test mode selection
+        d2.current_view = Display2View.MODE_SELECT
+        d2.selected_mode = 0
+        d2.handle_button_press('right', is_held=False)
+        assert d2.selected_mode == 1, "Mode should change from Auto to Manual"
         
         logger.info("\nDisplay rendering test completed successfully!")
 

@@ -53,25 +53,29 @@ MW_TID_HORN = 21
 MW_MARKFUKT = 30
 MW_REGEN24 = 31
 MW_TEMP = 32
-MW_AUTO_OVERRIDE = 33      # AutoOverride från befintlig mappning
-MW_REGEN_THRESHOLD = 34    # Regntröskel i mm (default 5)
-MW_MOISTURE_THRESHOLD = 35 # Markfukttröskel i % (default 80)
+MW_PRESSURE = 33            # Tryckgivare värde (0-100%)
+MW_AUTO_OVERRIDE = 34       # AutoOverride (flyttad från 33)
+MW_REGEN_THRESHOLD = 35     # Regntröskel i mm (default 5) (flyttad från 34)
+MW_MOISTURE_THRESHOLD = 36  # Markfukttröskel i % (default 80) (flyttad från 35)
 MW_STATUS_ZONE = 50
 MW_STATUS_PUMP = 51
 MW_STATUS_STEG = 52
 MW_SELECTED_ZONE = 53
+MW_FLOW_SWITCH = 55         # Flödesvakt status (0=ingen flöde, 1=flöde OK)
 MW_MODE_OVERRIDE = 60
 MW_MANUAL_START = 61
 MW_SET_SELECTED = 63
-MW_MANUAL_TIME = 64
+MW_MENU_BUTTONS = 64        # Menu buttons bitmask (bit0=Left, bit1=Right, bit2=OK, bit3=Back)
+MW_MANUAL_TIME = 65         # Manual runtime in minutes (1-240)
+MW_SPECIAL_MODE = 66        # Special mode trigger: 0=none, 1=Test, 2=Blow (PLC clears)
 MW_HEARTBEAT = 70
 MW_HEARTBEAT_CNT = 71
 MW_EVENTMASK = 72
 MW_BLOCK_REASON = 73
-MW_TEST_MODE = 80          # Test mode aktivering (1=aktiv, 0=inaktiv)
-MW_TEST_ZONE_RESULT = 81   # Test resultat för aktuell zon (bitmask för zoner 1-7)
-MW_ERROR_RESET = 82        # Error reset trigger (skriv 1 för att nollställa fel)
-MW_MODE = 100              # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
+MW_TEST_MODE = 80           # Test mode aktivering (1=aktiv, 0=inaktiv)
+MW_TEST_ZONE_RESULT = 81    # Test resultat för aktuell zon (bitmask för zoner 1-7)
+MW_ERROR_RESET = 82         # Error reset trigger (skriv 1 för att nollställa fel)
+MW_MODE = 100               # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
 
 # Zone constants
 MIN_ZONE = 1

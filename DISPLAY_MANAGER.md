@@ -18,18 +18,19 @@ The Display Manager implements control for two I2C LCD displays used in the Fotb
 ### Display 2
 - 8 columns × 2 rows LCD with I2C interface (HD44780-based)
 - Default I2C address: `0x3F` (configurable)
-- 4 buttons connected to GPIO:
-  - UP: GPIO 17 (default)
-  - DOWN: GPIO 27 (default)
-  - LEFT: GPIO 22 (default)
-  - RIGHT: GPIO 23 (default)
+- 4 buttons connected to PLC (read via Modbus):
+  - LEFT: DI11 (Meny Vänster/Upp)
+  - RIGHT: DI12 (Meny Höger/Ner)
+  - OK: DI13 (Meny OK/Välj)
+  - BACK: DI14 (Meny Tillbaka)
+- Buttons read from Modbus register MW64 (bitmask)
 - Used for manual control and settings
 
 ### Required Hardware
 - Raspberry Pi (or compatible) with I2C enabled
 - Two I2C LCD displays (20x4 and 2x8)
-- Four push buttons (for Display 2)
-- Pull-up resistors for buttons (or use internal pull-ups)
+- Four push buttons connected to UNIPI PLC inputs (DI11-DI14)
+- UNIPI PLC with Modbus TCP interface
 
 ## Installation
 
@@ -50,10 +51,9 @@ sudo apt-get install -y python3-pip i2c-tools python3-smbus
 
 # Install Python packages
 pip install -r display_requirements.txt
-
-# For Raspberry Pi GPIO support
-pip install RPi.GPIO
 ```
+
+**Note:** GPIO support (RPi.GPIO) is no longer required as buttons are read from PLC via Modbus.
 
 ### 3. Verify I2C Devices
 
@@ -72,19 +72,18 @@ Find your display addresses using `i2cdetect -y 1`. Common addresses:
 - `0x27`, `0x3F` - PCF8574-based I2C adapters
 - `0x20`, `0x21` - MCP23008/23017-based adapters
 
-### GPIO Pin Configuration
+### Menu Button Configuration
 
-Default button mapping (BCM numbering):
+Menu buttons are connected to UNIPI PLC inputs (DI11-DI14) and read via Modbus register MW64:
 ```python
-button_pins = {
-    'up': 17,      # GPIO 17 (Physical pin 11)
-    'down': 27,    # GPIO 27 (Physical pin 13)
-    'left': 22,    # GPIO 22 (Physical pin 15)
-    'right': 23    # GPIO 23 (Physical pin 16)
-}
+# Button mapping in PLC (read from MW64 bitmask):
+# bit0: LEFT (DI11)  - Meny Vänster/Upp
+# bit1: RIGHT (DI12) - Meny Höger/Ner
+# bit2: OK (DI13)    - Meny OK/Välj (long press >2s to confirm)
+# bit3: BACK (DI14)  - Meny Tillbaka
 ```
 
-Modify these in the `Display2Manager` constructor if needed.
+No configuration needed - buttons are automatically read from PLC.
 
 ## Usage
 
@@ -343,15 +342,19 @@ sudo nano /boot/config.txt
 3. Check 5V power supply to LCD
 4. Verify I2C wiring: SDA, SCL, VCC, GND
 
-### GPIO Button Issues
+### Button Input Issues
+
+Buttons are now read from PLC via Modbus (MW64). To test:
 
 ```bash
-# Test GPIO
-python3 -c "import RPi.GPIO as GPIO; GPIO.setmode(GPIO.BCM); print('GPIO OK')"
+# Test Modbus connection
+python3 -c "from pymodbus.client import ModbusTcpClient; c = ModbusTcpClient('127.0.0.1'); print(c.connect())"
 
-# Check button wiring - should show LOW when pressed
-gpio readall
+# Read button status from MW64
+python3 -c "from pymodbus.client import ModbusTcpClient; c = ModbusTcpClient('127.0.0.1'); c.connect(); r = c.read_holding_registers(64, 1); print(f'MW64 = {r.registers[0]}')"
 ```
+
+Check button wiring to PLC inputs DI11-DI14.
 
 ### Modbus Connection Issues
 
@@ -384,8 +387,8 @@ Manages the 20x4 auto-rotating display.
 
 #### `Display2Manager`
 Manages the 2x8 interactive display.
-- 3 views (overview, zone, time)
-- GPIO button handling
+- 2 views (overview, zone selection)
+- Modbus-based button reading from PLC (DI11-DI14 via MW64)
 - Immediate display updates on button press
 
 #### `AutoScheduler`
@@ -453,25 +456,27 @@ except KeyboardInterrupt:
     scheduler.stop()
 ```
 
-### Custom Button Pins
+### Button Reading
+
+Buttons are automatically read from PLC via Modbus (MW64). No custom configuration needed.
 
 ```python
 from display_manager import Display2Manager
 
-# Custom GPIO pins
-custom_pins = {
-    'up': 5,
-    'down': 6,
-    'left': 13,
-    'right': 19
-}
-
+# Display manager automatically reads buttons from MW64
 display2 = Display2Manager(
     i2c_addr=0x3F,
-    button_pins=custom_pins
+    modbus_host="127.0.0.1",
+    modbus_port=502
 )
 display2.start()
 ```
+
+Button mapping (from forbindningstabell.csv):
+- LEFT (DI11): Navigate/decrease zone
+- RIGHT (DI12): Navigate/increase zone  
+- OK (DI13): Confirm (hold >2s)
+- BACK (DI14): Cancel/back to overview
 
 ## License
 
