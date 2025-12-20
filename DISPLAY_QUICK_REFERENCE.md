@@ -39,75 +39,135 @@ Current time
 
 ---
 
-## Display 2 (2x8) - Manual Control
+## Display 2 (2x8) - Manual Control & Mode Selection
 **Location**: Operator panel  
 **Type**: Interactive with 4 buttons (via PLC inputs DI11-DI14)  
-**For manual zone control**
+**For complete irrigation control**
 
 ### Button Functions
 
 ```
     ┌───────┐
-    │  OK   │  - Confirm (hold >2s)
+    │  OK   │  - Confirm / Advance (hold >2s on CONFIRM)
     └───────┘
 ┌───────┐ ┌───────┐
-│ LEFT  │ │ RIGHT │  - Decrease/Increase zone
+│ LEFT  │ │ RIGHT │  - Decrease/Increase value
 └───────┘ └───────┘
     ┌───────┐
-    │ BACK  │  - Cancel/Back
+    │ BACK  │  - Go back / Cancel
     └───────┘
 ```
 
 Buttons are read from PLC via Modbus (MW64).
 
-### View Navigation
-**OK**: Enter zone selection  
-**BACK**: Return to overview  
-**LEFT/RIGHT**: Adjust zone when in selection view
+### Complete Menu System
 
-Views: OVERVIEW → ZONE SELECTION → OVERVIEW
-
-### View Details
+**Flow**: OVERVIEW → MODE → ZONE → TIME (if Manual) → CONFIRM → Execute
 
 #### VIEW 1: OVERVIEW
 ```
 A Z:2
-P:ON
+OK:Menu
 ```
-- **A/M**: Auto/Manual mode
-- **Z**: Current zone (1-7)
-- **P**: Pump (ON/OFF)
-- **Press OK** to enter zone selection
+- **A/M**: Current system mode (Auto/Manual)
+- **Z**: Current active zone (1-7)
+- **P:ON/OFF**: Pump status when running
+- **OK:Menu**: Press OK to enter menu system
 
-#### VIEW 2: ZONE SELECTION
+#### VIEW 2: MODE SELECT
 ```
-Zone
-  3
+  Mode
+ Manual
 ```
-- **RIGHT**: Increment zone (7→1 wrap)
-- **LEFT**: Decrement zone (1→7 wrap)
-- **OK (hold >2s)**: Confirm zone selection
-- **BACK**: Cancel and return to overview
+**Modes Available**:
+- **Auto**: Full sequence (all zones, configured times)
+- **Manual**: Single zone with custom time
+- **Test**: Short test run on selected zone
+- **Blow**: Blow-out mode on selected zone
+
+**Controls**:
+- **LEFT/RIGHT**: Cycle through modes
+- **OK**: Confirm mode and advance to zone selection
+- **BACK**: Return to overview
+
+#### VIEW 3: ZONE SELECT
+```
+  Zone
+   3
+```
+- **LEFT**: Decrease zone (1 ← 7)
+- **RIGHT**: Increase zone (1 → 7)
+- **OK**: Confirm zone (advances to TIME or CONFIRM based on mode)
+- **BACK**: Return to mode selection
 - **Range**: 1-7
 
-**Note:** Manual mode uses auto-configured times (Set_Tid_Center/Horn)
+**Note**: Zone selection skipped for Auto mode (runs all zones)
 
-### Manual Operation Workflow
+#### VIEW 4: TIME SELECT (Manual Mode Only)
+```
+  Time
+ 15min
+```
+- **LEFT**: Decrease time by 1 minute (min: 1)
+- **RIGHT**: Increase time by 1 minute (max: 240)
+- **OK**: Confirm time and advance to confirm screen
+- **BACK**: Return to zone selection
+- **Range**: 1-240 minutes
 
-1. **Press OK** to enter zone selection
-2. **Press LEFT/RIGHT** to select zone (1-7)
-3. **Hold OK >2s** to confirm zone
-4. **Press physical START button** or trigger via API
-5. Display shows OVERVIEW with active zone
+#### VIEW 5: CONFIRM
+```
+ M Z3 15m
+ Hold OK
+```
+**Display Format**:
+- **A All**: Auto mode (all zones)
+- **M Z3 15m**: Manual zone 3, 15 minutes
+- **T Z5**: Test mode zone 5
+- **B Z2**: Blow mode zone 2
+
+**Action**:
+- **Hold OK >2s**: Execute selection and start irrigation
+- **BACK**: Return to previous view (TIME or ZONE)
+
+### Complete Operation Workflows
+
+#### Auto Mode
+1. **OVERVIEW** → Press OK
+2. **MODE** → Select "Auto" → OK
+3. **CONFIRM** "A All" → Hold OK >2s
+4. System runs all zones with configured times
+
+#### Manual Mode
+1. **OVERVIEW** → Press OK
+2. **MODE** → Select "Manual" → OK
+3. **ZONE** → Choose zone (e.g., 3) → OK
+4. **TIME** → Set minutes (e.g., 15) → OK
+5. **CONFIRM** "M Z3 15m" → Hold OK >2s
+6. System runs zone 3 for 15 minutes
+
+#### Test Mode
+1. **OVERVIEW** → Press OK
+2. **MODE** → Select "Test" → OK
+3. **ZONE** → Choose zone → OK
+4. **CONFIRM** "T Z5" → Hold OK >2s
+5. System runs short test on zone 5
+
+#### Blow Mode (Winterization)
+1. **OVERVIEW** → Press OK
+2. **MODE** → Select "Blow" → OK
+3. **ZONE** → Choose zone → OK
+4. **CONFIRM** "B Z2" → Hold OK >2s
+5. System runs blow-out on zone 2
 
 ### Quick Actions
 
 | Task | Steps |
 |------|-------|
 | Check current status | View OVERVIEW display |
-| Select zone 5 | OK → LEFT/RIGHT to 5 → Hold OK >2s |
-| Cancel selection | Press BACK |
-| View system mode | Check OVERVIEW, see A/M indicator |
+| Start auto watering | OK → Auto → OK → Hold OK |
+| Manual zone 5, 20 min | OK → Manual → OK → Zone 5 → OK → 20 min → OK → Hold OK |
+| Test zone 3 | OK → Test → OK → Zone 3 → OK → Hold OK |
+| Cancel at any time | Press BACK button |
 
 ---
 

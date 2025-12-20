@@ -152,6 +152,14 @@ sudo systemctl start bevattning-api
   - bit1: Höger (DI12)
   - bit2: OK (DI13)
   - bit3: Tillbaka (DI14)
+- **MW65** ManualRunTimeReg (manuell körtid i minuter, 1-240)
+  - Används när manual mode triggas via display
+  - Om ej satt, använder system Set_Tid_Center/Horn
+- **MW66** SpecialModeReg (trigger för special modes)
+  - 0=ingen åtgärd
+  - 1=Test mode (kort testkörning)
+  - 2=Blow mode (bläs ut/vinterberedning)
+  - PLC nollar registret efter start
 - **MW70** HeartbeatReg (bit0 togglar varje ~1s)
 - **MW71** HeartbeatCountReg (0..65535, ++ varje ~1s)
 - **MW72** EventMaskReg (bitmask)
@@ -179,11 +187,14 @@ sudo systemctl start bevattning-api
   - Fysisk 1-0-2 switch har två separata ingångar: DI3 (Auto) och DI10 (Manual)
 
 ## Sekvens & anti-vattenslag
-- **Start (auto):** Ventil för zon öppnas, OpenDelay löper, därefter pump på och kör-timer. Auto-läge kör alla zoner 1-7.
-- **Start (manual):** Välj zon med menyknappar (DI11-DI14 läses via MW64). Manual-läge kör **endast den valda zonen**, med samma tider som auto-läge.
+- **Start (auto):** Ventil för zon öppnas, OpenDelay löper, därefter pump på och kör-timer. Auto-läge kör alla zoner 1-7 med Set_Tid_Center/Horn.
+- **Start (manual):** Använd displaymenyn: MODE→Manual, välj zon och tid (MW65), bekräfta. Kör **endast den valda zonen** med vald tid.
+- **Start (test):** Använd displaymenyn: MODE→Test, välj zon, bekräfta. Kort testkörning på vald zon via MW66=1.
+- **Start (blow):** Använd displaymenyn: MODE→Blow, välj zon, bekräfta. Blow-out mode på vald zon via MW66=2.
 - **Zonbyte:** När körtid är slut: pump av först, CloseDelay, stäng ventiler, PauseDelay, nästa zon, OpenDelay, pump på.
 - **Stop/E-stop:** Pump av direkt, CloseDelay, stäng ventiler. E-stop nollar sekvens och blockreason=4.
 - **Flödesvaktsskydd:** Flödesvakt (DI6) via Terminal X3 ger torrkörsningsskydd för pump. Status läses till MW55.
+- **Displaymeny:** Komplett meny via knappar DI11-DI14: OVERVIEW → MODE → ZONE → TIME (manual) → CONFIRM (håll OK >2s).
 - **LED-indikatorer:** BORTTAGNA - aktiv zon och återstående tid visas på system-display istället.
 - **Display-knappar:** Button 1 (öka zon), Button 2 (minska zon). Håll knapp i 3 sekunder för att bekräfta val.
 - **21:00 auto-läge övergång:** Systemet övergår passivt till auto-läge kl 21:00 dagligen. Om en sekvens körs fortsätter den utan avbrott och övergången sker efteråt.
