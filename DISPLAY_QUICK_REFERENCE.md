@@ -41,27 +41,31 @@ Current time
 
 ## Display 2 (2x8) - Manual Control
 **Location**: Operator panel  
-**Type**: Interactive with 4 buttons  
+**Type**: Interactive with 4 buttons (via PLC inputs DI11-DI14)  
 **For manual zone control**
 
 ### Button Functions
 
 ```
     ┌───────┐
-    │  UP   │  - Increment value
+    │  OK   │  - Confirm (hold >2s)
     └───────┘
 ┌───────┐ ┌───────┐
-│ LEFT  │ │ RIGHT │  - Switch views
+│ LEFT  │ │ RIGHT │  - Decrease/Increase zone
 └───────┘ └───────┘
     ┌───────┐
-    │ DOWN  │  - Decrement value
+    │ BACK  │  - Cancel/Back
     └───────┘
 ```
 
+Buttons are read from PLC via Modbus (MW64).
+
 ### View Navigation
-**LEFT**: ← Previous view  
-**RIGHT**: → Next view  
-Views cycle: OVERVIEW → ZONE → TIME → OVERVIEW
+**OK**: Enter zone selection  
+**BACK**: Return to overview  
+**LEFT/RIGHT**: Adjust zone when in selection view
+
+Views: OVERVIEW → ZONE SELECTION → OVERVIEW
 
 ### View Details
 
@@ -73,43 +77,37 @@ P:ON
 - **A/M**: Auto/Manual mode
 - **Z**: Current zone (1-7)
 - **P**: Pump (ON/OFF)
-- **No editing**
+- **Press OK** to enter zone selection
 
 #### VIEW 2: ZONE SELECTION
 ```
 Zone
   3
 ```
-- **UP**: Next zone (7→1)
-- **DOWN**: Previous zone (1→7)
+- **RIGHT**: Increment zone (7→1 wrap)
+- **LEFT**: Decrement zone (1→7 wrap)
+- **OK (hold >2s)**: Confirm zone selection
+- **BACK**: Cancel and return to overview
 - **Range**: 1-7
 
-#### VIEW 3: TIME SELECTION
-```
-Time
- 15min
-```
-- **UP**: +1 minute
-- **DOWN**: -1 minute
-- **Range**: 1-240 min
+**Note:** Manual mode uses auto-configured times (Set_Tid_Center/Horn)
 
 ### Manual Operation Workflow
 
-1. **Press RIGHT** until "Zone" appears
-2. **Press UP/DOWN** to select zone (1-7)
-3. **Press RIGHT** to "Time" view
-4. **Press UP/DOWN** to set minutes (1-240)
-5. **Trigger manual start** via PLC or API
-6. Display returns to OVERVIEW
+1. **Press OK** to enter zone selection
+2. **Press LEFT/RIGHT** to select zone (1-7)
+3. **Hold OK >2s** to confirm zone
+4. **Press physical START button** or trigger via API
+5. Display shows OVERVIEW with active zone
 
 ### Quick Actions
 
 | Task | Steps |
 |------|-------|
-| Check current status | Wait for OVERVIEW or press LEFT/RIGHT to find it |
-| Select zone 5 | RIGHT to Zone → UP/DOWN to 5 |
-| Set 10 minutes | RIGHT to Time → UP/DOWN to 10 |
-| View system mode | LEFT/RIGHT to OVERVIEW, check A/M |
+| Check current status | View OVERVIEW display |
+| Select zone 5 | OK → LEFT/RIGHT to 5 → Hold OK >2s |
+| Cancel selection | Press BACK |
+| View system mode | Check OVERVIEW, see A/M indicator |
 
 ---
 
@@ -140,8 +138,8 @@ Time
 | Problem | Solution |
 |---------|----------|
 | No text | Check I2C address (default: 0x3F) |
-| Buttons don't work | Check GPIO connections |
-| Values won't change | Verify correct view (Zone/Time) |
+| Buttons don't work | Check PLC Modbus connection, verify DI11-DI14 wiring |
+| Values won't change | Verify in Zone Selection view, check Modbus MW64 |
 
 ### General
 | Problem | Solution |

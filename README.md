@@ -583,7 +583,7 @@ curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
 - **Auto-bevattning:** Använd `bevattning_scheduler.py` med systemd timer för daglig körning kl 01:00.
 - FastAPI kör som systemd-tjänst för app/webb-styrning.
 - Display Manager körs som systemd-tjänst för lokal styrning och övervakning.
-- Se till att Siemens LOGO/VFD hanterar mjukstart; pumpstyrningen sker via `Signal_Pump` (på/av), men rampning sköts av VFD.
+- Mjukstartare hanterar motorstart/stopp; pumpstyrningen sker via `Signal_Pump` (på/av, Relä 8), rampning sköts av mjukstartaren.
 
 ### Automatisk bevattning (01:00 dagligen)
 
