@@ -1,0 +1,92 @@
+{
+  "project_meta": {
+    "name": "Fotbollsplan Bevattning - As-Built 2025",
+    "description": "System configuration with hybrid pipe network (PEM 90/75/50).",
+    "instructions_for_copilot": "Use the pipe dimensions defined here to estimate pressure drops. Zone 7 has higher friction due to PEM 50.",
+    "last_updated": "2025-05-20"
+  },
+  "pump_station": {
+    "model": "E.M.S. DX 12-40T",
+    "specs": {
+      "power_kw": 4.0,
+      "max_head_m": 116,
+      "max_flow_l_min": 250
+    },
+    "constraints": {
+      "warning": "Pump creates high static pressure (>10 bar) at low flow rates."
+    }
+  },
+  "pipe_network": {
+    "primary_feed": {
+      "from": "Pump",
+      "to": "Point 2 (T-junction)",
+      "material": "PEM 90",
+      "status": "New"
+    },
+    "right_leg_&_top_left": {
+      "path": "Pt 2 -> Pt 6, 8, 10 (Right) & Pt 14 (Top Left)",
+      "material": "PEM 75",
+      "status": "New - Low Friction"
+    },
+    "left_leg_bottom": {
+      "path": "Pt 14 -> Pt 17/18 (Zone 7)",
+      "material": "PEM 50",
+      "status": "Old - High Friction (Natural flow restriction)"
+    }
+  },
+  "zones": [
+    {
+      "zone_id": 1,
+      "location": "Center Top",
+      "sprinkler": "Hunter I-90",
+      "feed_pipe": "PEM 75",
+      "status": "OPTIMAL"
+    },
+    {
+      "zone_id": 2,
+      "location": "Center Middle",
+      "sprinkler": "Hunter I-90",
+      "feed_pipe": "PEM 75",
+      "status": "OPTIMAL"
+    },
+    {
+      "zone_id": 3,
+      "location": "Center Bottom",
+      "sprinkler": "Hunter I-90",
+      "feed_pipe": "PEM 75",
+      "status": "OPTIMAL"
+    },
+    {
+      "zone_id": 4,
+      "location": "Corner Top Right",
+      "sprinkler": "Hunter I-25 (2st)",
+      "feed_pipe": "PEM 75",
+      "pressure_note": "Direct feed from PEM 75.",
+      "status": "WARNING: HIGH PRESSURE (>10 bar)"
+    },
+    {
+      "zone_id": 5,
+      "location": "Corner Bottom Right",
+      "sprinkler": "Hunter I-25 (2st)",
+      "feed_pipe": "PEM 75",
+      "pressure_note": "Direct feed from PEM 75.",
+      "status": "WARNING: HIGH PRESSURE (>10 bar)"
+    },
+    {
+      "zone_id": 6,
+      "location": "Corner Top Left",
+      "sprinkler": "Hunter I-25 (2st)",
+      "feed_pipe": "PEM 75 (to valve)",
+      "pressure_note": "Direct feed from PEM 75.",
+      "status": "WARNING: HIGH PRESSURE (>10 bar)"
+    },
+    {
+      "zone_id": 7,
+      "location": "Corner Bottom Left",
+      "sprinkler": "Hunter I-25 (2st)",
+      "feed_pipe": "PEM 50 (from Pt 14)",
+      "pressure_note": "Pressure reduced by friction in PEM 50 pipe.",
+      "status": "ELEVATED but ACCEPTABLE (~8-9 bar)"
+    }
+  ]
+}
