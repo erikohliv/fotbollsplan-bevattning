@@ -1,0 +1,106 @@
+{
+  "project_meta": {
+    "name": "Fotbollsplan Bevattning - As-Built 2025",
+    "description": "Configuration file containing hardware specs, pressure calculations, and logic for GitHub Copilot assistance.",
+    "instructions_for_copilot": "Use this file to answer technical questions. If a valve is changed to a 'Flow Control' type in the 'zones' list, assume the high pressure warning is resolved.",
+    "last_updated": "2025-05-20"
+  },
+  "pump_station": {
+    "model": "E.M.S. DX 12-40T",
+    "specs": {
+      "power_kw": 4.0,
+      "max_head_m": 116,
+      "max_flow_l_min": 250
+    },
+    "constraints": {
+      "warning": "Pump generates very high pressure (>10 bar) at low flows (<100 l/min). Critical for small zones."
+    }
+  },
+  "component_catalog": {
+    "valves": {
+      "standard": {
+        "id": "V_STD",
+        "model": "Hunter PGV 1½ (Standard)",
+        "flow_control": false,
+        "pressure_drop_bar": 0.27
+      },
+      "throttled": {
+        "id": "V_FC",
+        "model": "Hunter PGV 1½ FC (Flow Control)",
+        "flow_control": true,
+        "pressure_drop_bar": "Variable (User Adjusted)",
+        "note": "Can reduce downstream pressure manually"
+      }
+    },
+    "pipes": {
+      "main_loop": "PEM 75 PN16 (New)",
+      "laterals_center": "PEM 63 (Existing)",
+      "laterals_corners": "PEM 32/40 (Existing)"
+    }
+  },
+  "zones": [
+    {
+      "zone_id": 1,
+      "location": "Center Top",
+      "valve_installed": "V_STD",
+      "sprinkler": "Hunter I-90 (1st)",
+      "target_flow_l_min": 180,
+      "estimated_pressure_bar": 7.2,
+      "status": "OPTIMAL"
+    },
+    {
+      "zone_id": 2,
+      "location": "Center Middle",
+      "valve_installed": "V_STD",
+      "sprinkler": "Hunter I-90 (1st)",
+      "target_flow_l_min": 180,
+      "estimated_pressure_bar": 7.0,
+      "status": "OPTIMAL"
+    },
+    {
+      "zone_id": 3,
+      "location": "Center Bottom",
+      "valve_installed": "V_STD",
+      "sprinkler": "Hunter I-90 (1st)",
+      "target_flow_l_min": 180,
+      "estimated_pressure_bar": 7.0,
+      "status": "OPTIMAL"
+    },
+    {
+      "zone_id": 4,
+      "location": "Corner Top Right",
+      "valve_installed": "V_STD",
+      "sprinkler": "Hunter I-25 (2st)",
+      "target_flow_l_min": 90,
+      "estimated_pressure_bar": 10.5,
+      "status": "WARNING: HIGH PRESSURE (>10 bar). Pump operating near shut-off head."
+    },
+    {
+      "zone_id": 5,
+      "location": "Corner Bottom Right",
+      "valve_installed": "V_STD",
+      "sprinkler": "Hunter I-25 (2st)",
+      "target_flow_l_min": 90,
+      "estimated_pressure_bar": 10.5,
+      "status": "WARNING: HIGH PRESSURE (>10 bar). Pump operating near shut-off head."
+    },
+    {
+      "zone_id": 6,
+      "location": "Corner Top Left",
+      "valve_installed": "V_STD",
+      "sprinkler": "Hunter I-25 (2st)",
+      "target_flow_l_min": 90,
+      "estimated_pressure_bar": 10.5,
+      "status": "WARNING: HIGH PRESSURE (>10 bar). Pump operating near shut-off head."
+    },
+    {
+      "zone_id": 7,
+      "location": "Corner Bottom Left",
+      "valve_installed": "V_STD",
+      "sprinkler": "Hunter I-25 (2st)",
+      "target_flow_l_min": 90,
+      "estimated_pressure_bar": 10.5,
+      "status": "WARNING: HIGH PRESSURE (>10 bar). Pump operating near shut-off head."
+    }
+  ]
+}

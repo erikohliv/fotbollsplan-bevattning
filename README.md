@@ -7,6 +7,22 @@
 - **Display Manager:** Hanterar två I2C LCD-displayer för status och manuell styrning. Menyknappar läses från PLC via Modbus.
 - **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump styrs direkt via Relä 8 → Mjukstartare. Flödesvakt (DI6) och Tryckgivare (AI2) via Terminal X3.
 
+## Hårdvarukonfiguration
+
+Systemets hårdvaruspecifikationer och zonkonfiguration finns dokumenterade i `hardware_config.json`. Denna fil innehåller:
+
+- **Pump Station:** E.M.S. DX 12-40T (4.0 kW, max 116m tryckhöjd, 250 l/min)
+  - **Varning:** Pumpen genererar mycket högt tryck (>10 bar) vid låga flöden (<100 l/min), kritiskt för små zoner
+- **Ventiler:** 
+  - Standard: Hunter PGV 1½ (V_STD) - tryckfall 0.27 bar
+  - Flow Control: Hunter PGV 1½ FC (V_FC) - variabelt tryckfall, kan reducera nedströmstryck manuellt
+- **Rör:** PEM 75 PN16 (huvudslinga), PEM 63 (center lateraler), PEM 32/40 (hörn lateraler)
+- **Zoner:** 7 zoner totalt
+  - Zoner 1-3 (Center): Hunter I-90 spridare, 180 l/min, 7.0-7.2 bar (OPTIMAL)
+  - Zoner 4-7 (Hörn): Hunter I-25 spridare, 90 l/min, 10.5 bar (**VARNING: HÖGT TRYCK**)
+
+**OBS:** Hörnzonerna (4-7) har högt tryck på grund av lågt flöde. För att lösa detta kan ventiler bytas till Flow Control-typ (V_FC) som kan reducera trycket manuellt.
+
 ## Installation på Raspberry Pi
 
 ### Komplett installation (Rekommenderat för nya system)

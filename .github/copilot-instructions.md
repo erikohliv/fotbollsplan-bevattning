@@ -7,6 +7,16 @@ Detta är ett automatiserat bevattningssystem för fotbollsplan som kombinerar:
 - **FastAPI Backend**: REST API och webb-UI för styrning och övervakning
 - **Hårdvara**: UNIPI 1.1 med Modbus, Raspberry Pi 4, Siemens LOGO, VFD-pump
 
+## Hårdvarukonfiguration
+Detaljerade hårdvaruspecifikationer finns i `hardware_config.json`:
+- **Pump:** E.M.S. DX 12-40T (4.0 kW, 116m max höjd, 250 l/min max flöde)
+  - **KRITISK BEGRÄNSNING:** Pumpen genererar mycket högt tryck (>10 bar) vid låga flöden (<100 l/min)
+- **Ventiler:** Hunter PGV 1½ Standard (V_STD) och Flow Control (V_FC) varianter
+- **Zoner:** 7 zoner - Zoner 1-3 (center, 180 l/min) är optimala, Zoner 4-7 (hörn, 90 l/min) har högtrycksvarningar
+- **Lösning för högt tryck:** Byt ventiler i hörnzoner till Flow Control-typ (V_FC) för att reducera tryck manuellt
+
+**Viktigt för Copilot:** När en ventil ändras till 'V_FC' i zones-listan, anta att högtrycksvarningen är löst.
+
 ## Kodningskonventioner
 
 ### Python
