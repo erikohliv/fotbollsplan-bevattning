@@ -5,7 +5,7 @@ Detta är ett automatiserat bevattningssystem för fotbollsplan som kombinerar:
 - **PLC (Structured Text)**: Säkerhetskritisk realtidslogik för ventil- och pumpstyrning
 - **Python Controller**: Väderdata från SMHI och markfukt, skriver till PLC via Modbus
 - **FastAPI Backend**: REST API och webb-UI för styrning och övervakning
-- **Hårdvara**: UNIPI 1.1 med Modbus, Raspberry Pi 3, Siemens LOGO, VFD-pump
+- **Hårdvara**: UNIPI 1.1 med Modbus, Raspberry Pi 4, Siemens LOGO, VFD-pump
 
 ## Kodningskonventioner
 
@@ -146,11 +146,11 @@ python3 bevattning_controller.py --loop --interval 60 --auto-start
 - `README.md`: Huvuddokumentation
 
 ## Begränsningar och Överväganden
-- Koden körs på Raspberry Pi 3 med begränsad CPU/minne
+- Koden körs på Raspberry Pi 4 med begränsad CPU/minne
 - PLC körs med 100ms task-cykel - håll Modbus-skrivningar rimliga
 - Systemet styr fysisk pump och ventiler - säkerhet först
 - Nätverkskommunikation kan vara instabil - implementera timeouts och retries
-- SMHI-API kan vara nere - ha fallback-värden
+- Väder-API kan vara nere - ha fallback-värden
 
 ## Språkanvändning
 - **Svenska**: Domänspecifika termer (bevattning, zoner, ventiler, pump)
