@@ -2,8 +2,8 @@
   "project_meta": {
     "name": "Fotbollsplan Bevattning - As-Built 2025",
     "description": "System configuration with hybrid pipe network (PEM 90/75/50).",
-    "instructions_for_copilot": "Use the pipe dimensions defined here to estimate pressure drops. Zone 7 has higher friction due to PEM 50.",
-    "last_updated": "2025-05-20"
+    "instructions_for_copilot": "Use the pipe dimensions defined here to estimate pressure drops. Zone 7 has higher friction due to PEM 50 (50mm inner diameter) compared to Zone 5 with PEM 75 (75mm). Smaller diameter = higher friction = lower pressure. This is by design - Zone 7's PEM 50 provides natural pressure dampening from >10 bar to ~8-9 bar, protecting equipment. See PIPE_NETWORK_DOCUMENTATION.md for full hydraulic analysis.",
+    "last_updated": "2025-12-21"
   },
   "pump_station": {
     "model": "E.M.S. DX 12-40T",
@@ -69,8 +69,11 @@
       "location": "Corner Bottom Right",
       "sprinkler": "Hunter I-25 (2st)",
       "feed_pipe": "PEM 75",
-      "pressure_note": "Direct feed from PEM 75.",
-      "status": "WARNING: HIGH PRESSURE (>10 bar)"
+      "pipe_diameter_mm": 75,
+      "pipe_inner_diameter_mm": 67.5,
+      "pressure_note": "Direct feed from PEM 75 - large diameter = low friction = high pressure.",
+      "status": "WARNING: HIGH PRESSURE (>10 bar)",
+      "comparison": "Larger pipe than Zone 7 (PEM 75 vs PEM 50) results in 2+ bar higher pressure"
     },
     {
       "zone_id": 6,
@@ -85,8 +88,12 @@
       "location": "Corner Bottom Left",
       "sprinkler": "Hunter I-25 (2st)",
       "feed_pipe": "PEM 50 (from Pt 14)",
-      "pressure_note": "Pressure reduced by friction in PEM 50 pipe.",
-      "status": "ELEVATED but ACCEPTABLE (~8-9 bar)"
+      "pipe_diameter_mm": 50,
+      "pipe_inner_diameter_mm": 45,
+      "pressure_note": "Pressure reduced by friction in PEM 50 pipe - smaller diameter = higher friction = pressure dampening.",
+      "status": "ELEVATED but ACCEPTABLE (~8-9 bar)",
+      "comparison": "Smaller pipe than Zone 5 (PEM 50 vs PEM 75) provides natural pressure regulation. This is beneficial - protects valves and sprinklers from excessive pump pressure.",
+      "technical_detail": "Friction loss in PEM 50 absorbs ~2 bar, bringing pressure from dangerous >10 bar down to safe 8-9 bar working range."
     }
   ]
 }
