@@ -7,6 +7,9 @@
 - **Display Manager:** Hanterar två I2C LCD-displayer för status och manuell styrning. Menyknappar läses från PLC via Modbus.
 - **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump styrs direkt via Relä 8 → Mjukstartare. Flödesvakt (DI6) och Tryckgivare (AI2) via Terminal X3.
 
+## Rörledningsnät och Zonspecifikationer
+Systemet använder ett hybridnät med PEM 90/75/50 rör. **Viktigt**: Zon 7 har PEM 50 (mindre dimension) medan Zon 5 har PEM 75, vilket ger naturlig tryckdämpning i Zon 7. Se [PIPE_NETWORK_DOCUMENTATION.md](PIPE_NETWORK_DOCUMENTATION.md) för detaljerad förklaring av hydraulik, tryckskillnader och varför dimensionen spelar roll.
+
 ## Installation på Raspberry Pi
 
 ### Komplett installation (Rekommenderat för nya system)
