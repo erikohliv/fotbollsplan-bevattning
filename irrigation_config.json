@@ -1,65 +1,565 @@
 {
   "project_meta": {
-    "name": "Fotbollsplan Bevattning - As-Built Final",
-    "description": "Final configuration based on CSV topology and measured pressure data.",
+    "name": "Fotbollsplan Bevattning",
+    "version": "3.2 (Estimated Lengths)",
+    "description": "Full topologi med automatiserade specifikationer. Längder är SCHABLONVÄRDEN (Gissade).",
+    "units": {
+      "pressure": "bar",
+      "flow": "l/min",
+      "dimension": "mm",
+      "length": "m"
+    },
     "last_updated": "2025-05-20"
   },
-  "pump_station": {
-    "model": "E.M.S. DX 12-40T",
-    "specs": { "power_kw": 4.0, "max_head_m": 116, "max_flow_l_min": 250 }
-  },
-  "component_catalog": {
-    "valves": {
-      "V_STD": "Hunter PGV Standard (Open/Close)",
-      "V_FC": "Hunter PGV Flow Control (Throttling Capable - Critical for high pressure)"
+  "components": [
+    {
+      "id": "PUMP",
+      "type": "Pumpstation",
+      "info": "EMS DX 12-40T",
+      "status_note": "Källa",
+      "specs": {
+        "pipe_dim_nominal": "PEM 90",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 79.2,
+        "roughness_c": 150,
+        "length_m": 15.0,
+        "component_details": "Max H=116m, Q_max=250 l/min, P=4.0kW",
+        "measured_pressure_bar": null
+      }
     },
-    "pipes": {
-      "PEM90": "Main Feed",
-      "PEM75": "Main Ring (Highway - Low Friction)",
-      "PEM63": "Center Feed",
-      "PEM50": "Zone 7 Feed (Brake - High Friction)",
-      "PEM32": "Sprinkler Feed (Final leg)"
+    {
+      "id": "T1",
+      "type": "T-Koppling",
+      "info": "-",
+      "status_note": "Huvudmatning",
+      "specs": {
+        "pipe_dim_nominal": "PEM 90",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 79.2,
+        "roughness_c": 150,
+        "length_m": 5.0,
+        "component_details": "",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "T2",
+      "type": "T-Koppling",
+      "info": "-",
+      "status_note": "Fördelning Höger/Mitten",
+      "specs": {
+        "pipe_dim_nominal": "PEM 90",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 79.2,
+        "roughness_c": 150,
+        "length_m": 40.0,
+        "component_details": "",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "T3",
+      "type": "T-Koppling",
+      "info": "-",
+      "status_note": "Mitten stam (\"Highway\")",
+      "specs": {
+        "pipe_dim_nominal": "PEM 63",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 55.4,
+        "roughness_c": 150,
+        "length_m": 30.0,
+        "component_details": "",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "T4",
+      "type": "T-Koppling",
+      "info": "-",
+      "status_note": "Mitten stam",
+      "specs": {
+        "pipe_dim_nominal": "PEM 63",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 55.4,
+        "roughness_c": 150,
+        "length_m": 30.0,
+        "component_details": "",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "T5",
+      "type": "T-Koppling",
+      "info": "-",
+      "status_note": "Mitten stam",
+      "specs": {
+        "pipe_dim_nominal": "PEM 63",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 55.4,
+        "roughness_c": 150,
+        "length_m": 30.0,
+        "component_details": "",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "T7",
+      "type": "T-Koppling",
+      "info": "-",
+      "status_note": "Vänster matning",
+      "specs": {
+        "pipe_dim_nominal": "PEM 75",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 66.0,
+        "roughness_c": 150,
+        "length_m": 40.0,
+        "component_details": "",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "T6",
+      "type": "T-Koppling",
+      "info": "-",
+      "status_note": "Fördelning Hörn H.N",
+      "specs": {
+        "pipe_dim_nominal": "PEM 32",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 28.0,
+        "roughness_c": 150,
+        "length_m": 10.0,
+        "component_details": "",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "T9",
+      "type": "T-Koppling",
+      "info": "-",
+      "status_note": "Fördelning Hörn V.Ö (Grov in)",
+      "specs": {
+        "pipe_dim_nominal": "PEM 50",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 44.0,
+        "roughness_c": 150,
+        "length_m": 10.0,
+        "component_details": "",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "T10",
+      "type": "T-Koppling",
+      "info": "-",
+      "status_note": "Fördelning Hörn H.Ö",
+      "specs": {
+        "pipe_dim_nominal": "PEM 32",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 28.0,
+        "roughness_c": 150,
+        "length_m": 10.0,
+        "component_details": "",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "T11",
+      "type": "T-Koppling",
+      "info": "-",
+      "status_note": "Fördelning Vänster",
+      "specs": {
+        "pipe_dim_nominal": "PEM 32",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 28.0,
+        "roughness_c": 150,
+        "length_m": 10.0,
+        "component_details": "",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "V3",
+      "type": "Ventil (FC)",
+      "info": "Zone 4: Corner 1",
+      "status_note": "Avstick från 75-stam",
+      "specs": {
+        "pipe_dim_nominal": "PEM 32",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 28.0,
+        "roughness_c": 150,
+        "length_m": 5.0,
+        "component_details": "Pressure Loss ~0.1-0.2 bar (Max 10 bar)",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "V6",
+      "type": "Ventil (STD)",
+      "info": "Zone 1: Center 1",
+      "status_note": "Avstick från 63-stam",
+      "specs": {
+        "pipe_dim_nominal": "PEM 50",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 44.0,
+        "roughness_c": 150,
+        "length_m": 5.0,
+        "component_details": "Pressure Loss ~0.1-0.2 bar (Max 10 bar)",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "V8",
+      "type": "Ventil (STD)",
+      "info": "Zone 2: Center 2",
+      "status_note": "Avstick från 63-stam",
+      "specs": {
+        "pipe_dim_nominal": "PEM 50",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 44.0,
+        "roughness_c": 150,
+        "length_m": 5.0,
+        "component_details": "Pressure Loss ~0.1-0.2 bar (Max 10 bar)",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "V10",
+      "type": "Ventil (STD)",
+      "info": "Zone 3: Center 3",
+      "status_note": "Avstick från 63-stam",
+      "specs": {
+        "pipe_dim_nominal": "PEM 50",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 44.0,
+        "roughness_c": 150,
+        "length_m": 5.0,
+        "component_details": "Pressure Loss ~0.1-0.2 bar (Max 10 bar)",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "V11",
+      "type": "Ventil (FC)",
+      "info": "Zone 5: Corner 2",
+      "status_note": "Avstick från 63-stam",
+      "specs": {
+        "pipe_dim_nominal": "PEM 32",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 28.0,
+        "roughness_c": 150,
+        "length_m": 5.0,
+        "component_details": "Pressure Loss ~0.1-0.2 bar (Max 10 bar)",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "V14",
+      "type": "Ventil (FC)",
+      "info": "Zone 6: Corner 3",
+      "status_note": "Avstick från 75-stam",
+      "specs": {
+        "pipe_dim_nominal": "PEM 32",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 28.0,
+        "roughness_c": 150,
+        "length_m": 5.0,
+        "component_details": "Pressure Loss ~0.1-0.2 bar (Max 10 bar)",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "V15",
+      "type": "Ventil (FC)",
+      "info": "Zone 7: Corner 4",
+      "status_note": "Specialzon (50 hela vägen)",
+      "specs": {
+        "pipe_dim_nominal": "PEM 50",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 44.0,
+        "roughness_c": 150,
+        "length_m": 40.0,
+        "component_details": "Pressure Loss ~0.1-0.2 bar (Max 10 bar)",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "S4",
+      "type": "Spridare",
+      "info": "I-25",
+      "status_note": "Standard",
+      "specs": {
+        "pipe_dim_nominal": "PEM 32",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 28.0,
+        "roughness_c": 150,
+        "length_m": 15.0,
+        "component_details": "Rad=14-21m, Q=30-90 l/min (Rec P=3.5-5 bar)",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "S5",
+      "type": "Spridare",
+      "info": "I-25",
+      "status_note": "Standard",
+      "specs": {
+        "pipe_dim_nominal": "PEM 32",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 28.0,
+        "roughness_c": 150,
+        "length_m": 15.0,
+        "component_details": "Rad=14-21m, Q=30-90 l/min (Rec P=3.5-5 bar)",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "S7",
+      "type": "Spridare",
+      "info": "I-90",
+      "status_note": "Kräver grov slang",
+      "specs": {
+        "pipe_dim_nominal": "PEM 50",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 44.0,
+        "roughness_c": 150,
+        "length_m": 15.0,
+        "component_details": "Rad=22-29m, Q=100-280 l/min (Rec P=6-7 bar)",
+        "measured_pressure_bar": 8.0
+      }
+    },
+    {
+      "id": "S9",
+      "type": "Spridare",
+      "info": "I-90",
+      "status_note": "Kräver grov slang",
+      "specs": {
+        "pipe_dim_nominal": "PEM 50",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 44.0,
+        "roughness_c": 150,
+        "length_m": 15.0,
+        "component_details": "Rad=22-29m, Q=100-280 l/min (Rec P=6-7 bar)",
+        "measured_pressure_bar": 7.4
+      }
+    },
+    {
+      "id": "S11",
+      "type": "Spridare",
+      "info": "I-90",
+      "status_note": "Kräver grov slang",
+      "specs": {
+        "pipe_dim_nominal": "PEM 50",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 44.0,
+        "roughness_c": 150,
+        "length_m": 15.0,
+        "component_details": "Rad=22-29m, Q=100-280 l/min (Rec P=6-7 bar)",
+        "measured_pressure_bar": 6.8
+      }
+    },
+    {
+      "id": "S12",
+      "type": "Spridare",
+      "info": "I-25",
+      "status_note": "",
+      "specs": {
+        "pipe_dim_nominal": "PEM 32",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 28.0,
+        "roughness_c": 150,
+        "length_m": 15.0,
+        "component_details": "Rad=14-21m, Q=30-90 l/min (Rec P=3.5-5 bar)",
+        "measured_pressure_bar": 7.9
+      }
+    },
+    {
+      "id": "S13",
+      "type": "Spridare",
+      "info": "I-25",
+      "status_note": "",
+      "specs": {
+        "pipe_dim_nominal": "PEM 32",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 28.0,
+        "roughness_c": 150,
+        "length_m": 15.0,
+        "component_details": "Rad=14-21m, Q=30-90 l/min (Rec P=3.5-5 bar)",
+        "measured_pressure_bar": 6.9
+      }
+    },
+    {
+      "id": "S15",
+      "type": "Spridare",
+      "info": "I-25",
+      "status_note": "",
+      "specs": {
+        "pipe_dim_nominal": "PEM 32",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 28.0,
+        "roughness_c": 150,
+        "length_m": 15.0,
+        "component_details": "Rad=14-21m, Q=30-90 l/min (Rec P=3.5-5 bar)",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "S16",
+      "type": "Spridare",
+      "info": "I-25",
+      "status_note": "",
+      "specs": {
+        "pipe_dim_nominal": "PEM 32",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 28.0,
+        "roughness_c": 150,
+        "length_m": 15.0,
+        "component_details": "Rad=14-21m, Q=30-90 l/min (Rec P=3.5-5 bar)",
+        "measured_pressure_bar": null
+      }
+    },
+    {
+      "id": "S17",
+      "type": "Spridare",
+      "info": "I-25",
+      "status_note": "Reduceras efter T9",
+      "specs": {
+        "pipe_dim_nominal": "PEM 32",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 28.0,
+        "roughness_c": 150,
+        "length_m": 15.0,
+        "component_details": "Rad=14-21m, Q=30-90 l/min (Rec P=3.5-5 bar)",
+        "measured_pressure_bar": 6.6
+      }
+    },
+    {
+      "id": "S18",
+      "type": "Spridare",
+      "info": "I-25",
+      "status_note": "Reduceras efter T9",
+      "specs": {
+        "pipe_dim_nominal": "PEM 32",
+        "pipe_standard": "PE100 PN10 SDR17",
+        "inner_diameter_mm": 28.0,
+        "roughness_c": 150,
+        "length_m": 15.0,
+        "component_details": "Rad=14-21m, Q=30-90 l/min (Rec P=3.5-5 bar)",
+        "measured_pressure_bar": 5.4
+      }
     }
-  },
-  "zones": [
+  ],
+  "topology": [
     {
-      "zone_id": 1, "valve_id": 6, "sprinklers": [7], 
-      "location": "Center Top", "feed": "PEM 63",
-      "status": "OPTIMAL", "valve_type": "V_STD"
+      "from": "PUMP",
+      "to": "T1"
     },
     {
-      "zone_id": 2, "valve_id": 8, "sprinklers": [9], 
-      "location": "Center Middle", "feed": "PEM 63",
-      "status": "OPTIMAL", "valve_type": "V_STD"
+      "from": "T1",
+      "to": "T2"
     },
     {
-      "zone_id": 3, "valve_id": 10, "sprinklers": [11], 
-      "location": "Center Bottom", "feed": "PEM 63",
-      "status": "OPTIMAL", "valve_type": "V_STD"
+      "from": "T1",
+      "to": "T7"
     },
     {
-      "zone_id": 4, "valve_id": 3, "sprinklers": [4, 5], 
-      "location": "Corner Top Right", "feed": "PEM 75",
-      "status": "WARNING (High Pressure ~8.3 bar)", "valve_type": "V_FC",
-      "action": "THROTTLE REQUIRED"
+      "from": "T2",
+      "to": "V3"
     },
     {
-      "zone_id": 5, "valve_id": 12, "sprinklers": [12, 13], 
-      "location": "Corner Bottom Right", "feed": "PEM 75",
-      "status": "WARNING (High Pressure ~7.9 bar)", "valve_type": "V_FC",
-      "action": "THROTTLE REQUIRED"
+      "from": "T2",
+      "to": "T3"
     },
     {
-      "zone_id": 6, "valve_id": 15, "sprinklers": [17], 
-      "location": "Corner Top Left", "feed": "PEM 75",
-      "status": "WARNING (High Pressure ~8.2 bar)", "valve_type": "V_FC",
-      "action": "THROTTLE REQUIRED"
+      "from": "T3",
+      "to": "V6"
     },
     {
-      "zone_id": 7, "valve_id": 16, "sprinklers": [18], 
-      "location": "Corner Bottom Left", "feed": "PEM 50 (Brake)",
-      "status": "PERFECT (Natural Pressure ~5.4 bar)", "valve_type": "V_STD",
-      "action": "NONE (Standard Valve OK)"
+      "from": "T3",
+      "to": "T4"
+    },
+    {
+      "from": "T4",
+      "to": "V8"
+    },
+    {
+      "from": "T4",
+      "to": "T5"
+    },
+    {
+      "from": "T5",
+      "to": "V10"
+    },
+    {
+      "from": "T5",
+      "to": "V11"
+    },
+    {
+      "from": "T7",
+      "to": "V14"
+    },
+    {
+      "from": "T7",
+      "to": "V15"
+    },
+    {
+      "from": "T6",
+      "to": "S12"
+    },
+    {
+      "from": "T6",
+      "to": "S13"
+    },
+    {
+      "from": "T9",
+      "to": "S17"
+    },
+    {
+      "from": "T9",
+      "to": "S18"
+    },
+    {
+      "from": "T10",
+      "to": "S4"
+    },
+    {
+      "from": "T10",
+      "to": "S5"
+    },
+    {
+      "from": "T11",
+      "to": "S15"
+    },
+    {
+      "from": "T11",
+      "to": "S16"
+    },
+    {
+      "from": "V3",
+      "to": "T10"
+    },
+    {
+      "from": "V6",
+      "to": "S7"
+    },
+    {
+      "from": "V8",
+      "to": "S9"
+    },
+    {
+      "from": "V10",
+      "to": "S11"
+    },
+    {
+      "from": "V11",
+      "to": "T6"
+    },
+    {
+      "from": "V14",
+      "to": "T11"
+    },
+    {
+      "from": "V15",
+      "to": "T9"
     }
   ]
 }
