@@ -1,8 +1,8 @@
 {
   "project_meta": {
     "name": "Fotbollsplan Bevattning",
-    "version": "3.2 (Estimated Lengths)",
-    "description": "Full topologi med automatiserade specifikationer. Längder är SCHABLONVÄRDEN (Gissade).",
+    "version": "3.2 (Uppskattade längder)",
+    "description": "Full topologi med automatiserade specifikationer. Längder är UPPSKATTADE VÄRDEN.",
     "units": {
       "pressure": "bar",
       "flow": "l/min",
