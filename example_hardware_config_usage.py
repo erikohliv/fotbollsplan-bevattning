@@ -9,7 +9,6 @@ This demonstrates:
 - Suggesting valve upgrades
 """
 import json
-from pathlib import Path
 
 
 def load_hardware_config(config_path="hardware_config.json"):
