@@ -1,99 +1,65 @@
 {
   "project_meta": {
-    "name": "Fotbollsplan Bevattning - As-Built 2025",
-    "description": "System configuration with hybrid pipe network (PEM 90/75/50).",
-    "instructions_for_copilot": "Use the pipe dimensions defined here to estimate pressure drops. Zone 7 has higher friction due to PEM 50 (50mm inner diameter) compared to Zone 5 with PEM 75 (75mm). Smaller diameter = higher friction = lower pressure. This is by design - Zone 7's PEM 50 provides natural pressure dampening from >10 bar to ~8-9 bar, protecting equipment. See PIPE_NETWORK_DOCUMENTATION.md for full hydraulic analysis.",
-    "last_updated": "2025-12-21"
+    "name": "Fotbollsplan Bevattning - As-Built Final",
+    "description": "Final configuration based on CSV topology and measured pressure data.",
+    "last_updated": "2025-05-20"
   },
   "pump_station": {
     "model": "E.M.S. DX 12-40T",
-    "specs": {
-      "power_kw": 4.0,
-      "max_head_m": 116,
-      "max_flow_l_min": 250
-    },
-    "constraints": {
-      "warning": "Pump creates high static pressure (>10 bar) at low flow rates."
-    }
+    "specs": { "power_kw": 4.0, "max_head_m": 116, "max_flow_l_min": 250 }
   },
-  "pipe_network": {
-    "primary_feed": {
-      "from": "Pump",
-      "to": "Point 2 (T-junction)",
-      "material": "PEM 90",
-      "status": "New"
+  "component_catalog": {
+    "valves": {
+      "V_STD": "Hunter PGV Standard (Open/Close)",
+      "V_FC": "Hunter PGV Flow Control (Throttling Capable - Critical for high pressure)"
     },
-    "right_leg_&_top_left": {
-      "path": "Pt 2 -> Pt 6, 8, 10 (Right) & Pt 14 (Top Left)",
-      "material": "PEM 75",
-      "status": "New - Low Friction"
-    },
-    "left_leg_bottom": {
-      "path": "Pt 14 -> Pt 17/18 (Zone 7)",
-      "material": "PEM 50",
-      "status": "Old - High Friction (Natural flow restriction)"
+    "pipes": {
+      "PEM90": "Main Feed",
+      "PEM75": "Main Ring (Highway - Low Friction)",
+      "PEM63": "Center Feed",
+      "PEM50": "Zone 7 Feed (Brake - High Friction)",
+      "PEM32": "Sprinkler Feed (Final leg)"
     }
   },
   "zones": [
     {
-      "zone_id": 1,
-      "location": "Center Top",
-      "sprinkler": "Hunter I-90",
-      "feed_pipe": "PEM 75",
-      "status": "OPTIMAL"
+      "zone_id": 1, "valve_id": 6, "sprinklers": [7], 
+      "location": "Center Top", "feed": "PEM 63",
+      "status": "OPTIMAL", "valve_type": "V_STD"
     },
     {
-      "zone_id": 2,
-      "location": "Center Middle",
-      "sprinkler": "Hunter I-90",
-      "feed_pipe": "PEM 75",
-      "status": "OPTIMAL"
+      "zone_id": 2, "valve_id": 8, "sprinklers": [9], 
+      "location": "Center Middle", "feed": "PEM 63",
+      "status": "OPTIMAL", "valve_type": "V_STD"
     },
     {
-      "zone_id": 3,
-      "location": "Center Bottom",
-      "sprinkler": "Hunter I-90",
-      "feed_pipe": "PEM 75",
-      "status": "OPTIMAL"
+      "zone_id": 3, "valve_id": 10, "sprinklers": [11], 
+      "location": "Center Bottom", "feed": "PEM 63",
+      "status": "OPTIMAL", "valve_type": "V_STD"
     },
     {
-      "zone_id": 4,
-      "location": "Corner Top Right",
-      "sprinkler": "Hunter I-25 (2st)",
-      "feed_pipe": "PEM 75",
-      "pressure_note": "Direct feed from PEM 75.",
-      "status": "WARNING: HIGH PRESSURE (>10 bar)"
+      "zone_id": 4, "valve_id": 3, "sprinklers": [4, 5], 
+      "location": "Corner Top Right", "feed": "PEM 75",
+      "status": "WARNING (High Pressure ~8.3 bar)", "valve_type": "V_FC",
+      "action": "THROTTLE REQUIRED"
     },
     {
-      "zone_id": 5,
-      "location": "Corner Bottom Right",
-      "sprinkler": "Hunter I-25 (2st)",
-      "feed_pipe": "PEM 75",
-      "pipe_diameter_mm": 75,
-      "pipe_inner_diameter_mm": 67.5,
-      "pressure_note": "Direct feed from PEM 75 - large diameter = low friction = high pressure.",
-      "status": "WARNING: HIGH PRESSURE (>10 bar)",
-      "comparison": "Larger pipe than Zone 7 (PEM 75 vs PEM 50) results in 2+ bar higher pressure"
+      "zone_id": 5, "valve_id": 12, "sprinklers": [12, 13], 
+      "location": "Corner Bottom Right", "feed": "PEM 75",
+      "status": "WARNING (High Pressure ~7.9 bar)", "valve_type": "V_FC",
+      "action": "THROTTLE REQUIRED"
     },
     {
-      "zone_id": 6,
-      "location": "Corner Top Left",
-      "sprinkler": "Hunter I-25 (2st)",
-      "feed_pipe": "PEM 75 (to valve)",
-      "pressure_note": "Direct feed from PEM 75.",
-      "status": "WARNING: HIGH PRESSURE (>10 bar)"
+      "zone_id": 6, "valve_id": 15, "sprinklers": [17], 
+      "location": "Corner Top Left", "feed": "PEM 75",
+      "status": "WARNING (High Pressure ~8.2 bar)", "valve_type": "V_FC",
+      "action": "THROTTLE REQUIRED"
     },
     {
-      "zone_id": 7,
-      "location": "Corner Bottom Left",
-      "sprinkler": "Hunter I-25 (2st)",
-      "feed_pipe": "PEM 50 (from Pt 14)",
-      "pipe_diameter_mm": 50,
-      "pipe_inner_diameter_mm": 45,
-      "pressure_note": "Pressure reduced by friction in PEM 50 pipe - smaller diameter = higher friction = pressure dampening.",
-      "status": "ELEVATED but ACCEPTABLE (~8-9 bar)",
-      "comparison": "Smaller pipe than Zone 5 (PEM 50 vs PEM 75) provides natural pressure regulation. This is beneficial - protects valves and sprinklers from excessive pump pressure.",
-      "technical_detail": "Friction loss in PEM 50 absorbs ~2 bar, bringing pressure from dangerous >10 bar down to safe 8-9 bar working range."
+      "zone_id": 7, "valve_id": 16, "sprinklers": [18], 
+      "location": "Corner Bottom Left", "feed": "PEM 50 (Brake)",
+      "status": "PERFECT (Natural Pressure ~5.4 bar)", "valve_type": "V_STD",
+      "action": "NONE (Standard Valve OK)"
     }
   ]
 }
