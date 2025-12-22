@@ -155,7 +155,7 @@ FLOW_OK_STATE = True        # Matchar PLC
 |----------|----------------|-----------|-----|-------------|
 | MW33 | Pressure_Value (0-100%) | Pressure_Switch_Status (0/1) | Digital | Tryckvakt status |
 | MW54 | - | PressureAlarmReg | Alarm | 0=OK, 1=Timeout, 2=Oväntat |
-| MW55 | FlowSwitchStatus | FlowSwitchStatus | Digital | Flödesvakt status (oförändrat) |
+| MW55 | FlowSwitchStatus | FlowSwitchStatus | Digital | Flödesvakt status (oförändrad) |
 | MW56 | - | FlowAlarmReg | Alarm | 0=OK, 1=Timeout, 2=Torrkörning |
 | MW73 | BlockReasonReg | BlockReasonReg | Status | +5=Tryckfel, +6=Flödesfel |
 

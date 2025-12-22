@@ -61,7 +61,8 @@ def mock_modbus():
         def _read_side_effect(address, count=1, unit=None):
             defaults = {
                 MW_STATUS_ZONE: [1, 0, 0, 1],
-                MW_PRESSURE_ALARM: [0, 1, 0],  # MW54-56: pressure_alarm, flow_switch, flow_alarm
+                # MW54-56 maps to: [MW54=pressure_alarm, MW55=flow_switch, MW56=flow_alarm]
+                MW_PRESSURE_ALARM: [0, 1, 0],
                 MW_HEARTBEAT: [0, 0, 0, 0],
                 MW_MODE: [0],
                 MW_MODE_OVERRIDE: [1],
@@ -134,7 +135,8 @@ def test_status_safety_flags(client, mock_modbus, pressure_alarm, flow_alarm, pr
     def _side_effect(address, count=1, unit=None):
         mapping = {
             MW_STATUS_ZONE: [0, pump_on, 0, 0],
-            MW_PRESSURE_ALARM: [pressure_alarm, flow_ok, flow_alarm],  # MW54-56
+            # MW54-56 maps to: [MW54=pressure_alarm, MW55=flow_switch, MW56=flow_alarm]
+            MW_PRESSURE_ALARM: [pressure_alarm, flow_ok, flow_alarm],
             MW_HEARTBEAT: [0, 0, 0, 0],
             MW_MODE: [0],
             MW_MODE_OVERRIDE: [1],

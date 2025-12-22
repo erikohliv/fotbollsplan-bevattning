@@ -288,16 +288,18 @@ class TestZoneCommand(BaseModel):
 @app.get("/status")
 def status(x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
-    # Read registers including new alarm registers MW54 and MW56
+    # Read registers including safety monitoring registers
     # Group 1: MW50-53 (zone, pump, steg, selected_zone)
-    # Group 2: MW54-56 (pressure_alarm, flow_switch, flow_alarm)
+    # Group 2: MW54-56 (pressure_alarm, flow_switch_status, flow_alarm)
+    #          Note: MW55 is flow switch status, intentionally read together with alarms for efficiency
     # Group 3: MW70-73 (heartbeat data)
     # Group 4: MW_MODE (mode switch status)
+    # Group 5: MW33 (pressure switch status)
     with get_modbus_connection() as client:
         rr1 = client.read_holding_registers(MW_STATUS_ZONE, 4, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr1, "read status registers MW50-53")
         rr_safety = client.read_holding_registers(MW_PRESSURE_ALARM, 3, unit=MODBUS_UNIT)
-        _ensure_modbus_ok(rr_safety, "read safety registers MW54-56")
+        _ensure_modbus_ok(rr_safety, "read safety registers MW54-56 (alarm+flow)")
         rr2 = client.read_holding_registers(MW_HEARTBEAT, 4, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr2, "read heartbeat registers MW70-73")
         rr3 = client.read_holding_registers(MW_MODE, 1, unit=MODBUS_UNIT)
@@ -313,9 +315,10 @@ def status(x_api_key: Optional[str] = Header(None)):
     }
     pump_on = rr1.registers[1] == 1
     pressure_ok = rr_pressure_switch.registers[0] == 1
-    pressure_alarm = rr_safety.registers[0]  # 0=OK, 1=Timeout, 2=Unexpected
-    flow_ok = rr_safety.registers[1] == 1
-    flow_alarm = rr_safety.registers[2]  # 0=OK, 1=Timeout, 2=Torrkörning
+    # Safety register mapping: [MW54=pressure_alarm, MW55=flow_switch, MW56=flow_alarm]
+    pressure_alarm = rr_safety.registers[0]  # MW54: 0=OK, 1=Timeout, 2=Unexpected
+    flow_ok = rr_safety.registers[1] == 1    # MW55: FlowSwitchStatus (0/1)
+    flow_alarm = rr_safety.registers[2]      # MW56: 0=OK, 1=Timeout, 2=Torrkörning
     
     # Digital sensor safety flags based on alarm registers
     # Alarm codes:
