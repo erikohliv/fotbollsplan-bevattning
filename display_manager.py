@@ -57,8 +57,8 @@ MW_BLOCK_REASON = 73
 MW_MARKFUKT = 30
 MW_REGEN24 = 31
 MW_TEMP = 32
-MW_PRESSURE = 33            # Tryckgivare värde
-MW_MODE = 100               # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
+MW_PRESSURE_SWITCH = 33      # Tryckvakt status (digital)
+MW_MODE = 100                # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
 
 
 logger = logging.getLogger("display_manager")

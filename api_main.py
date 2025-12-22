@@ -52,15 +52,17 @@ MW_TID_HORN = 21
 MW_MARKFUKT = 30
 MW_REGEN24 = 31
 MW_TEMP = 32
-MW_PRESSURE = 33            # Tryckgivare värde (0-100%)
-MW_AUTO_OVERRIDE = 34       # AutoOverride (flyttad från 33)
-MW_REGEN_THRESHOLD = 35     # Regntröskel i mm (default 5) (flyttad från 34)
-MW_MOISTURE_THRESHOLD = 36  # Markfukttröskel i % (default 80) (flyttad från 35)
+MW_PRESSURE_SWITCH = 33      # Tryckvakt status (0=ingen tryck, 1=tryck OK)
+MW_AUTO_OVERRIDE = 34        # AutoOverride (flyttad från 33)
+MW_REGEN_THRESHOLD = 35      # Regntröskel i mm (default 5) (flyttad från 34)
+MW_MOISTURE_THRESHOLD = 36   # Markfukttröskel i % (default 80) (flyttad från 35)
 MW_STATUS_ZONE = 50
 MW_STATUS_PUMP = 51
 MW_STATUS_STEG = 52
 MW_SELECTED_ZONE = 53
-MW_FLOW_SWITCH = 55         # Flödesvakt status (0=ingen flöde, 1=flöde OK)
+MW_PRESSURE_ALARM = 54       # Tryck larm (0=OK, 1=Timeout, 2=Unexpected)
+MW_FLOW_SWITCH = 55          # Flödesvakt status (0=ingen flöde, 1=flöde OK)
+MW_FLOW_ALARM = 56           # Flöde larm (0=OK, 1=Timeout, 2=Torrkörning)
 MW_MODE_OVERRIDE = 60
 MW_MANUAL_START = 61
 MW_SET_SELECTED = 63
@@ -76,9 +78,12 @@ MW_TEST_ZONE_RESULT = 81    # Test resultat för aktuell zon (bitmask för zoner
 MW_ERROR_RESET = 82         # Error reset trigger (skriv 1 för att nollställa fel)
 MW_MODE = 100               # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
 
-# Säkerhetströsklar för tryck/flöde
-PRESSURE_LOW_THRESHOLD = 20       # % - lågt tryck när flöde detekteras
-PRESSURE_HIGH_THRESHOLD = 90      # % - nära maxtryck utan flöde indikerar blockering
+# Digital sensor state expectations (configurable in PLC)
+# These match PLC constants: PRESSURE_OK_STATE and FLOW_OK_STATE
+# TRUE = NO (Normally Open) - sensor closes when active
+# FALSE = NC (Normally Closed) - sensor opens when active
+PRESSURE_OK_STATE = True    # Expected state when pressure is OK
+FLOW_OK_STATE = True        # Expected state when flow is OK
 
 # Zone constants
 MIN_ZONE = 1
@@ -283,24 +288,22 @@ class TestZoneCommand(BaseModel):
 @app.get("/status")
 def status(x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
-    # Read registers in two groups to avoid reading undefined intermediate registers.
-    # According to the PLC register map, MW54-59, MW62, MW65-69 are not defined.
-    # Reading only defined registers prevents potential issues with non-existent or 
-    # side-effect registers while still being more efficient than the original implementation.
+    # Read registers including new alarm registers MW54 and MW56
     # Group 1: MW50-53 (zone, pump, steg, selected_zone)
-    # Group 2: MW70-73 (heartbeat data)
-    # Group 3: MW_MODE (mode switch status)
+    # Group 2: MW54-56 (pressure_alarm, flow_switch, flow_alarm)
+    # Group 3: MW70-73 (heartbeat data)
+    # Group 4: MW_MODE (mode switch status)
     with get_modbus_connection() as client:
         rr1 = client.read_holding_registers(MW_STATUS_ZONE, 4, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr1, "read status registers MW50-53")
+        rr_safety = client.read_holding_registers(MW_PRESSURE_ALARM, 3, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr_safety, "read safety registers MW54-56")
         rr2 = client.read_holding_registers(MW_HEARTBEAT, 4, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr2, "read heartbeat registers MW70-73")
         rr3 = client.read_holding_registers(MW_MODE, 1, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr3, f"read mode register MW{MW_MODE}")
-        rr_pressure = client.read_holding_registers(MW_PRESSURE, 1, unit=MODBUS_UNIT)
-        _ensure_modbus_ok(rr_pressure, f"read pressure register MW{MW_PRESSURE}")
-        rr_flow = client.read_holding_registers(MW_FLOW_SWITCH, 1, unit=MODBUS_UNIT)
-        _ensure_modbus_ok(rr_flow, f"read flow switch register MW{MW_FLOW_SWITCH}")
+        rr_pressure_switch = client.read_holding_registers(MW_PRESSURE_SWITCH, 1, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr_pressure_switch, f"read pressure switch register MW{MW_PRESSURE_SWITCH}")
     
     mode_value = rr3.registers[0]
     mode_text = {
@@ -309,15 +312,22 @@ def status(x_api_key: Optional[str] = Header(None)):
         2: "Fjärrläge aktivt"
     }
     pump_on = rr1.registers[1] == 1
-    pressure_value = int(rr_pressure.registers[0])
-    flow_ok = rr_flow.registers[0] == 1
-    blockering = pump_on and (not flow_ok) and pressure_value >= PRESSURE_HIGH_THRESHOLD
-    torrkorning = pump_on and (not flow_ok) and not blockering
+    pressure_ok = rr_pressure_switch.registers[0] == 1
+    pressure_alarm = rr_safety.registers[0]  # 0=OK, 1=Timeout, 2=Unexpected
+    flow_ok = rr_safety.registers[1] == 1
+    flow_alarm = rr_safety.registers[2]  # 0=OK, 1=Timeout, 2=Torrkörning
+    
+    # Digital sensor safety flags based on alarm registers
+    # Alarm codes:
+    # Pressure: 0=OK, 1=Timeout (no pressure within 10s of pump start), 2=Unexpected (pressure when pump off)
+    # Flow: 0=OK, 1=Initial timeout, 2=Torrkörning (flow lost during operation)
     safety_flags = {
-        "slangbrott": pump_on and flow_ok and pressure_value < PRESSURE_LOW_THRESHOLD,
-        "torrkorning": torrkorning,
-        "givarkontroll": (not pump_on) and pressure_value >= PRESSURE_HIGH_THRESHOLD,
-        "blockering": blockering,
+        "tryck_timeout": pressure_alarm == 1,        # No pressure after pump start
+        "oväntat_tryck": pressure_alarm == 2,        # Pressure detected when pump is off
+        "torrkorning": flow_alarm == 2,              # Flow lost during pump operation
+        "flöde_timeout": flow_alarm == 1,            # Initial flow timeout
+        "tryck_ok": pressure_ok,                     # Current pressure switch state
+        "flöde_ok": flow_ok,                         # Current flow switch state
     }
     
     return {
@@ -331,8 +341,10 @@ def status(x_api_key: Optional[str] = Header(None)):
         "block_reason": rr2.registers[3],
         "mode": mode_value,
         "mode_text": mode_text.get(mode_value, f"Okänt läge {mode_value}"),
-        "pressure": pressure_value,
-        "flow_ok": flow_ok,
+        "pressure_switch": pressure_ok,              # Digital: 0=no pressure, 1=pressure OK
+        "pressure_alarm": pressure_alarm,            # 0=OK, 1=Timeout, 2=Unexpected
+        "flow_switch": flow_ok,                      # Digital: 0=no flow, 1=flow OK
+        "flow_alarm": flow_alarm,                    # 0=OK, 1=Timeout, 2=Torrkörning
         "safety": safety_flags,
         "timestamp": int(time.time())
     }
