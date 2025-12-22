@@ -1,0 +1,19 @@
+Logisk_Adress,Fysisk_Port,Variabel,Typ,Hårdvara,Koppling_Plint,Funktion,Notering
+%QX0.0,RL1,Valve_1,DO,Solenoid 24V,X3:1,Bevattning,
+%QX0.1,RL2,Valve_2,DO,Solenoid 24V,X3:2,Bevattning,
+%QX0.2,RL3,Valve_3,DO,Solenoid 24V,X3:3,Bevattning,
+%QX0.3,RL4,Valve_4,DO,Solenoid 24V,X3:4,Bevattning,
+%QX0.4,RL5,Valve_5,DO,Solenoid 24V,X3:5,Bevattning,
+%QX0.5,RL6,Valve_6,DO,Solenoid 24V,X3:6,Bevattning,
+%QX0.6,RL7,Valve_7,DO,Solenoid 24V,X3:7,Bevattning,
+%QX0.7,RL8,Pump_Enable,DO,Relä till Mjukstart,X3:8,Pumpstyrning,Aktiverar pump
+%IW0,AI1,Sensor_Moisture,AI,Markfuktgivare,AI:1,Övervakning,Analog 0-10V
+%IX0.0,I01,Button_Stop,DI,Stoppknapp (NC),DI:1,Säkerhet,Bryter vid tryck
+%IX0.1,I02,Button_Start,DI,Startknapp (NO),DI:2,Styrning,Startar sekvens
+%IX0.2,I03,Switch_Auto,DI,Vred Auto,DI:3,Läge,
+%IX0.3,I04,Button_Reset,DI,Resetknapp,DI:4,Larmhantering,Återställer larm
+%IX0.4,I05,Switch_Pressure,DI,Tryckvakt (NO/NC),DI:5,Säkerhet/Läckage,Sluter vid tryck > X bar
+%IX0.5,I06,Button_Test,DI,Testknapp,DI:6,Service,
+%IX0.6,I07,Flow_Switch,DI,Flödesvakt,DI:7,Säkerhet/Torrkörning,Sluter vid flöde
+%IX0.7,I08,E_Stop,DI,Nödstopp (NC),DI:8,Säkerhet,Hårdvarubryt
+%IX1.1,I10,Switch_Manual,DI,Vred Manuell,DI:10,Läge,
