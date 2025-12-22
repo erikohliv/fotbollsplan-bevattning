@@ -22,14 +22,14 @@ sys.modules['pymodbus.client'] = MagicMock()
 from api_main import (
     API_KEY,
     API_LOGGER_NAME,
-    PRESSURE_HIGH_THRESHOLD,
-    PRESSURE_LOW_THRESHOLD,
     MW_BLOCK_REASON,
+    MW_FLOW_ALARM,
     MW_FLOW_SWITCH,
     MW_HEARTBEAT,
     MW_MODE,
     MW_MODE_OVERRIDE,
-    MW_PRESSURE,
+    MW_PRESSURE_ALARM,
+    MW_PRESSURE_SWITCH,
     MW_STATUS_ZONE,
     MW_TEST_ZONE_RESULT,
     USER_MODBUS_ERROR,
@@ -61,11 +61,12 @@ def mock_modbus():
         def _read_side_effect(address, count=1, unit=None):
             defaults = {
                 MW_STATUS_ZONE: [1, 0, 0, 1],
+                # MW54-56 maps to: [MW54=pressure_alarm, MW55=flow_switch, MW56=flow_alarm]
+                MW_PRESSURE_ALARM: [0, 1, 0],
                 MW_HEARTBEAT: [0, 0, 0, 0],
                 MW_MODE: [0],
                 MW_MODE_OVERRIDE: [1],
-                MW_PRESSURE: [50],
-                MW_FLOW_SWITCH: [1],
+                MW_PRESSURE_SWITCH: [1],
                 MW_BLOCK_REASON: [0],
                 MW_TEST_ZONE_RESULT: [0],
             }
@@ -101,24 +102,29 @@ def test_status_authorized(client, mock_modbus):
     assert "pump_on" in data
     assert "block_reason" in data
     assert "safety" in data
-    assert "pressure" in data
+    assert "pressure_switch" in data
+    assert "pressure_alarm" in data
+    assert "flow_switch" in data
+    assert "flow_alarm" in data
 
 
 @pytest.mark.parametrize(
-    "pressure, flow, pump_on, expected_flags",
+    "pressure_alarm, flow_alarm, pressure_ok, flow_ok, pump_on, expected_flags",
     [
-        # Slangbrott: flöde finns men trycket är lågt
-        (PRESSURE_LOW_THRESHOLD - 1, 1, 1, {"slangbrott": True, "torrkorning": False, "givarkontroll": False, "blockering": False}),
-        # Torrkörning: pump på men inget flöde
-        (10, 0, 1, {"slangbrott": False, "torrkorning": True, "givarkontroll": False, "blockering": False}),
-        # Givarfel: tryck trots att pumpen är av
-        (PRESSURE_HIGH_THRESHOLD, 0, 0, {"slangbrott": False, "torrkorning": False, "givarkontroll": True, "blockering": False}),
-        # Blockering: maxtryck men inget flöde
-        (PRESSURE_HIGH_THRESHOLD, 0, 1, {"slangbrott": False, "torrkorning": False, "givarkontroll": False, "blockering": True}),
+        # Normal operation: all OK
+        (0, 0, 1, 1, 1, {"tryck_timeout": False, "oväntat_tryck": False, "torrkorning": False, "flöde_timeout": False, "tryck_ok": True, "flöde_ok": True}),
+        # Pressure timeout after pump start
+        (1, 0, 0, 1, 1, {"tryck_timeout": True, "oväntat_tryck": False, "torrkorning": False, "flöde_timeout": False, "tryck_ok": False, "flöde_ok": True}),
+        # Unexpected pressure when pump off
+        (2, 0, 1, 0, 0, {"tryck_timeout": False, "oväntat_tryck": True, "torrkorning": False, "flöde_timeout": False, "tryck_ok": True, "flöde_ok": False}),
+        # Torrkörning: flow lost during operation
+        (0, 2, 1, 0, 1, {"tryck_timeout": False, "oväntat_tryck": False, "torrkorning": True, "flöde_timeout": False, "tryck_ok": True, "flöde_ok": False}),
+        # Flow initial timeout
+        (0, 1, 1, 0, 1, {"tryck_timeout": False, "oväntat_tryck": False, "torrkorning": False, "flöde_timeout": True, "tryck_ok": True, "flöde_ok": False}),
     ],
 )
-def test_status_safety_flags(client, mock_modbus, pressure, flow, pump_on, expected_flags):
-    """Validate computed safety flags for flow/pressure edge cases."""
+def test_status_safety_flags(client, mock_modbus, pressure_alarm, flow_alarm, pressure_ok, flow_ok, pump_on, expected_flags):
+    """Validate computed safety flags for digital sensors."""
 
     def _result(values):
         result = MagicMock()
@@ -129,11 +135,12 @@ def test_status_safety_flags(client, mock_modbus, pressure, flow, pump_on, expec
     def _side_effect(address, count=1, unit=None):
         mapping = {
             MW_STATUS_ZONE: [0, pump_on, 0, 0],
+            # MW54-56 maps to: [MW54=pressure_alarm, MW55=flow_switch, MW56=flow_alarm]
+            MW_PRESSURE_ALARM: [pressure_alarm, flow_ok, flow_alarm],
             MW_HEARTBEAT: [0, 0, 0, 0],
             MW_MODE: [0],
             MW_MODE_OVERRIDE: [1],
-            MW_PRESSURE: [pressure],
-            MW_FLOW_SWITCH: [flow],
+            MW_PRESSURE_SWITCH: [pressure_ok],
             MW_BLOCK_REASON: [0],
         }
         values = mapping.get(address, [0] * count)
@@ -147,8 +154,10 @@ def test_status_safety_flags(client, mock_modbus, pressure, flow, pump_on, expec
     assert response.status_code == 200
     payload = response.json()
 
-    assert payload["pressure"] == pressure
-    assert payload["flow_ok"] is (flow == 1)
+    assert payload["pressure_switch"] == (pressure_ok == 1)
+    assert payload["pressure_alarm"] == pressure_alarm
+    assert payload["flow_switch"] == (flow_ok == 1)
+    assert payload["flow_alarm"] == flow_alarm
     for key, value in expected_flags.items():
         assert payload["safety"][key] is value
 

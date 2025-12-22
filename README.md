@@ -135,7 +135,11 @@ sudo systemctl start bevattning-api
   - Värdeområde: 0-100%
 - **MW31** Regen_24h_mm (skrivs av Python/extern).
 - **MW32** Temp_C (skrivs av Python/extern).
-- **MW33** Pressure_Value (0-100%, skalas från analog input %IW1 - Tryckgivare via Terminal X3).
+- **MW33** Pressure_Switch_Status (digital: 0=ingen tryck, 1=tryck OK - från DI5 via Terminal X3).
+  - **ÄNDRING från analog till digital**: Tidigare analog 0-100%, nu digital switch
+  - Tryckvakt ansluten till %IX0.4 (DI5)
+  - Polaritet konfigurerbar i PLC via PRESSURE_OK_STATE (TRUE=NO, FALSE=NC)
+  - Se MW54 för larmstatus
 - **MW34** AutoOverride (1=forcera körning, hoppa fukt/regn-block).
 - **MW35** RegenThreshold_mm (default 5 om 0).
 - **MW36** MoistureThreshold (default 80 om 0).
@@ -146,7 +150,18 @@ sudo systemctl start bevattning-api
 - **MW51** Status_PumpOn (1/0)
 - **MW52** Status_Steg
 - **MW53** SelectedZoneReg (vald zon)
-- **MW55** FlowSwitchStatus (0=ingen flöde, 1=flöde OK - från DI6 via Terminal X3)
+- **MW54** PressureAlarmReg (tryckvakt larm)
+  - 0=OK
+  - 1=Timeout (inget tryck inom 10s efter pumpstart)
+  - 2=Oväntat tryck (tryck detekterat när pump är av)
+- **MW55** FlowSwitchStatus (digital: 0=ingen flöde, 1=flöde OK - från DI7 via Terminal X3)
+  - Flödesvakt ansluten till %IX0.6 (DI7)
+  - Polaritet konfigurerbar i PLC via FLOW_OK_STATE (TRUE=NO, FALSE=NC)
+  - Se MW56 för larmstatus
+- **MW56** FlowAlarmReg (flödesvakt larm)
+  - 0=OK
+  - 1=Initial timeout
+  - 2=Torrkörning (flöde förlorat under drift, >3s utan flöde)
 - **MW60** ModeRegister (1=Auto, 0=Manual override)
 - **MW61** ManualStartReg (skriv 1 för manuell start, PLC nollar)
 - **MW63** SetSelectedZoneReg (skriv 1..7, PLC nollar)
@@ -177,6 +192,8 @@ sudo systemctl start bevattning-api
   - 2=Moisture > threshold
   - 3=Anti-kollision/pump upptagen
   - 4=E-stop
+  - 5=Tryckfel (inget tryck efter pumpstart)
+  - 6=Flödesfel (torrkörning, inget flöde under drift)
 - **MW80** TestMode (1=testläge aktivt, 0=inaktivt)
 - **MW81** TestZoneResult (bitmask för testade zoner 1-7)
 - **MW82** ErrorReset (skriv 1 för att nollställa fel, PLC nollar)
@@ -196,11 +213,49 @@ sudo systemctl start bevattning-api
 - **Start (blow):** Använd displaymenyn: MODE→Blow, välj zon, bekräfta. Blow-out mode på vald zon via MW66=2.
 - **Zonbyte:** När körtid är slut: pump av först, CloseDelay, stäng ventiler, PauseDelay, nästa zon, OpenDelay, pump på.
 - **Stop/E-stop:** Pump av direkt, CloseDelay, stäng ventiler. E-stop nollar sekvens och blockreason=4.
-- **Flödesvaktsskydd:** Flödesvakt (DI6) via Terminal X3 ger torrkörsningsskydd för pump. Status läses till MW55.
+- **Säkerhetsövervakning:**
+  - **Tryckvakt (DI5):** Digital ingång. Vid pumpstart måste tryck detekteras inom 10s, annars alarm (MW54=1) och pump stoppas (BlockReason=5).
+  - **Flödesvakt (DI7):** Digital ingång. Om flöde försvinner under drift i mer än 3s, alarm (MW56=2) och pump stoppas (BlockReason=6).
+  - **Polaritet:** Båda givare kan konfigureras för NO (Normally Open) eller NC (Normally Closed) via PLC-konstanter PRESSURE_OK_STATE och FLOW_OK_STATE.
+  - **Reset:** Använd MW82 (ErrorReset) för att nollställa alarm och återställa systemet.
 - **Displaymeny:** Komplett meny via knappar DI11-DI14: OVERVIEW → MODE → ZONE → TIME (manual) → CONFIRM (håll OK >2s).
 - **LED-indikatorer:** BORTTAGNA - aktiv zon och återstående tid visas på system-display istället.
 - **Display-knappar:** Button 1 (öka zon), Button 2 (minska zon). Håll knapp i 3 sekunder för att bekräfta val.
 - **21:00 auto-läge övergång:** Systemet övergår passivt till auto-läge kl 21:00 dagligen. Om en sekvens körs fortsätter den utan avbrott och övergången sker efteråt.
+
+## Konfigurering av givare (Tryckvakt och Flödesvakt)
+Tryckvakten och flödesvakten är digitala givare som kan vara antingen NO (Normally Open) eller NC (Normally Closed). 
+
+**Ändra givarpolaritet i PLC-koden:**
+I filen `Fotbollsplan_Master_Version12.st`, hitta följande konstanter i VAR-sektionen:
+```structured-text
+(* Safety monitoring: Configurable sensor polarity *)
+PRESSURE_OK_STATE : BOOL := TRUE;   (* TRUE=NO (Normally Open), FALSE=NC (Normally Closed) *)
+FLOW_OK_STATE : BOOL := TRUE;       (* TRUE=NO (Normally Open), FALSE=NC (Normally Closed) *)
+```
+
+**Exempel:**
+- Om tryckvakten är kopplad NC (Normally Closed) - öppnar när tryck finns:
+  ```structured-text
+  PRESSURE_OK_STATE : BOOL := FALSE;
+  ```
+- Om flödesvakten är kopplad NO (Normally Open) - sluter när flöde finns:
+  ```structured-text
+  FLOW_OK_STATE : BOOL := TRUE;
+  ```
+
+**Verifiering:**
+1. Se till att pumpen är avstängd
+2. Läs MW33 (Pressure_Switch_Status) - ska vara 0 när inget tryck
+3. Läs MW55 (FlowSwitchStatus) - ska vara 0 när inget flöde
+4. Om värdena är felaktiga, invertera motsvarande konstant i PLC-koden
+
+**Timeout-inställningar:**
+PLC-konstanter för timeout-övervakning kan justeras vid behov:
+```structured-text
+PRESSURE_TIMEOUT_SEC : INT := 10;   (* Sekunder att vänta på tryck efter pumpstart *)
+FLOW_TIMEOUT_SEC : INT := 3;        (* Sekunder utan flöde under drift innan larm *)
+```
 
 ## Python Open-Meteo-controller
 - Fil: `bevattning_controller.py`

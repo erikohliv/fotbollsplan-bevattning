@@ -34,8 +34,9 @@ PROGRAM Fotbollsplan_Master
     Start_Puls       : BOOL; (* %IX0.1 - DI2 *)
     Mode_Auto        : BOOL; (* %IX0.2 - DI3 Auto läge från 1-0-2 brytare *)
     Reset_Button     : BOOL; (* %IX0.3 - DI4 Reset/Kvittera larm *)
+    Switch_Pressure  : BOOL; (* %IX0.4 - DI5 Tryckvakt (NO/NC) via Terminal X3 *)
     Test_Button      : BOOL; (* %IX0.5 *)
-    Flow_Switch      : BOOL; (* %IX0.6 - DI6 Flödesvakt via Terminal X3 *)
+    Flow_Switch      : BOOL; (* %IX0.6 - DI7 Flödesvakt via Terminal X3 *)
     EStop_NC         : BOOL; (* %IX0.7 - DI8 Nödstopp *)
     Mode_Manual      : BOOL; (* %IX1.1 - DI10 Manuell läge från 1-0-2 brytare *)
     Menu_Left        : BOOL; (* %IX1.2 - DI11 Meny Vänster/Upp *)
@@ -45,7 +46,6 @@ PROGRAM Fotbollsplan_Master
 
     (* ANALOG INPUTS *)
     Analog_Markfukt_Raw : INT; (* %IW0 - 0-10V analog input from soil moisture sensor *)
-    Analog_Pressure_Raw : INT; (* %IW1 - 0-10V/4-20mA pressure sensor via Terminal X3 *)
 
     (* MODBUS / HOLDING REGISTER *)
     Remote_Command : INT; (* %MW10 *)
@@ -55,7 +55,7 @@ PROGRAM Fotbollsplan_Master
     Markfukt       : INT; (* %MW30 *)
     Regen_24h_mm   : INT; (* %MW31 *)
     Temp_C         : INT; (* %MW32 *)
-    Pressure_Value : INT; (* %MW33 - Tryckgivare värde (0-100% eller skalat) *)
+    Pressure_Switch_Status : INT; (* %MW33 - Tryckvakt status (0=ingen tryck, 1=tryck OK) *)
     AutoOverride   : INT; (* %MW34 *)
 
     RegenThreshold_mm : INT; (* %MW35 *)
@@ -70,7 +70,9 @@ PROGRAM Fotbollsplan_Master
     Status_Steg        : INT; (* %MW52 *)
     
     SelectedZoneReg    : INT; (* %MW53 - vald zon *)
+    PressureAlarmReg   : INT; (* %MW54 - Tryck larm (0=OK, 1=Timeout, 2=Unexpected) *)
     FlowSwitchStatus   : INT; (* %MW55 - Flödesvakt status (0=ingen flöde, 1=flöde OK) *)
+    FlowAlarmReg       : INT; (* %MW56 - Flöde larm (0=OK, 1=Timeout, 2=Torrkörning) *)
     ModeRegister       : INT; (* %MW60 - 1=Auto, 0=Manual override *)
     ManualStartReg     : INT; (* %MW61 - skriv 1 för manual start (PLC nollar) *)
     SetSelectedZoneReg : INT; (* %MW63 - skriv 1..7 för direktval (PLC nollar) *)
@@ -160,6 +162,23 @@ PROGRAM Fotbollsplan_Master
 
     AntiCollisionBlock : BOOL := FALSE;
     
+    (* Safety monitoring: Configurable sensor polarity *)
+    PRESSURE_OK_STATE : BOOL := TRUE;   (* TRUE=NO (Normally Open), FALSE=NC (Normally Closed) *)
+    FLOW_OK_STATE : BOOL := TRUE;       (* TRUE=NO (Normally Open), FALSE=NC (Normally Closed) *)
+    
+    (* Safety monitoring: Pressure timeout *)
+    Tmr_PressureTimeout : TON;
+    PressureAlarm : INT := 0;           (* 0=OK, 1=Timeout efter pumpstart, 2=Oväntat tryck *)
+    PRESSURE_TIMEOUT_SEC : INT := 10;   (* Sekunder att vänta på tryck efter pumpstart *)
+    PressureLost : BOOL := FALSE;       (* Indikerar att tryck har förlorats oväntat *)
+    
+    (* Safety monitoring: Flow timeout *)
+    Tmr_FlowTimeout : TON;
+    FlowAlarm : INT := 0;               (* 0=OK, 1=Initialt timeout, 2=Torrkörning under drift *)
+    FLOW_TIMEOUT_SEC : INT := 3;        (* Sekunder utan flöde under drift innan larm *)
+    FlowLostDuringRun : BOOL := FALSE;  (* Indikerar flödesförlust under körning *)
+    Prev_Pump_State : BOOL := FALSE;    (* För edge-detection av pumpstart *)
+    
     (* Mode switch state tracking *)
     CurrentModeSwitch : INT := 0;  (* Aktuellt läge: 0=Neutral, 1=Lokalt, 2=Fjärr *)
     PrevModeSwitchReg : INT := 0;  (* Tidigare värde av ModeSwitchReg för edge-detection *)
@@ -213,24 +232,22 @@ PROGRAM Fotbollsplan_Master
   IF Markfukt > MOISTURE_PERCENT_MAX THEN Markfukt := MOISTURE_PERCENT_MAX; END_IF;
   IF Markfukt < 0 THEN Markfukt := 0; END_IF;
 
-  (* TRYCKGIVARE: Scale analog input 0-10V (0-27648) to 0-100% *)
-  (* Similar scaling as soil moisture sensor *)
-  IF Analog_Pressure_Raw < 0 THEN
-    Pressure_Value := 0;
-  ELSIF Analog_Pressure_Raw > ANALOG_INPUT_MAX THEN
-    Pressure_Value := MOISTURE_PERCENT_MAX;
+  (* TRYCKVAKT: Digital input (NO/NC configurable) *)
+  (* Switch_Pressure (%IX0.4 - DI5) är digital ingång *)
+  (* PRESSURE_OK_STATE styr polaritet: TRUE=NO (sluter vid tryck), FALSE=NC (bryter vid tryck) *)
+  IF Switch_Pressure = PRESSURE_OK_STATE THEN
+    Pressure_Switch_Status := 1;  (* Tryck OK *)
   ELSE
-    Pressure_Value := (Analog_Pressure_Raw * MOISTURE_PERCENT_MAX) / ANALOG_INPUT_MAX;
+    Pressure_Switch_Status := 0;  (* Inget tryck *)
   END_IF;
-  IF Pressure_Value > MOISTURE_PERCENT_MAX THEN Pressure_Value := MOISTURE_PERCENT_MAX; END_IF;
-  IF Pressure_Value < 0 THEN Pressure_Value := 0; END_IF;
 
-  (* FLÖDESVAKT: Läs status från DI6 och skriv till MW55 *)
-  (* Flow_Switch är Active High: 1=flöde OK, 0=ingen flöde *)
-  IF Flow_Switch THEN
-    FlowSwitchStatus := 1;
+  (* FLÖDESVAKT: Digital input (NO/NC configurable) *)
+  (* Flow_Switch (%IX0.6 - DI7) är digital ingång *)
+  (* FLOW_OK_STATE styr polaritet: TRUE=NO (sluter vid flöde), FALSE=NC (bryter vid flöde) *)
+  IF Flow_Switch = FLOW_OK_STATE THEN
+    FlowSwitchStatus := 1;  (* Flöde OK *)
   ELSE
-    FlowSwitchStatus := 0;
+    FlowSwitchStatus := 0;  (* Inget flöde *)
   END_IF;
 
   (* MENYKNAPPAR: Läs status från DI11-DI14 och bygg bitmask i MW64 *)
@@ -261,9 +278,95 @@ PROGRAM Fotbollsplan_Master
       AntiCollisionBlock := FALSE;
     END_IF;
     
+    (* Clear safety alarms on reset *)
+    PressureAlarm := 0;
+    FlowAlarm := 0;
+    PressureLost := FALSE;
+    FlowLostDuringRun := FALSE;
+    Tmr_PressureTimeout(IN := FALSE, PT := T#1s);
+    Tmr_FlowTimeout(IN := FALSE, PT := T#1s);
+    
     (* PLC auto-clears the reset register *)
     ErrorResetReg := 0;
   END_IF;
+
+  (* SÄKERHETSÖVERVAKNING: Tryck och Flöde *)
+  (* Export alarm status to Modbus registers *)
+  PressureAlarmReg := PressureAlarm;
+  FlowAlarmReg := FlowAlarm;
+  
+  (* Detect pump state changes (rising edge) *)
+  IF Signal_Pump AND NOT Prev_Pump_State THEN
+    (* Pump just started - reset alarms and start pressure timeout *)
+    PressureAlarm := 0;
+    FlowAlarm := 0;
+    PressureLost := FALSE;
+    FlowLostDuringRun := FALSE;
+    Tmr_PressureTimeout(IN := TRUE, PT := T#1s * PRESSURE_TIMEOUT_SEC);
+    Tmr_FlowTimeout(IN := FALSE, PT := T#1s);
+  END_IF;
+  
+  (* PRESSURE MONITORING *)
+  IF Signal_Pump THEN
+    (* Pump is running - check pressure *)
+    IF Pressure_Switch_Status = 1 THEN
+      (* Pressure OK - stop timeout timer *)
+      Tmr_PressureTimeout(IN := FALSE, PT := T#1s * PRESSURE_TIMEOUT_SEC);
+      (* Clear alarm if it was only a timeout (not unexpected pressure) *)
+      IF PressureAlarm = 1 THEN PressureAlarm := 0; END_IF;
+    ELSE
+      (* No pressure while pump is running *)
+      IF Tmr_PressureTimeout.Q THEN
+        (* Timeout exceeded - set alarm *)
+        IF PressureAlarm = 0 THEN PressureAlarm := 1; END_IF;  (* Timeout alarm *)
+        PressureLost := TRUE;
+        (* SAFETY ACTION: Stop pump immediately *)
+        Signal_Pump := FALSE;
+        BlockReason := 5;  (* Pressure failure *)
+      END_IF;
+    END_IF;
+  ELSE
+    (* Pump is off - check for unexpected pressure *)
+    IF Pressure_Switch_Status = 1 THEN
+      (* Unexpected pressure when pump is off *)
+      PressureAlarm := 2;  (* Unexpected pressure *)
+    ELSE
+      (* No pressure when pump is off - this is normal *)
+      IF PressureAlarm = 2 THEN PressureAlarm := 0; END_IF;  (* Clear unexpected pressure *)
+    END_IF;
+    (* Reset timeout timer when pump is off *)
+    Tmr_PressureTimeout(IN := FALSE, PT := T#1s * PRESSURE_TIMEOUT_SEC);
+  END_IF;
+  
+  (* FLOW MONITORING *)
+  IF Signal_Pump THEN
+    (* Pump is running - check flow *)
+    IF FlowSwitchStatus = 1 THEN
+      (* Flow OK - reset timeout timer *)
+      Tmr_FlowTimeout(IN := FALSE, PT := T#1s * FLOW_TIMEOUT_SEC);
+      (* Clear alarm if flow has returned *)
+      IF FlowAlarm <> 0 THEN FlowAlarm := 0; END_IF;
+      FlowLostDuringRun := FALSE;
+    ELSE
+      (* No flow while pump is running - start/continue timeout *)
+      Tmr_FlowTimeout(IN := TRUE, PT := T#1s * FLOW_TIMEOUT_SEC);
+      IF Tmr_FlowTimeout.Q THEN
+        (* Timeout exceeded - set alarm *)
+        FlowAlarm := 2;  (* Torrkörning - no flow during pump operation *)
+        FlowLostDuringRun := TRUE;
+        (* SAFETY ACTION: Stop pump immediately *)
+        Signal_Pump := FALSE;
+        BlockReason := 6;  (* Flow failure - Torrkörning *)
+      END_IF;
+    END_IF;
+  ELSE
+    (* Pump is off - reset flow monitoring *)
+    Tmr_FlowTimeout(IN := FALSE, PT := T#1s * FLOW_TIMEOUT_SEC);
+    (* Don't clear FlowLostDuringRun flag here - it persists until manual reset *)
+  END_IF;
+  
+  (* Update previous pump state for next cycle *)
+  Prev_Pump_State := Signal_Pump;
 
   (* E-STOP (NC) *)
   IF NOT EStop_NC THEN
@@ -277,6 +380,11 @@ PROGRAM Fotbollsplan_Master
     Remote_Command := 0;
     Steg := 0;
     Nuvarande_Zon := 0;
+    (* Clear safety alarms *)
+    PressureAlarm := 0;
+    FlowAlarm := 0;
+    Tmr_PressureTimeout(IN := FALSE, PT := T#1s);
+    Tmr_FlowTimeout(IN := FALSE, PT := T#1s);
     EventMask := EventMask OR 1; (* bit0 E-stop *)
     BlockReason := 4;
     RETURN;
@@ -685,6 +793,7 @@ CONFIGURATION Config0
     Start_Puls AT %IX0.1 : BOOL;
     Mode_Auto AT %IX0.2 : BOOL;
     Reset_Button AT %IX0.3 : BOOL;
+    Switch_Pressure AT %IX0.4 : BOOL;
     Test_Button AT %IX0.5 : BOOL;
     Flow_Switch AT %IX0.6 : BOOL;
     EStop_NC AT %IX0.7 : BOOL;
@@ -696,7 +805,6 @@ CONFIGURATION Config0
 
     (* ANALOG INPUTS *)
     Analog_Markfukt_Raw AT %IW0 : INT;  (* 0-10V soil moisture sensor *)
-    Analog_Pressure_Raw AT %IW1 : INT;  (* 0-10V/4-20mA pressure sensor *)
 
     Remote_Command AT %MW10 : INT;
     Set_Tid_Center AT %MW20 : INT;
@@ -705,7 +813,7 @@ CONFIGURATION Config0
     Markfukt AT %MW30 : INT;
     Regen_24h_mm AT %MW31 : INT;
     Temp_C AT %MW32 : INT;
-    Pressure_Value AT %MW33 : INT;
+    Pressure_Switch_Status AT %MW33 : INT;
     AutoOverride AT %MW34 : INT;
 
     RegenThreshold_mm AT %MW35 : INT;
@@ -720,7 +828,9 @@ CONFIGURATION Config0
     Status_Steg AT %MW52 : INT;
 
     SelectedZoneReg AT %MW53 : INT;
+    PressureAlarmReg AT %MW54 : INT;
     FlowSwitchStatus AT %MW55 : INT;
+    FlowAlarmReg AT %MW56 : INT;
     
     ModeRegister AT %MW60 : INT;
     ManualStartReg AT %MW61 : INT;
