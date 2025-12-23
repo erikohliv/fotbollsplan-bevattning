@@ -16,7 +16,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
+      - name: Check Raspberry Pi availability
+        id: rpi_check
+        env:
+          RPI_HOST: ${{ secrets.RPI_HOST }}
+        run: |
+          echo "Kontrollerar om Raspberry Pi svarar..."
+          if ping -c 1 -W 5 $RPI_HOST &>/dev/null; then
+            echo "✓ Raspberry Pi är tillgänglig"
+            echo "available=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ Varning: Raspberry Pi är inte tillgänglig. Hoppar över deployment."
+            echo "available=false" >> $GITHUB_OUTPUT
+          fi
+      
       - name: Deploy to Raspberry Pi
+        if: steps.rpi_check.outputs.available == 'true'
         env:
           RPI_HOST: ${{ secrets.RPI_HOST }}
           RPI_USER: ${{ secrets.RPI_USER }}
@@ -74,6 +89,7 @@ jobs:
           echo "Deployment finished successfully!"
       
       - name: Verify Deployment
+        if: steps.rpi_check.outputs.available == 'true'
         env:
           RPI_HOST: ${{ secrets.RPI_HOST }}
           RPI_USER: ${{ secrets.RPI_USER }}
