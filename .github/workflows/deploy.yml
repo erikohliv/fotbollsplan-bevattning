@@ -22,7 +22,7 @@ jobs:
           RPI_HOST: ${{ secrets.RPI_HOST }}
         run: |
           echo "Kontrollerar om Raspberry Pi svarar..."
-          if ping -c 1 -W 5 $RPI_HOST &>/dev/null; then
+          if ping -c 1 -W 10 "$RPI_HOST" &>/dev/null; then
             echo "✓ Raspberry Pi är tillgänglig"
             echo "available=true" >> $GITHUB_OUTPUT
           else
