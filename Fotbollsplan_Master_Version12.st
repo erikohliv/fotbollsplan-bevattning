@@ -2,14 +2,14 @@
   Fotbollsplan_Master_Version12.st
   - HÅRDVARUUPPDATERING: Siemens LOGO borttagen. Pump styrs direkt av UNIPI Relä 8 via Mjukstartare.
   - Menyknappar flyttade från Raspberry Pi GPIO till UNIPI PLC-ingångar (DI11-DI14, läses via MW64).
-  - Flödesvakt (DI6) via Terminal X3: Ger torrkörsningsskydd för pump.
-  - Tryckgivare (AI2) via Terminal X3: Övervakar pumptryck (MW33).
+  - Tryckvakt (DI5) via Terminal X3: Digital övervakningsskydd för pumptryck (MW33).
+  - Flödesvakt (DI7) via Terminal X3: Digital torrkörsningsskydd för pump (MW55).
   - Auto/Man-brytare: Delad i två separata ingångar DI3 (Auto) och DI10 (Manual) för 1-0-2 brytare.
   - Ventiler öppnas före pumpstart.
   - Pump stängs av först vid stop/zonbyte, därefter ventiler efter CloseDelay, för att minimera vattenslag.
   - Heartbeat (1s) bit+counter: MW70 (bit0 toggle), MW71 counter.
   - Event/Alarm mask: MW72 (bit0 E-stop, bit1 fukt/regen-block, bit2 sekvens aktiv, bit3 anti-kollision, bit4 AutoOverride).
-  - Block reason: MW73 (0=OK, 1=Regen>thr, 2=Moisture>thr, 3=Anti-kollision/Pump upptagen, 4=E-stop).
+  - Block reason: MW73 (0=OK, 1=Regen>thr, 2=Moisture>thr, 3=Anti-kollision/Pump upptagen, 4=E-stop, 5=Pressure failure, 6=Flow failure).
   - ManualRunTime REMOVED: Manual mode nu använder samma tider som auto mode (Set_Tid_Center/Set_Tid_Horn).
   - LED outputs REMOVED: Aktiv zon och återstående tid visas på display istället.
   - Manual mode: Kör endast den valda zonen (inte full sekvens som auto mode).
@@ -19,7 +19,9 @@
   - Test Mode (MW80): 1=Test mode active för försäsongskontroll.
   - ErrorReset (MW82): Skriv 1 för att återställa fel (PLC nollar automatiskt).
   - Markfuktgivare: Analog input %IW0 (0-10V) skalas till MW30 (0-100%).
-  - Flödesvakt: DI6 läses till MW55 för övervakning och torrkörsningsskydd.
+  - Tryckvakt: Digital input %IX0.4 (DI5) läses till MW33 (0=ingen tryck, 1=tryck OK).
+  - Flödesvakt: Digital input %IX0.6 (DI7) läses till MW55 (0=ingen flöde, 1=flöde OK).
+  - Säkerhetslogik: Pump stoppar automatiskt vid tryck-timeout (10s) eller flödesförlust (5s).
 *)
 
 PROGRAM Fotbollsplan_Master

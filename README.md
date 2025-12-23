@@ -5,7 +5,7 @@
 - **Python controller:** Hämtar Open-Meteo, markfukt (valfritt), skriver Modbus-register, pulserar start.
 - **FastAPI-backend:** API/Webb-UI + Modbus-brygga. Skyddas med API-nyckel.
 - **Display Manager:** Hanterar två I2C LCD-displayer för status och manuell styrning. Menyknappar läses från PLC via Modbus.
-- **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump styrs direkt via Relä 8 → Mjukstartare. Flödesvakt (DI6) och Tryckgivare (AI2) via Terminal X3.
+- **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump styrs direkt via Relä 8 → Mjukstartare. Tryckvakt (DI5) och Flödesvakt (DI7) via Terminal X3 för säkerhetsövervakning.
 
 ## Rörledningsnät och Zonspecifikationer
 Systemet använder ett hybridnät med PEM 90/75/50 rör. **Viktigt**: Zon 7 har PEM 50 (mindre dimension) medan Zon 5 har PEM 75, vilket ger naturlig tryckdämpning i Zon 7. Se [PIPE_NETWORK_DOCUMENTATION.md](PIPE_NETWORK_DOCUMENTATION.md) för detaljerad förklaring av hydraulik, tryckskillnader och varför dimensionen spelar roll.
@@ -560,14 +560,16 @@ journalctl -u bevattning-api -n 50
 - LED_1..7: **BORTTAGNA** (aktiv zon visas på display istället)
 - Analog In:
   - Markfuktgivare: `%IW0` (0-10V analog input, skalas till 0-100% i PLC)
-  - Tryckgivare: `%IW1` (0-10V/4-20mA via Terminal X3, skalas till 0-100% i PLC)
 - Digitala Ingångar: 
-  - Stop `%IX0.0` (DI1)
-  - Start `%IX0.1` (DI2)
-  - Auto-läge `%IX0.2` (DI3 - från 1-0-2 brytare)
-  - Reset `%IX0.3` (DI4)
-  - Test `%IX0.5` (DI5)
-  - Flödesvakt `%IX0.6` (DI6 - via Terminal X3)
+  - Stop `%IX0.0` (DI1 - Button_Stop)
+  - Start `%IX0.1` (DI2 - Button_Start)
+  - Auto-läge `%IX0.2` (DI3 - Switch_Auto från 1-0-2 brytare)
+  - Reset `%IX0.3` (DI4 - Button_Reset)
+  - Tryckvakt `%IX0.4` (DI5 - Switch_Pressure, NO/NC konfigurerbar)
+  - Test `%IX0.5` (DI6 - Button_Test)
+  - Flödesvakt `%IX0.6` (DI7 - Flow_Switch, NO/NC konfigurerbar)
+  - Nödstopp `%IX0.7` (DI8 - E_Stop, NC)
+  - Manual-läge `%IX1.1` (DI10 - Switch_Manual från 1-0-2 brytare)
   - E-Stop NC `%IX0.7` (DI8)
   - Manual-läge `%IX1.1` (DI10 - från 1-0-2 brytare)
   - Meny Vänster `%IX1.2` (DI11 - PLC-knapp)
