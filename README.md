@@ -115,8 +115,9 @@ python3 display_manager.py --enable-scheduler
 Se [DISPLAY_MANAGER.md](DISPLAY_MANAGER.md) för fullständig dokumentation.
 
 ### systemd (service)
-Kopiera `systemd/bevattning-api.service` till `/etc/systemd/system/`, justera sökvägar/användare vid behov.
+Kopiera `systemd_bevattning-api.service` till `/etc/systemd/system/bevattning-api.service`, justera sökvägar/användare vid behov.
 ```bash
+sudo cp systemd_bevattning-api.service /etc/systemd/system/bevattning-api.service
 sudo systemctl daemon-reload
 sudo systemctl enable bevattning-api
 sudo systemctl start bevattning-api
