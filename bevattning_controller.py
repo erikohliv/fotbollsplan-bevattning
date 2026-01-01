@@ -182,6 +182,72 @@ def read_markfukt_from_modbus(addr, host, port, unit=DEFAULT_MODBUS_UNIT):
         return None
 
 
+def check_season():
+    """
+    Kontrollera säsong och returnera varningar/blockeringar
+    
+    Returns:
+        tuple: (block: bool, warning: str or None)
+    """
+    now = datetime.now()
+    month = now.month
+    day = now.day
+    
+    # Vinterperiod: December - Mars (inga bevattningar)
+    if month in [12, 1, 2, 3]:
+        return True, f"VINTER: Bevattning blockerad månad {month}. Systemet ska vara vinterberedt."
+    
+    # Oktober: Varning för blowout
+    if month == 10:
+        if day >= 15:
+            warning = f"HÖST: Varning! Blowout bör genomföras senast 31 oktober. Idag: {now.strftime('%Y-%m-%d')}"
+            logger.warning(warning)
+            return False, warning
+    
+    # April: Säsongsstart-varning
+    if month == 4:
+        warning = "VÅR: Säsongstart. Kontrollera att systemet är aktiverat och testat."
+        logger.info(warning)
+        return False, warning
+    
+    return False, None
+
+
+def prompt_user_fallback(reason: str) -> str:
+    """
+    Prompt användare för beslut när automatik inte fungerar
+    
+    Args:
+        reason: Anledning till fallback (t.ex. "API nere", "Sensor fail")
+    
+    Returns:
+        str: Användarens val ("sensor", "force", "abort")
+    """
+    print(f"\n{'='*60}")
+    print(f"⚠️  FALLBACK LÄGE: {reason}")
+    print(f"{'='*60}")
+    print("\nVälj åtgärd:")
+    print("  1) Kör på sensor (om tillgänglig)")
+    print("  2) Force Ready (kör oavsett villkor)")
+    print("  3) Avbryt (kör inte bevattning)")
+    print(f"{'='*60}")
+    
+    while True:
+        try:
+            choice = input("Ditt val (1/2/3): ").strip()
+            if choice == "1":
+                return "sensor"
+            elif choice == "2":
+                return "force"
+            elif choice == "3":
+                return "abort"
+            else:
+                print("Ogiltigt val. Välj 1, 2 eller 3.")
+        except (KeyboardInterrupt, EOFError):
+            print("\nAvbryter...")
+            return "abort"
+
+
 def write_registers_bulk(client, start_address, values, unit=DEFAULT_MODBUS_UNIT):
     """Write multiple consecutive registers in one operation for better performance."""
     try:
@@ -235,18 +301,50 @@ def pulse_remote_command(host, port, unit, cmd_reg=MW_REMOTE_CMD, cmd_value=50, 
 
 def main_once(args):
     logger.info("=== Bevattningsscript Körning Startad ===")
+    
+    # Kontrollera säsong först
+    season_block, season_warning = check_season()
+    if season_block:
+        logger.error(season_warning)
+        logger.error("BEVATTNING AVBRUTEN: Vinterperiod")
+        return
+    if season_warning:
+        logger.warning(season_warning)
+    
     logger.info("Hämtar väderdata från Open-Meteo...")
     temp, regn = hamta_vader(args.lat, args.lon)
     
-    # Use fallback values if weather fetch failed
-    if temp is None or regn is None:
-        logger.warning("Väderdata ej tillgänglig, använder fallback-värden")
-        if temp is None:
-            temp = 15.0
-        if regn is None:
-            regn = 0.0
+    # Hantera fallback om väderdata saknas
+    weather_failed = (temp is None or regn is None)
+    if weather_failed:
+        logger.warning("Väderdata ej tillgänglig från API")
+        
+        # I interaktivt läge, prompt användare
+        if not args.simulate and not args.dry_run:
+            decision = prompt_user_fallback("Open-Meteo API nere")
+            
+            if decision == "abort":
+                logger.info("Användare avbröt körning")
+                return
+            elif decision == "force":
+                logger.warning("FORCE MODE: Användare tvingar körning utan väderdata")
+                temp = 15.0  # Säkert antagande
+                regn = 0.0   # Inga  regn antas
+            elif decision == "sensor":
+                logger.info("Använder endast sensor-data")
+                temp = 15.0  # Neutral temperatur
+                regn = 0.0   # Använd sensor istället
+        else:
+            # I simulate/dry-run, använd fallback-värden
+            logger.warning("Väderdata ej tillgänglig, använder fallback-värden")
+            if temp is None:
+                temp = 15.0
+            if regn is None:
+                regn = 0.0
 
     markfukt = args.simulate_markfukt_value if args.simulate else 30
+    sensor_failed = False
+    
     if args.read_markfukt and not args.simulate:
         logger.info("Läser markfukt från Modbus register %d...", MK_REG_ADDR)
         markfukt_sensor_value = read_markfukt_from_modbus(
@@ -256,7 +354,23 @@ def main_once(args):
             markfukt = markfukt_sensor_value
             logger.info("Markfukt läst från sensor: %d%%", markfukt)
         else:
-            logger.info("Använder simulerad markfukt pga läsfel")
+            sensor_failed = True
+            logger.warning("Markfuktsensor ej tillgänglig")
+            
+            # Prompt användare om både väder och sensor har fel
+            if weather_failed:
+                decision = prompt_user_fallback("Både API och sensor nere")
+                if decision == "abort":
+                    logger.info("Användare avbröt körning")
+                    return
+                elif decision == "force":
+                    logger.warning("FORCE MODE: Användare tvingar körning utan data")
+                    markfukt = 30  # Säkert antagande
+                else:
+                    logger.info("Använder standard markfukt-värde")
+                    markfukt = 30
+            else:
+                logger.info("Använder simulerad markfukt pga sensor-fel")
     else:
         logger.info("Använder %s markfukt: %d%%", "simulerad" if args.simulate else "standard", markfukt)
 
