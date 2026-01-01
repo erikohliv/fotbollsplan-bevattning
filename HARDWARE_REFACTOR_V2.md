@@ -50,13 +50,16 @@ Detta dokument beskriver den uppdaterade hårdvarumappningen för fotbollsplans 
 
 ### Arcade Buttons (Nya)
 - **Typ:** 4 st arcade-knappar på I2C
-- **I2C-adress:** TBD (behöver definieras)
+- **I2C-adress:** 0x20 (default, kan konfigueras beroende på hårdvara)
+  - **OBS:** 0x20 är en vanlig adress för PCF8574 I/O expanders. Om konflikt uppstår, använd alternativ adress (t.ex. 0x21-0x27 beroende på hårdvara).
+  - **Verifikation:** Kör `sudo i2cdetect -y 1` för att se upptagna adresser.
 - **Knappar:**
   - Button 1: Upp/Öka
   - Button 2: Ner/Minska
   - Button 3: OK/Välj
   - Button 4: Tillbaka/Avbryt
 - **Funktion:** Navigera menyer på Display 1, välja zoner och tider
+- **Implementation:** Se `ArcadeButtonManager` klass i `display_manager.py` - läslogik är placeholder och måste anpassas till faktisk hårdvara.
 
 ### Display 2 (D2) - **BORTTAGEN**
 Display 2 har tagits bort från systemet. All användarinteraktion sker nu via Display 1 och de nya arcade-knapparna.
@@ -189,7 +192,8 @@ sudo i2cdetect -y 1
 
 # Expected:
 # - 0x27: Display 1 (20x4 LCD)
-# - 0xXX: Arcade buttons (adress TBD)
+# - 0x20: Arcade buttons (eller annan adress om 0x20 är upptagen)
+# OBS: Om 0x20 redan används, konfigurera arcade buttons på annan adress
 ```
 
 ### Testa Mode Latch Logic

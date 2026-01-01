@@ -160,8 +160,18 @@ class ArcadeButtonManager:
             return self.button_states
         
         try:
-            # Read button register (implementation depends on actual I2C button controller)
-            # This is a placeholder - actual implementation depends on hardware
+            # ==================================================================
+            # WARNING: PLACEHOLDER IMPLEMENTATION
+            # This code assumes a simple I2C button controller where a single
+            # byte read returns button states as a bitmask (bit 0-3).
+            # 
+            # This MUST be updated to match your actual hardware:
+            # - PCF8574 I/O expander: Use read_byte() but may need inversion
+            # - MCP23008/MCP23017: Need register address and proper init
+            # - Custom controller: Implement according to datasheet
+            # 
+            # Test thoroughly before production use!
+            # ==================================================================
             data = self.bus.read_byte(self.i2c_addr)
             
             self.button_states = {

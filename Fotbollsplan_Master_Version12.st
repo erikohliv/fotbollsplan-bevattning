@@ -319,9 +319,10 @@ PROGRAM Fotbollsplan_Master
     (* SÄKERHETSÅTGÄRD: Stoppa pump omedelbart *)
     Signal_Pump := FALSE;
     
-    (* Sätt block reason om inte redan satt till högre prioritet *)
-    IF BlockReason = 0 THEN
-      BlockReason := 8;  (* Nytt block reason code för soft starter fault *)
+    (* Sätt block reason - överskriv låg-prioritet fel (1-6), men inte kritiska (4, 7) *)
+    (* Prioritet: E-stop(4) > Motorskydd(7) > Soft starter(8) > Pressure/Flow(5,6) > Villkor(1-3) *)
+    IF BlockReason <> 4 AND BlockReason <> 7 THEN
+      BlockReason := 8;  (* Soft starter fault *)
     END_IF;
   END_IF;
   Prev_Soft_Starter_Fault := Soft_Starter_Fault;
@@ -335,7 +336,7 @@ PROGRAM Fotbollsplan_Master
   END_IF;
 
   (* TRYCKVAKT: Digital input (NO/NC configurable) *)
-  (* Switch_Pressure (%IX0.4 - DI5) är digital ingång *)
+  (* Switch_Pressure (%IX1.0 - I09) är digital ingång *)
   (* PRESSURE_OK_STATE styr polaritet: TRUE=NO (sluter vid tryck), FALSE=NC (bryter vid tryck) *)
   IF Switch_Pressure = PRESSURE_OK_STATE THEN
     Pressure_Switch_Status := 1;  (* Tryck OK *)
