@@ -19,3 +19,5 @@ Logisk_Adress,Fysisk_Port,Variabel,Typ,Hårdvara,Koppling_Plint,Funktion,Noterin
 %IX0.7,I08,Soft_Starter_Fault,DI,Mjukstartare Signal,DI:8,Säkerhet/Motorskydd,Fault signal från Soft Starter
 %IX1.0,I09,Pressure_Switch,DI,Tryckvakt,DI:9,Säkerhet/Läckage,Digital - Sluter vid tryck > X bar
 %IX1.1,I10,Motor_Protection,DI,Motorskydd Q1,DI:10,KRITISK LARM,Utlöst motorskydd - Stoppar systemet
+%IX1.2,I11,Fuse_24VDC,DI,Säkring 24VDC,DI:11,KRITISK SÄKERHET,Övervakar 24VDC (PLC/Sensorer) - NC kontakt
+%IX1.3,I12,Fuse_24VAC,DI,Säkring 24VAC,DI:12,KRITISK SÄKERHET,Övervakar 24VAC (Ventiler R1-R7) - NC kontakt - EJ INSTALLERAD ÄN

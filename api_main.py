@@ -73,11 +73,19 @@ MW_SPECIAL_MODE = 66         # Special mode trigger: 0=none, 1=Test, 2=Blow (PLC
 MW_HEARTBEAT = 70
 MW_HEARTBEAT_CNT = 71
 MW_EVENTMASK = 72            # bit0=E-stop, bit1=fukt/regen, bit2=sekvens, bit3=anti-kollision, bit4=AutoOverride, bit5=Motorskydd
-MW_BLOCK_REASON = 73         # 0=OK, 1=Regen, 2=Moisture, 3=Anti-kollision, 4=E-stop, 5=Pressure, 6=Flow, 7=Motor protection, 8=Soft starter fault
+MW_BLOCK_REASON = 73         # 0=OK, 1=Regen, 2=Moisture, 3=Anti-kollision, 4=E-stop, 5=Pressure, 6=Flow, 7=Motor protection, 8=Soft starter fault, 9=24VDC fuse, 10=24VAC fuse
 MW_TEST_MODE = 80            # Test mode aktivering (1=aktiv, 0=inaktiv)
 MW_TEST_ZONE_RESULT = 81     # Test resultat för aktuell zon (bitmask för zoner 1-7)
 MW_ERROR_RESET = 82          # Error reset trigger (skriv 1 för att nollställa fel)
 MW_MODE = 100                # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
+
+# Digital Inputs - Säkringsövervakning
+DI_FUSE_24VDC = 10   # %IX1.2 = I11 - 24VDC säkring (PLC, sensorer)
+DI_FUSE_24VAC = 11   # %IX1.3 = I12 - 24VAC säkring (ventiler) - FÖRBERED
+
+# Block Reason Codes
+BLOCK_REASON_FUSE_24VDC = 9   # 24VDC säkring utlöst
+BLOCK_REASON_FUSE_24VAC = 10  # 24VAC säkring utlöst (framtida)
 
 # Digital sensor state expectations (configurable in PLC)
 # These match PLC constants: PRESSURE_OK_STATE and FLOW_OK_STATE
@@ -772,7 +780,9 @@ def felsokning(x_api_key: Optional[str] = Header(None)):
             5: "Tryckvakt fel",
             6: "Flödesvakt fel",
             7: "Motorskydd utlöst",
-            8: "Mjukstartare fel"
+            8: "Mjukstartare fel",
+            9: "24VDC säkring utlöst",
+            10: "24VAC säkring utlöst"
         }
         
         # Tolka eventmask
