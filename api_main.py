@@ -56,6 +56,7 @@ MW_PRESSURE_SWITCH = 33      # Tryckvakt status (0=ingen tryck, 1=tryck OK)
 MW_AUTO_OVERRIDE = 34        # AutoOverride (flyttad från 33)
 MW_REGEN_THRESHOLD = 35      # Regntröskel i mm (default 5) (flyttad från 34)
 MW_MOISTURE_THRESHOLD = 36   # Markfukttröskel i % (default 80) (flyttad från 35)
+MW_SOIL_TEMP_RAW = 37        # Jordtemperatur råvärde från analog A2 (0-27648 motsvarar 0-10V)
 MW_STATUS_ZONE = 50
 MW_STATUS_PUMP = 51
 MW_STATUS_STEG = 52
@@ -63,20 +64,20 @@ MW_SELECTED_ZONE = 53
 MW_PRESSURE_ALARM = 54       # Tryck larm (0=OK, 1=Timeout, 2=Unexpected)
 MW_FLOW_SWITCH = 55          # Flödesvakt status (0=ingen flöde, 1=flöde OK)
 MW_FLOW_ALARM = 56           # Flöde larm (0=OK, 1=Timeout, 2=Torrkörning)
-MW_MODE_OVERRIDE = 60
+MW_MODE_OVERRIDE = 60        # 1=Auto, 0=Manual (latched state from I05/I06 buttons)
 MW_MANUAL_START = 61
 MW_SET_SELECTED = 63
-MW_MENU_BUTTONS = 64        # Menu buttons bitmask (bit0=Left, bit1=Right, bit2=OK, bit3=Back)
-MW_MANUAL_TIME = 65         # Manual runtime in minutes (1-240)
-MW_SPECIAL_MODE = 66        # Special mode trigger: 0=none, 1=Test, 2=Blow (PLC clears)
+MW_MENU_BUTTONS = 64         # DEPRECATED - Menu buttons moved to I2C arcade buttons
+MW_MANUAL_TIME = 65          # Manual runtime in minutes (1-240)
+MW_SPECIAL_MODE = 66         # Special mode trigger: 0=none, 1=Test, 2=Blow (PLC clears)
 MW_HEARTBEAT = 70
 MW_HEARTBEAT_CNT = 71
-MW_EVENTMASK = 72
-MW_BLOCK_REASON = 73
-MW_TEST_MODE = 80           # Test mode aktivering (1=aktiv, 0=inaktiv)
-MW_TEST_ZONE_RESULT = 81    # Test resultat för aktuell zon (bitmask för zoner 1-7)
-MW_ERROR_RESET = 82         # Error reset trigger (skriv 1 för att nollställa fel)
-MW_MODE = 100               # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
+MW_EVENTMASK = 72            # bit0=E-stop, bit1=fukt/regen, bit2=sekvens, bit3=anti-kollision, bit4=AutoOverride, bit5=Motorskydd
+MW_BLOCK_REASON = 73         # 0=OK, 1=Regen, 2=Moisture, 3=Anti-kollision, 4=E-stop, 5=Pressure, 6=Flow, 7=Motor protection, 8=Soft starter fault
+MW_TEST_MODE = 80            # Test mode aktivering (1=aktiv, 0=inaktiv)
+MW_TEST_ZONE_RESULT = 81     # Test resultat för aktuell zon (bitmask för zoner 1-7)
+MW_ERROR_RESET = 82          # Error reset trigger (skriv 1 för att nollställa fel)
+MW_MODE = 100                # Mode switch: 0=Neutral, 1=Lokalt läge, 2=Fjärrläge
 
 # Digital sensor state expectations (configurable in PLC)
 # These match PLC constants: PRESSURE_OK_STATE and FLOW_OK_STATE
@@ -631,7 +632,11 @@ def felsokning(x_api_key: Optional[str] = Header(None)):
             1: "Regn över tröskel",
             2: "Markfukt över tröskel",
             3: "Anti-kollision / Pump upptagen",
-            4: "E-stop aktiv"
+            4: "E-stop aktiv",
+            5: "Tryckvakt fel",
+            6: "Flödesvakt fel",
+            7: "Motorskydd utlöst",
+            8: "Mjukstartare fel"
         }
         
         # Tolka eventmask
@@ -640,7 +645,8 @@ def felsokning(x_api_key: Optional[str] = Header(None)):
             "moisture_rain_block": bool(eventmask & 0x02),
             "sequence_active": bool(eventmask & 0x04),
             "anti_collision": bool(eventmask & 0x08),
-            "auto_override": bool(eventmask & 0x10)
+            "auto_override": bool(eventmask & 0x10),
+            "motor_protection": bool(eventmask & 0x20)
         }
         
         return {
@@ -1411,7 +1417,11 @@ def get_process_view(x_api_key: Optional[str] = Header(None)):
         1: "Regn över tröskel",
         2: "Markfukt över tröskel",
         3: "Anti-kollision/Pump upptagen",
-        4: "E-stop aktiv"
+        4: "E-stop aktiv",
+        5: "Tryckvakt fel",
+        6: "Flödesvakt fel",
+        7: "Motorskydd utlöst",
+        8: "Mjukstartare fel"
     }
     
     block_explanations = {
@@ -1419,7 +1429,11 @@ def get_process_view(x_api_key: Optional[str] = Header(None)):
         1: f"Nederbörd senaste 24h ({env_regs.registers[1]} mm) överstiger tröskelvärdet ({regen_threshold} mm). Bevattning pausas automatiskt.",
         2: f"Markfukten ({env_regs.registers[0]}%) överstiger tröskelvärdet ({moisture_threshold}%). Bevattning pausas automatiskt.",
         3: "En annan sekvens eller process använder pumpen. Vänta tills den är klar.",
-        4: "Nödstopp är aktiverat. Kontrollera fysisk E-stop-knapp och återställ innan körning."
+        4: "Nödstopp är aktiverat. Kontrollera fysisk E-stop-knapp och återställ innan körning.",
+        5: "Tryckvakt har indikerat fel. Kontrollera tryck i systemet och återställ med reset-knapp.",
+        6: "Flödesvakt har indikerat fel (torrkörning). Kontrollera vattenförsörjning och återställ med reset-knapp.",
+        7: "Motorskydd (Q1) har utlöst. KRITISKT FEL - kontrollera motor och elektrisk installation innan återställning.",
+        8: "Mjukstartare har rapporterat fel. Kontrollera mjukstartare och återställ med reset-knapp."
     }
     
     mode_value = mode_reg.registers[0]
