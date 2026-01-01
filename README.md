@@ -353,6 +353,106 @@ PRESSURE_TIMEOUT_SEC : INT := 10;   (* Sekunder att vänta på tryck efter pumps
 FLOW_TIMEOUT_SEC : INT := 3;        (* Sekunder utan flöde under drift innan larm *)
 ```
 
+## Smart Pump Protection (System 2.0)
+
+Systemet har avancerad pumpsäkerhet baserad på digitala sensorer (Tryckvakt och Flödesvakt).
+
+### Skyddsfunktioner
+
+#### 1. Grace Period (Uppstart)
+- **Tid:** 25 sekunder efter pump-start
+- **Funktion:** Maskerar alarm under mjukstartens upprampning
+- **Status:** Tryck- och flödesvaktar ignoreras tills trycket stabiliseras
+
+#### 2. Slangbrott-detektion
+**Villkor:** Flöde=JA, Tryck=NEJ  
+**Reaktionstid:** 2 sekunder  
+**Åtgärd:** 
+- Pump stoppas omedelbart (nödstopp)
+- BlockReason = 11 (Slangbrott)
+- E-post-larm skickas (om konfigurerat)
+
+**Tolkning:** Vatten flödar men tryck kan inte byggas upp → Läckage/slangbrott
+
+#### 3. Torrkörning-detektion
+**Villkor:** Flöde=NEJ, Tryck=NEJ  
+**Reaktionstid:** 10 sekunder  
+**Åtgärd:**
+- Pump stoppas omedelbart (nödstopp)
+- BlockReason = 12 (Torrkörning)
+- E-post-larm skickas (om konfigurerat)
+
+**Tolkning:** Varken flöde eller tryck → Vattnet är slut eller pumpfel
+
+#### 4. Normal avslutning (Slangvinda)
+**Villkor:** Flöde=NEJ, Tryck=JA  
+**Reaktionstid:** Omedelbar  
+**Åtgärd:**
+- Pump stoppas mjukt (normalt stopp)
+- Bevattningstider sätts till 0 (signal om avslutad körning)
+- **INGET larm** (detta är normalt)
+
+**Tolkning:** Slangvindan har stängt ventilen → Körning klar
+
+### Block Reason Codes (Uppdaterade)
+
+```
+0  = OK
+1  = Regn över tröskel
+2  = Markfukt över tröskel
+3  = Anti-kollision
+4  = E-stop
+5  = Tryckvakt fel (initialt)
+6  = Flödesvakt fel (initialt)
+7  = Motorskydd utlöst
+8  = Mjukstartare fel
+9  = 24VDC säkring utlöst
+10 = 24VAC säkring utlöst
+11 = Slangbrott (Smart Pump Protection) ← NYT
+12 = Torrkörning (Smart Pump Protection) ← NYT
+```
+
+### Återställning efter pump-larm
+
+Vid pump-larm (BlockReason 11 eller 12):
+
+1. **Kontrollera systemet fysiskt:**
+   - Slangbrott (11): Inspektera slangar och kopplingar
+   - Torrkörning (12): Kontrollera vattentillförsel och pump
+
+2. **Återställ via API:**
+```bash
+curl -X POST -H "X-API-Key: <din-nyckel>" http://<ip>:8000/menu/reset-error
+```
+
+3. **Återställ via Display:** Tryck på Reset-knappen (S203)
+
+4. **Testa systemet:** Kör en kort testsekvens för att verifiera att felet är åtgärdat
+
+### Felsökning
+
+**Problem:** Falskt slangbrott-larm  
+**Orsaker:**
+- Tryckvakten är felaktigt inställd (för högt tryck-tröskel)
+- Tryckvakten är felaktig (öppnar för tidigt)
+- Luftficka i systemet
+
+**Åtgärd:**
+1. Kontrollera tryckvaktsinställning (ska vara ca 2-3 bar)
+2. Blöt ur systemet för att ta bort luftfickor
+3. Om problemet kvarstår, justera SLANGBROTT_DELAY i `pump_protection.py`
+
+**Problem:** Falskt torrkörning-larm  
+**Orsaker:**
+- Flödesvakten är felaktigt monterad
+- Flödesvakten är blockerad
+- För låg flödeshastighet i systemet
+
+**Åtgärd:**
+1. Kontrollera flödesvakt-montering och rengör om nödvändigt
+2. Verifiera att minst en zon har öppen ventil
+3. Om problemet kvarstår, justera TORRKORNING_DELAY i `pump_protection.py`
+
 ## Python Open-Meteo-controller
 - Fil: `bevattning_controller.py`
 - Hämtar väderdata från Open-Meteo (gratis, inget API-nyckel behövs)
