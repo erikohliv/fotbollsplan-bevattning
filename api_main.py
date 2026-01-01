@@ -1013,6 +1013,21 @@ label { font-weight: bold; margin-right: 5px; }
   </div>
   
   <div class="section">
+    <h3>🔧 Sensor & Fallback</h3>
+    <div id="sensor-status-display" style="margin-bottom: 10px; padding: 10px; background: #e8f5e9; border-radius: 4px;">
+      <div style="font-family: monospace; font-size: 12px;" id="sensor-info">Laddar sensorstatus...</div>
+    </div>
+    <div class="controls">
+      <button onclick="refreshSensorStatus()">Uppdatera Sensorstatus</button>
+      <button class="danger" onclick="startFallback()">⚠️ Starta Fallback-läge</button>
+    </div>
+    <p style="font-size: 12px; color: #666; margin-top: 10px;">
+      Fallback använder default-värden (temp=15°C, fukt=30%, regn=0mm) vid sensorfel.
+      <strong>Kräver manuell bekräftelse.</strong>
+    </p>
+  </div>
+  
+  <div class="section">
     <h3>Zon-konfiguration</h3>
     <p style="color: #666; font-size: 12px; margin-top: 0;">
       Inaktivera zoner som inte ska vattnas (t.ex. vid trasig spridare). 
@@ -1461,6 +1476,77 @@ async function toggleZone(zoneId) {
   }
 }
 
+async function refreshSensorStatus() {
+  try {
+    const r = await fetch('/sensor-status', {headers: {'X-API-Key': key}});
+    
+    if (!r.ok) {
+      document.getElementById('sensor-info').innerText = 'Fel vid läsning av sensorstatus';
+      return;
+    }
+    
+    const data = await r.json();
+    
+    // Format sensor info
+    const moistureIcon = data.sensors.moisture.ok ? '✅' : '❌';
+    const tempIcon = data.sensors.temperature.ok ? '✅' : '❌';
+    const fuse24vdcIcon = data.fuses['24vdc'].status ? '✅' : '🚨';
+    const fuse24vacIcon = data.fuses['24vac'].status ? '✅' : '🚨';
+    
+    const info = 
+      `${moistureIcon} Markfukt: ${data.sensors.moisture.value}% (${data.sensors.moisture.voltage}V)\n` +
+      `${tempIcon} Temperatur: ${data.sensors.temperature.value_raw} raw (${data.sensors.temperature.voltage}V)\n` +
+      `${fuse24vdcIcon} 24VDC säkring: ${data.fuses['24vdc'].text}\n` +
+      `${fuse24vacIcon} 24VAC säkring: ${data.fuses['24vac'].text} ${data.fuses['24vac'].note || ''}`;
+    
+    document.getElementById('sensor-info').innerText = info;
+    
+    // Visa varning om sensor-fel
+    if (!data.sensors.moisture.ok || !data.sensors.temperature.ok) {
+      showMessage('⚠️ Sensorfel detekterat! Spänning < 1.0V', true);
+    }
+    
+    // Visa kritiskt fel om säkring utlöst
+    if (!data.fuses['24vdc'].status || !data.fuses['24vac'].status) {
+      showMessage('🚨 KRITISKT: Säkring utlöst!', true);
+    }
+    
+  } catch (err) {
+    showMessage('Nätverksfel vid läsning av sensorstatus: ' + err.message, true);
+  }
+}
+
+async function startFallback() {
+  if (!confirm('⚠️ VARNING: Starta Fallback-läge?\n\nDetta använder default-värden istället för verkliga sensorer:\n- Temperatur: 15°C\n- Markfukt: 30%\n- Regn: 0mm\n\nAnvänd endast om sensorer har fel och du ändå vill vattna.')) {
+    return;
+  }
+  
+  try {
+    const r = await fetch('/command/start-fallback', {
+      method: 'POST',
+      headers: {'X-API-Key': key, 'Content-Type': 'application/json'},
+      body: JSON.stringify({confirm: true})
+    });
+    
+    if (!r.ok) {
+      const err = await r.json();
+      showMessage('Fel: ' + (err.detail || 'Okänt fel'), true);
+      return;
+    }
+    
+    const result = await r.json();
+    showMessage('✅ Fallback-läge aktiverat med default-värden');
+    setTimeout(loadStatus, 500);
+  } catch (err) {
+    showMessage('Nätverksfel: ' + err.message, true);
+  }
+}
+
+// Auto-refresh sensor status var 30:e sekund
+setInterval(refreshSensorStatus, 30000);
+// Initial load
+refreshSensorStatus();
+
 </script>
 </body>
 </html>
@@ -1581,6 +1667,190 @@ def get_rain_forecast(x_api_key: Optional[str] = Header(None)):
             status_code=502, 
             detail=f"Kunde inte hämta väderdata från Open-Meteo: {str(e)}"
         ) from e
+
+
+@app.get("/sensor-status")
+def get_sensor_status(x_api_key: Optional[str] = Header(None)):
+    """
+    Hämta sensor- och säkringsstatus.
+    
+    Returnerar:
+        {
+            "ok": true,
+            "sensors": {
+                "moisture": {"voltage": 3.2, "ok": true, "value": 45, "unit": "%"},
+                "temperature": {"voltage": 2.8, "ok": true, "value_raw": 7500, "unit": "raw (0-27648)"}
+            },
+            "fuses": {
+                "24vdc": {"status": true, "text": "OK", "description": "PLC, sensorer, styrning"},
+                "24vac": {"status": true, "text": "OK", "description": "Solenoid-ventiler (R1-R7)", "note": "Ej installerad än"}
+            },
+            "timestamp": 1234567890
+        }
+    """
+    require_key(x_api_key)
+    
+    with get_modbus_connection() as client:
+        # Läs analoga sensorer
+        sensor_regs = client.read_holding_registers(MW_MARKFUKT, 1, unit=MODBUS_UNIT)
+        temp_regs = client.read_holding_registers(MW_SOIL_TEMP_RAW, 1, unit=MODBUS_UNIT)
+        
+        # Läs säkringar (I11-I12)
+        fuse_inputs = client.read_discrete_inputs(DI_FUSE_24VDC, 2, unit=MODBUS_UNIT)
+        
+        _ensure_modbus_ok(sensor_regs, "read moisture sensor")
+        _ensure_modbus_ok(temp_regs, "read temperature sensor")
+        _ensure_modbus_ok(fuse_inputs, "read fuse status")
+        
+        # Beräkna spänningar
+        moisture_raw = sensor_regs.registers[0]
+        temp_raw = temp_regs.registers[0]
+        
+        # Markfukt: 0-100% → 0-10V (antar linjär)
+        moisture_voltage = (moisture_raw / 100.0) * 10.0
+        # Temperatur: 0-27648 → 0-10V
+        temp_voltage = (temp_raw / 27648.0) * 10.0
+        
+        fuse_24vdc = fuse_inputs.bits[0]
+        fuse_24vac = fuse_inputs.bits[1]
+    
+    return {
+        "ok": True,
+        "sensors": {
+            "moisture": {
+                "voltage": round(moisture_voltage, 2),
+                "ok": moisture_voltage >= 1.0,
+                "value": moisture_raw,
+                "unit": "%"
+            },
+            "temperature": {
+                "voltage": round(temp_voltage, 2),
+                "ok": temp_voltage >= 1.0,
+                "value_raw": temp_raw,
+                "unit": "raw (0-27648)"
+            }
+        },
+        "fuses": {
+            "24vdc": {
+                "status": fuse_24vdc,
+                "text": "OK" if fuse_24vdc else "UTLÖST",
+                "description": "PLC, sensorer, styrning",
+                "critical": not fuse_24vdc
+            },
+            "24vac": {
+                "status": fuse_24vac,
+                "text": "OK" if fuse_24vac else "UTLÖST",
+                "description": "Solenoid-ventiler (R1-R7)",
+                "critical": not fuse_24vac,
+                "note": "Ej installerad än - förbered för framtida implementering"
+            }
+        },
+        "timestamp": int(time.time())
+    }
+
+
+class FallbackCommand(BaseModel):
+    """Request model for manual fallback activation."""
+    confirm: bool = False
+
+
+@app.post("/command/start-fallback")
+def start_fallback(cmd: FallbackCommand, x_api_key: Optional[str] = Header(None)):
+    """
+    Starta Fallback-läge manuellt (vid sensorfel).
+    
+    VARNING: Använder default-värden istället för verkliga sensorer.
+    
+    Säkerhetsregler:
+    - Blockeras om 24VDC säkring utlöst (I11=0)
+    - Blockeras om 24VAC säkring utlöst (I12=0)
+    - Kräver confirm=true
+    
+    Request body:
+        {
+            "confirm": true
+        }
+    
+    Returns:
+        {
+            "ok": true,
+            "mode": "fallback",
+            "values": {
+                "temperature": 15,
+                "moisture": 30,
+                "rain": 0,
+                "tid_center": 60,
+                "tid_horn": 25
+            },
+            "message": "Fallback-läge aktiverat med default-värden"
+        }
+    """
+    require_key(x_api_key)
+    
+    if not cmd.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Fallback-läge kräver bekräftelse (confirm=true)"
+        )
+    
+    # === KRITISK: Kontrollera säkringar FÖRST ===
+    with get_modbus_connection() as client:
+        fuse_inputs = client.read_discrete_inputs(DI_FUSE_24VDC, 2, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(fuse_inputs, "read fuse status for fallback")
+        
+        fuse_24vdc = fuse_inputs.bits[0]
+        fuse_24vac = fuse_inputs.bits[1]
+        
+        if not fuse_24vdc:
+            raise HTTPException(
+                status_code=503,
+                detail="KRITISKT: 24VDC säkring utlöst (I11=0). Fallback EJ tillåten."
+            )
+        
+        if not fuse_24vac:
+            raise HTTPException(
+                status_code=503,
+                detail="KRITISKT: 24VAC säkring utlöst (I12=0). Ventiler fungerar EJ."
+            )
+        
+        # Säkringar OK → Skriv Fallback-värden
+        logger.warning("[FALLBACK] Manuell aktivering via API - använder default-värden")
+        
+        # Default Fallback-värden
+        temp = 15      # °C - neutral temperatur
+        moisture = 30  # % - säkert antagande
+        rain = 0       # mm - inget regn antas
+        
+        # Beräkna tider (full körning om Fallback)
+        tid_center = 60  # minuter
+        tid_horn = 25    # minuter
+        
+        # Skriv till PLC
+        values_time = [tid_center, tid_horn]
+        values_env = [moisture, rain, temp]
+        
+        rr1 = client.write_registers(MW_TID_CENTER, values_time, unit=MODBUS_UNIT)
+        rr2 = client.write_registers(MW_MARKFUKT, values_env, unit=MODBUS_UNIT)
+        
+        _ensure_modbus_ok(rr1, "write fallback times")
+        _ensure_modbus_ok(rr2, "write fallback environment")
+    
+    logger.info("[FALLBACK] Default-värden skrivna: temp=%d°C, moisture=%d%%, rain=%dmm, tid_center=%d, tid_horn=%d",
+                temp, moisture, rain, tid_center, tid_horn)
+    
+    return {
+        "ok": True,
+        "mode": "fallback",
+        "values": {
+            "temperature": temp,
+            "moisture": moisture,
+            "rain": rain,
+            "tid_center": tid_center,
+            "tid_horn": tid_horn
+        },
+        "message": "Fallback-läge aktiverat med default-värden",
+        "timestamp": int(time.time())
+    }
 
 
 @app.get("/process-view")
