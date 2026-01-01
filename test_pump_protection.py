@@ -150,6 +150,7 @@ class TestCheckPumpSafety:
         state.update(pump_active=True, delta_time=START_GRACE_PERIOD + 1)
         
         # Simulate hose break - should build up timer
+        # Run for delay duration + 2 seconds buffer to ensure alarm triggers
         for i in range(int(SLANGBROTT_DELAY) + 2):
             result = check_pump_safety(
                 state=state,
@@ -188,7 +189,7 @@ class TestCheckPumpSafety:
         # Run through grace period
         state.update(pump_active=True, delta_time=START_GRACE_PERIOD + 1)
         
-        # Simulate dry run
+        # Simulate dry run - run for delay duration + 2 seconds buffer to ensure alarm triggers
         for i in range(int(TORRKORNING_DELAY) + 2):
             result = check_pump_safety(
                 state=state,

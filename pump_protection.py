@@ -65,7 +65,13 @@ class PumpState:
     def reset(self):
         """Reset all state (används vid error reset)"""
         logger.info("Pump protection state reset")
-        self.__init__()
+        self.time_running = 0.0
+        self.timer_slangbrott = 0.0
+        self.timer_torrkorning = 0.0
+        self.last_check = None
+        self.pump_was_active = False
+        self.start_count = 0
+        self.start_history = []
 
 
 def check_pump_safety(
