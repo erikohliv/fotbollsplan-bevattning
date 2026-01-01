@@ -12,3 +12,7 @@ dash>=2.0.0
 plotly>=5.0.0
 pandas>=1.3.0
 httpx>=0.28.0
+
+# UniPi 1.1 Hardware Support
+RPi.GPIO>=0.7.0                              # GPIO control för digitala ingångar
+adafruit-circuitpython-ads1x15>=3.0.0        # ADS1115 ADC för analoga ingångar
