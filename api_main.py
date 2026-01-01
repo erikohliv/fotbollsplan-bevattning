@@ -1493,9 +1493,13 @@ async function refreshSensorStatus() {
     const fuse24vdcIcon = data.fuses['24vdc'].status ? '✅' : '🚨';
     const fuse24vacIcon = data.fuses['24vac'].status ? '✅' : '🚨';
     
+    // Use voltage_approx for moisture, voltage for temperature
+    const moistureVoltage = data.sensors.moisture.voltage_approx || data.sensors.moisture.voltage || 0;
+    const tempVoltage = data.sensors.temperature.voltage || 0;
+    
     const info = 
-      `${moistureIcon} Markfukt: ${data.sensors.moisture.value}% (${data.sensors.moisture.voltage}V)\n` +
-      `${tempIcon} Temperatur: ${data.sensors.temperature.value_raw} raw (${data.sensors.temperature.voltage}V)\n` +
+      `${moistureIcon} Markfukt: ${data.sensors.moisture.value}% (~${moistureVoltage}V approx)\n` +
+      `${tempIcon} Temperatur: ${data.sensors.temperature.value_raw} raw (${tempVoltage}V)\n` +
       `${fuse24vdcIcon} 24VDC säkring: ${data.fuses['24vdc'].text}\n` +
       `${fuse24vacIcon} 24VAC säkring: ${data.fuses['24vac'].text} ${data.fuses['24vac'].note || ''}`;
     
@@ -1503,7 +1507,7 @@ async function refreshSensorStatus() {
     
     // Visa varning om sensor-fel
     if (!data.sensors.moisture.ok || !data.sensors.temperature.ok) {
-      showMessage('⚠️ Sensorfel detekterat! Spänning < 1.0V', true);
+      showMessage('⚠️ Sensorfel detekterat! Värde ovanligt lågt', true);
     }
     
     // Visa kritiskt fel om säkring utlöst
@@ -1702,13 +1706,13 @@ def get_sensor_status(x_api_key: Optional[str] = Header(None)):
         _ensure_modbus_ok(temp_regs, "read temperature sensor")
         _ensure_modbus_ok(fuse_inputs, "read fuse status")
         
-        # Beräkna spänningar
-        moisture_raw = sensor_regs.registers[0]
-        temp_raw = temp_regs.registers[0]
+        # Markfukt och temperatur
+        moisture_percent = sensor_regs.registers[0]  # 0-100%
+        temp_raw = temp_regs.registers[0]  # 0-27648 motsvarar 0-10V
         
-        # Markfukt: 0-100% → 0-10V (antar linjär)
-        moisture_voltage = (moisture_raw / 100.0) * 10.0
-        # Temperatur: 0-27648 → 0-10V
+        # Beräkna indikativ spänning (baserat på antagande om linjär skala)
+        # OBS: Detta är approximativt - för exakt spänning, läs direkt från analog input
+        moisture_voltage_approx = (moisture_percent / 100.0) * 10.0  # Approximation
         temp_voltage = (temp_raw / 27648.0) * 10.0
         
         fuse_24vdc = fuse_inputs.bits[0]
@@ -1718,10 +1722,11 @@ def get_sensor_status(x_api_key: Optional[str] = Header(None)):
         "ok": True,
         "sensors": {
             "moisture": {
-                "voltage": round(moisture_voltage, 2),
-                "ok": moisture_voltage >= 1.0,
-                "value": moisture_raw,
-                "unit": "%"
+                "voltage_approx": round(moisture_voltage_approx, 2),
+                "ok": moisture_percent >= 10,  # Lågt värde indikerar möjligt fel
+                "value": moisture_percent,
+                "unit": "%",
+                "note": "Voltage is approximate - sensor value is stored as percentage in PLC"
             },
             "temperature": {
                 "voltage": round(temp_voltage, 2),

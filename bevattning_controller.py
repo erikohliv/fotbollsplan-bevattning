@@ -448,20 +448,22 @@ def main_once(args):
             MK_REG_ADDR, host=args.host, port=args.port, unit=args.unit
         )
         if markfukt_sensor_value is not None:
-            # Kontrollera spänning (markfukt är 0-100%, så 1V motsvarar ~10%)
-            sensor_ok, voltage = check_sensor_voltage(markfukt_sensor_value, "Markfukt", max_value=100)
-            
-            if not sensor_ok:
-                logger.error("⛔ BEVATTNING AVBRUTEN: Markfukt-sensor fel")
+            # TODO: För fullständig spänningsvalidering, läs råvärdet från analog input (%IW0)
+            # Nuvarande: MK_REG_ADDR (100) kan innehålla redan konverterat %-värde
+            # Om värdet är mycket lågt (< 10%), indikerar det möjligt sensorfel
+            if markfukt_sensor_value < 10:
+                logger.error("🚨 MARKFUKT-SENSOR FEL: Värde %d%% är ovanligt lågt (möjligt kabelbrott)", markfukt_sensor_value)
+                logger.error("   → Automatik stoppad")
+                logger.error("   → Använd '/command/start-fallback' för manuell körning")
                 return {
-                    "error": "Sensor fault (Markfukt < 1.0V)",
+                    "error": "Sensor fault (Markfukt < 10%)",
                     "sensor": "moisture",
-                    "voltage": voltage,
+                    "value": markfukt_sensor_value,
                     "wrote": False
                 }
             
             markfukt = markfukt_sensor_value
-            logger.info("Markfukt läst från sensor: %d%% (%.2fV)", markfukt, voltage)
+            logger.info("Markfukt läst från sensor: %d%%", markfukt)
         else:
             logger.error("🚨 MARKFUKT-SENSOR EJ TILLGÄNGLIG")
             logger.error("   → Automatik stoppad")
