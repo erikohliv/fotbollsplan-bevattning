@@ -98,6 +98,8 @@ python3 email_test.py --send-alarm-test
 - ✅ Test-mail
 - ✅ Larm-notifieringar
 
+> 📧 **Gmail SMTP-konfiguration:** Se [SMTP_SETUP_GUIDE.md](SMTP_SETUP_GUIDE.md) för detaljerad guide om hur du skapar Gmail App-lösenord och konfigurerar 2-stegsverifiering.
+
 ### 🔍 Systemverifiering
 
 Kör när som helst för att kontrollera systemstatus:
