@@ -787,8 +787,6 @@ curl -X POST -H "X-API-Key: <din-nyckel>" \
 - Om alla hörn-zoner är inaktiverade sätts tiden för hörn till 0
 - Webb-UI visar zonkonfiguration med checkboxes för enkel hantering
 
-```
-
 ## Rekommenderad drift
 - PLC kör ST-programmet (task 100 ms).
 - Python SMHI-controller körs t.ex. via cron eller systemd timer för periodiska uppdateringar av väder/markfukt.

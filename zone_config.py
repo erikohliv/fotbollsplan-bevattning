@@ -8,6 +8,8 @@ Thread-safe med fil-locking för att undvika konflikter.
 import json
 import os
 import threading
+import csv
+import shutil
 from datetime import datetime
 from typing import Dict, List, Optional
 import logging
@@ -67,7 +69,6 @@ class ZoneConfig:
             return list(range(1, 8))
         
         try:
-            import csv
             with open(self.hardware_map, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
@@ -172,7 +173,6 @@ class ZoneConfig:
             if os.path.exists(self.config_file):
                 backup_file = self.config_file + '.backup'
                 try:
-                    import shutil
                     shutil.copy2(self.config_file, backup_file)
                     logger.debug("Backup skapad: %s", backup_file)
                 except Exception as e:
@@ -195,7 +195,6 @@ class ZoneConfig:
                 backup_file = self.config_file + '.backup'
                 if os.path.exists(backup_file):
                     try:
-                        import shutil
                         shutil.copy2(backup_file, self.config_file)
                         logger.info("Konfiguration återställd från backup")
                     except Exception as e2:
