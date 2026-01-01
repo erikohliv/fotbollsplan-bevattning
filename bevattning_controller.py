@@ -24,6 +24,9 @@ except ImportError:
     HAS_ZONE_CONFIG = False
     logging.warning("zone_config.py saknas, alla zoner kommer köras")
 
+# Import pump protection module
+from pump_protection import PumpState, check_pump_safety, get_diagnostics
+
 try:
     from pymodbus.client import ModbusTcpClient
 except Exception:
@@ -54,8 +57,11 @@ MW_TID_HORN = 21
 MW_MARKFUKT = 30
 MW_REGEN24 = 31
 MW_TEMP = 32
+MW_PRESSURE_SWITCH = 33      # Tryckvakt status (0=ingen tryck, 1=tryck OK)
 MW_SOIL_TEMP_RAW = 37        # Jordtemperatur råvärde från analog A2 (0-27648 motsvarar 0-10V)
-MW_BLOCK_REASON = 73  # BlockReasonReg: 0=OK, 1=Rain, 2=Moisture, 3=Anti-collision, 4=E-stop, 5=Pressure, 6=Flow, 7=Motor protection, 8=Soft starter fault, 9=24VDC fuse, 10=24VAC fuse
+MW_STATUS_PUMP = 51          # Signal_Pump status (1=running, 0=stopped)
+MW_FLOW_SWITCH = 55          # FlowSwitchStatus (1=flow, 0=no flow)
+MW_BLOCK_REASON = 73  # BlockReasonReg: 0=OK, 1=Rain, 2=Moisture, 3=Anti-collision, 4=E-stop, 5=Pressure, 6=Flow, 7=Motor protection, 8=Soft starter fault, 9=24VDC fuse, 10=24VAC fuse, 11=Slangbrott, 12=Torrkörning
 
 MK_REG_ADDR = 100  # exempelfält för extern markfukt-läsning
 
@@ -71,6 +77,9 @@ BLOCK_REASON_FUSE_24VAC = 10  # 24VAC säkring utlöst (framtida)
 # Simple global cache is sufficient for single-threaded controller script.
 # For multi-threaded use, consider thread-safe caching library.
 _weather_cache = {"data": None, "timestamp": None, "cache_duration": 600}  # 10 minutes cache
+
+# Global state for pump protection (persistent between körningar i loop mode)
+_pump_state = PumpState()
 
 logger = logging.getLogger("bevattning")
 logger.setLevel(logging.DEBUG)
@@ -394,6 +403,114 @@ def pulse_remote_command(host, port, unit, cmd_reg=MW_REMOTE_CMD, cmd_value=50, 
         return False
 
 
+def check_pump_safety_from_modbus(
+    state: PumpState,
+    host: str,
+    port: int,
+    unit: int
+) -> dict:
+    """
+    Läser sensorer från Modbus och kör pump-safety-check.
+    
+    Returns:
+        {
+            "action": str,         # "OK", "STOP_NORMAL", "ALARM_SLANGBROTT", "ALARM_TORRKORNING"
+            "alarm": str,          # Beskrivning av larm (None om OK)
+            "block_code": int,     # Block reason code
+            "diagnostics": dict    # Sensor-värden för loggning
+        }
+    """
+    client = open_modbus_client(host, port)
+    
+    try:
+        if not client.connect():
+            logger.warning("Kunde inte ansluta för pump-safety-check")
+            return {"action": "OK", "alarm": None, "block_code": 0, "diagnostics": {}}
+        
+        # Läs sensorer
+        pump_reg = client.read_holding_registers(MW_STATUS_PUMP, 1, unit=unit)
+        flow_reg = client.read_holding_registers(MW_FLOW_SWITCH, 1, unit=unit)
+        pressure_reg = client.read_holding_registers(MW_PRESSURE_SWITCH, 1, unit=unit)
+        
+        client.close()
+        
+        if any(r is None or (hasattr(r, 'isError') and r.isError()) 
+               for r in [pump_reg, flow_reg, pressure_reg]):
+            logger.warning("Kunde inte läsa pump-status från Modbus")
+            return {"action": "OK", "alarm": None, "block_code": 0, "diagnostics": {}}
+        
+        pump_active = pump_reg.registers[0] == 1
+        flow_detected = flow_reg.registers[0] == 1
+        pressure_ok = pressure_reg.registers[0] == 1
+        
+        # Beräkna delta_time
+        now = time.time()
+        if state.last_check is None:
+            delta_time = 0.0
+        else:
+            delta_time = now - state.last_check
+        state.last_check = now
+        
+        # Kör safety-check
+        result = check_pump_safety(
+            state=state,
+            pump_active=pump_active,
+            flow_detected=flow_detected,
+            pressure_ok=pressure_ok,
+            delta_time=delta_time
+        )
+        
+        # Mappa till block reason codes
+        block_codes = {
+            "ALARM_SLANGBROTT": 11,
+            "ALARM_TORRKORNING": 12,
+            "STOP_NORMAL": 0,
+            "OK": 0
+        }
+        
+        diagnostics = get_diagnostics(state, pump_active, flow_detected, pressure_ok)
+        
+        return {
+            "action": result,
+            "alarm": result if result != "OK" else None,
+            "block_code": block_codes[result],
+            "diagnostics": diagnostics
+        }
+        
+    except Exception as e:
+        logger.warning(f"Fel vid pump-safety-check: {e}")
+        try:
+            client.close()
+        except:
+            pass
+        return {"action": "OK", "alarm": None, "block_code": 0, "diagnostics": {}}
+
+
+def stop_pump_emergency(host: str, port: int, unit: int, alarm_reason: str, block_code: int):
+    """Nödstopp av pump vid kritiskt larm"""
+    logger.error(f"🚨 NÖDSTOPP: {alarm_reason}")
+    
+    client = open_modbus_client(host, port)
+    try:
+        if client.connect():
+            # Stoppa pump
+            client.write_register(MW_REMOTE_CMD, 0, unit=unit)
+            
+            # Skriv block reason
+            client.write_register(MW_BLOCK_REASON, block_code, unit=unit)
+            
+            client.close()
+            logger.info(f"Pump stoppad och block reason satt till {block_code}")
+        else:
+            logger.error("Kunde inte stoppa pump - Modbus-anslutning misslyckades")
+    except Exception as e:
+        logger.error(f"Fel vid pump-stopp: {e}")
+        try:
+            client.close()
+        except:
+            pass
+
+
 def main_once(args):
     logger.info("=== Bevattningsscript Körning Startad ===")
     
@@ -447,6 +564,70 @@ def main_once(args):
             "error": "Weather API unavailable",
             "wrote": False
         }
+    
+    # === PUMP SAFETY CHECK (NYT) ===
+    global _pump_state
+    if not args.simulate and not args.dry_run:
+        logger.debug("Kör pump safety check...")
+        pump_safety_result = check_pump_safety_from_modbus(
+            state=_pump_state,
+            host=args.host,
+            port=args.port,
+            unit=args.unit
+        )
+        
+        # Logga diagnostik
+        logger.debug(f"Pump diagnostik: {pump_safety_result['diagnostics']}")
+        
+        # Hantera kritiska larm
+        if pump_safety_result["action"] in ["ALARM_SLANGBROTT", "ALARM_TORRKORNING"]:
+            logger.error(f"⛔ PUMP-LARM: {pump_safety_result['alarm']}")
+            
+            # Stoppa pump
+            stop_pump_emergency(
+                args.host, 
+                args.port, 
+                args.unit, 
+                pump_safety_result["alarm"],
+                pump_safety_result["block_code"]
+            )
+            
+            # Skicka e-post (om konfigurerat)
+            try:
+                from healthcheck import send_pump_alarm
+                send_pump_alarm(pump_safety_result["alarm"], pump_safety_result["diagnostics"])
+            except Exception as e:
+                logger.warning(f"Kunde inte skicka pump-larm via e-post: {e}")
+            
+            return {
+                "error": pump_safety_result["alarm"],
+                "block_reason": pump_safety_result["block_code"],
+                "diagnostics": pump_safety_result["diagnostics"],
+                "wrote": False
+            }
+        
+        # Hantera normal avslutning (slangvinda)
+        elif pump_safety_result["action"] == "STOP_NORMAL":
+            logger.info("✅ Slangvinda avslutad normalt - Skriver 0-tider")
+            
+            # Skriv 0-tider för att signalera "klart"
+            client = open_modbus_client(args.host, args.port)
+            try:
+                if client.connect():
+                    client.write_register(MW_TID_CENTER, 0, unit=args.unit)
+                    client.write_register(MW_TID_HORN, 0, unit=args.unit)
+                    client.close()
+                    logger.info("0-tider skrivna till PLC")
+            except Exception as e:
+                logger.warning(f"Kunde inte skriva 0-tider: {e}")
+            
+            return {
+                "status": "STOP_NORMAL",
+                "tid_center": 0,
+                "tid_horn": 0,
+                "diagnostics": pump_safety_result["diagnostics"],
+                "wrote": True
+            }
 
     markfukt = args.simulate_markfukt_value if args.simulate else 30
     

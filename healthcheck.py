@@ -57,6 +57,77 @@ def send_mail(subject: str, body: str) -> None:
         print(f"[healthcheck] email send failed: {e}", file=sys.stderr)
 
 
+def send_pump_alarm(alarm_type: str, diagnostics: dict) -> None:
+    """
+    Skicka e-post vid pump-larm
+    
+    Args:
+        alarm_type: "ALARM_SLANGBROTT" eller "ALARM_TORRKORNING"
+        diagnostics: Dict med sensor-värden
+    """
+    host = os.getenv("SMTP_HOST")
+    if not host:
+        return
+    
+    port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_timeout = int(os.getenv("SMTP_TIMEOUT", "10"))
+    user = os.getenv("SMTP_USER")
+    pwd = os.getenv("SMTP_PASS")
+    sender = os.getenv("SMTP_FROM", user or "pump-alarm@localhost")
+    recipients = [r.strip() for r in os.getenv("SMTP_TO", "").split(",") if r.strip()]
+    
+    if not recipients:
+        return
+    
+    # Format alarm message
+    alarm_messages = {
+        "ALARM_SLANGBROTT": "🚨 KRITISKT: Slangbrott detekterat!",
+        "ALARM_TORRKORNING": "🚨 KRITISKT: Torrkörning detekterad!"
+    }
+    
+    subject = alarm_messages.get(alarm_type, f"🚨 Pump-larm: {alarm_type}")
+    
+    body = f"""
+Fotbollsplan Bevattning - Pump-larm
+
+Larmtyp: {alarm_type}
+Tid: {diagnostics.get('timestamp', 'Okänd')}
+
+Sensor-status:
+- Pump aktiv: {'JA' if diagnostics.get('pump_active') else 'NEJ'}
+- Flöde detekterat: {'JA' if diagnostics.get('flow_detected') else 'NEJ'}
+- Tryck OK: {'JA' if diagnostics.get('pressure_ok') else 'NEJ'}
+
+Timers:
+- Körtid: {diagnostics.get('time_running', 0):.1f}s
+- Slangbrott-timer: {diagnostics.get('timer_slangbrott', 0):.1f}s
+- Torrkörning-timer: {diagnostics.get('timer_torrkorning', 0):.1f}s
+
+Åtgärd: Pumpen har stoppats automatiskt.
+
+{"=" * 60}
+
+Kontrollera systemet omedelbart och använd /menu/reset-error för att återställa efter åtgärd.
+"""
+    
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = sender
+    msg["To"] = ", ".join(recipients)
+    msg.set_content(body)
+    
+    context = ssl.create_default_context()
+    try:
+        with smtplib.SMTP(host, port, timeout=smtp_timeout) as server:
+            server.starttls(context=context)
+            if user and pwd:
+                server.login(user, pwd)
+            server.send_message(msg)
+        print(f"[pump_alarm] Email sent: {alarm_type}")
+    except Exception as e:
+        print(f"[pump_alarm] Email send failed: {e}", file=sys.stderr)
+
+
 def check_api(api_url: str, api_key: str, timeout: int, retries: int) -> tuple[bool, dict]:
     """
     Check API with retry logic and exponential backoff.

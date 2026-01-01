@@ -20,6 +20,9 @@ except Exception:
     except Exception:
         ModbusTcpClient = None
 
+# Import pump protection module
+from pump_protection import PumpState
+
 load_dotenv()
 
 API_LOGGER_NAME = "bevattning.api"
@@ -99,6 +102,9 @@ MIN_ZONE = 1
 MAX_ZONE = 7
 # Indicates that block_reason could not be read after reset
 BLOCK_REASON_UNKNOWN = -1
+
+# Global state för pump-skydd
+_pump_protection_state = PumpState()
 
 app = FastAPI(title="Bevattning API", version="0.3")
 security = HTTPBasic()
@@ -782,7 +788,9 @@ def felsokning(x_api_key: Optional[str] = Header(None)):
             7: "Motorskydd utlöst",
             8: "Mjukstartare fel",
             9: "24VDC säkring utlöst",
-            10: "24VAC säkring utlöst"
+            10: "24VAC säkring utlöst",
+            11: "Slangbrott (Smart Pump Protection)",
+            12: "Torrkörning (Smart Pump Protection)"
         }
         
         # Tolka eventmask
@@ -817,6 +825,8 @@ def reset_error(x_api_key: Optional[str] = Header(None)):
     """
     require_key(x_api_key)
     
+    global _pump_protection_state
+    
     with get_modbus_connection() as client:
         logger.info("Återställer felstatus via API")
         # Pulsera error reset
@@ -829,6 +839,10 @@ def reset_error(x_api_key: Optional[str] = Header(None)):
         rr = client.write_register(MW_ERROR_RESET, 0, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr, "error reset off")
         
+        # Reset pump protection state (NYT)
+        _pump_protection_state.reset()
+        logger.info("Pump protection state återställd")
+        
         # Läs status efter reset
         block_check = client.read_holding_registers(MW_BLOCK_REASON, 1, unit=MODBUS_UNIT)
         if _modbus_has_error(block_check):
@@ -839,8 +853,9 @@ def reset_error(x_api_key: Optional[str] = Header(None)):
     return {
         "ok": True,
         "reset_performed": True,
+        "pump_state_reset": True,
         "new_block_reason": new_block_reason,
-        "message": "Error reset performed successfully"
+        "message": "Error reset performed successfully (including pump protection)"
     }
 
 
