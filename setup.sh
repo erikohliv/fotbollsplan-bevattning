@@ -488,6 +488,7 @@ install_systemd_services() {
     SERVICES=(
         "systemd_bevattning-api.service:bevattning-api.service"
         "systemd_display-manager.service:display-manager.service"
+        "systemd_bevattning-controller.service:bevattning-controller.service"
         "systemd_bevattning-scheduler.service:bevattning-scheduler.service"
         "systemd_bevattning-scheduler.timer:bevattning-scheduler.timer"
     )
@@ -511,29 +512,6 @@ install_systemd_services() {
         print_success "Installerade $DEST"
     done
     
-    # Skapa bevattning-controller.service från scratch (System 2.0)
-    print_info "Skapar bevattning-controller.service för System 2.0..."
-    cat > /etc/systemd/system/bevattning-controller.service << EOF
-[Unit]
-Description=Bevattning Controller (System 2.0)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-User=$USER
-Group=$USER
-WorkingDirectory=$PROJECT_DIR
-Environment="PYTHONUNBUFFERED=1"
-EnvironmentFile=$PROJECT_DIR/api_.env
-ExecStart=$PROJECT_DIR/.venv/bin/python3 $PROJECT_DIR/bevattning_controller.py --loop --interval 60 --read-markfukt
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-    print_success "Installerade bevattning-controller.service"
-    
     # Reload systemd
     systemctl daemon-reload || {
         print_error "systemctl daemon-reload misslyckades"
@@ -545,6 +523,7 @@ EOF
     systemctl enable bevattning-controller.service 2>/dev/null || print_warning "Kunde inte aktivera bevattning-controller"
     systemctl enable bevattning-api.service 2>/dev/null || print_warning "Kunde inte aktivera bevattning-api"
     systemctl enable display-manager.service 2>/dev/null || print_warning "Kunde inte aktivera display-manager"
+    systemctl enable bevattning-scheduler.timer 2>/dev/null || print_warning "Kunde inte aktivera bevattning-scheduler.timer"
     
     print_success "systemd services installerade och aktiverade"
     print_warning "Services startar automatiskt efter omstart"
@@ -636,6 +615,8 @@ main() {
     
     print_success "Fotbollsplan Bevattning System 2.0 har installerats!"
     echo
+    print_info "📖 Fullständig dokumentation: ${GREEN}INSTALL_SYSTEM2.md${NC}"
+    echo
     print_info "Nästa steg:"
     echo "  1. Starta om systemet för att aktivera I2C:"
     echo "     ${GREEN}sudo reboot${NC}"
@@ -654,6 +635,12 @@ main() {
     echo "     ${GREEN}source .venv/bin/activate${NC}"
     echo "     ${GREEN}python3 relay_test.py --host <plc-ip>${NC}"
     echo "     ${GREEN}python3 email_test.py${NC}"
+    echo
+    echo "  5. Åtkomst till systemet:"
+    IP=$(hostname -I | awk '{print $1}')
+    echo "     Webb-UI:  ${GREEN}http://$IP:8000${NC}"
+    echo "     API Docs: ${GREEN}http://$IP:8000/docs${NC}"
+    echo "     Dash:     ${GREEN}http://$IP:8050${NC}"
     echo
     
     read -p "Vill du starta om nu? (Y/n): " -n 1 -r
