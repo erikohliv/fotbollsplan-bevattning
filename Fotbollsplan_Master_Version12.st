@@ -1,27 +1,25 @@
 (*
   Fotbollsplan_Master_Version12.st
-  - HÅRDVARUUPPDATERING: Siemens LOGO borttagen. Pump styrs direkt av UNIPI Relä 8 via Mjukstartare.
-  - Menyknappar flyttade från Raspberry Pi GPIO till UNIPI PLC-ingångar (DI11-DI14, läses via MW64).
-  - Tryckvakt (DI5) via Terminal X3: Digital övervakningsskydd för pumptryck (MW33).
-  - Flödesvakt (DI7) via Terminal X3: Digital torrkörsningsskydd för pump (MW55).
-  - Auto/Man-brytare: Delad i två separata ingångar DI3 (Auto) och DI10 (Manual) för 1-0-2 brytare.
+  - HÅRDVARUUPPDATERING V2: Uppdaterad input-mappning för ny kontrollpanel och säkerhetssystem.
+  - AUTO/MANUAL LATCH: I05 (Auto) och I06 (Manual) är PULSE/MOMENTARY inputs - tillstånd latched i mjukvara.
+  - MOTORSKYDD: I10 (Motor_Protection) - kritiskt larm som stoppar systemet omedelbart (BlockReason=7).
+  - MJUKSTARTARE FAULT: I08 (Soft_Starter_Fault) - stoppar pump vid fel från mjukstartaren (BlockReason=8).
+  - NÖDSTOPP: I03 (EStop_NC) - maintained signal som bryter hela systemet.
+  - JORDTEMPERATUR: A2 (Analog_Temp_Raw) - analog input för temperaturgivare (%IW1).
+  - Pump styrs direkt av UNIPI Relä 8 (R8) via Mjukstartare.
+  - Tryckvakt (I09/%IX1.0) och Flödesvakt (I07/%IX0.6) för säkerhetsövervakning.
   - Ventiler öppnas före pumpstart.
   - Pump stängs av först vid stop/zonbyte, därefter ventiler efter CloseDelay, för att minimera vattenslag.
   - Heartbeat (1s) bit+counter: MW70 (bit0 toggle), MW71 counter.
-  - Event/Alarm mask: MW72 (bit0 E-stop, bit1 fukt/regen-block, bit2 sekvens aktiv, bit3 anti-kollision, bit4 AutoOverride).
-  - Block reason: MW73 (0=OK, 1=Regen>thr, 2=Moisture>thr, 3=Anti-kollision/Pump upptagen, 4=E-stop, 5=Pressure failure, 6=Flow failure).
-  - ManualRunTime REMOVED: Manual mode nu använder samma tider som auto mode (Set_Tid_Center/Set_Tid_Horn).
-  - LED outputs REMOVED: Aktiv zon och återstående tid visas på display istället.
+  - Event/Alarm mask: MW72 (bit0=E-stop, bit1=fukt/regen-block, bit2=sekvens aktiv, bit3=anti-kollision, bit4=AutoOverride, bit5=Motorskydd).
+  - Block reason: MW73 (0=OK, 1=Regen>thr, 2=Moisture>thr, 3=Anti-kollision, 4=E-stop, 5=Pressure failure, 6=Flow failure, 7=Motor protection, 8=Soft starter fault).
   - Manual mode: Kör endast den valda zonen (inte full sekvens som auto mode).
-  - 21:00 auto mode transition: Hanteras av Python display_manager, inte PLC.
   - Anti-kollision: Om sekvens redan kör/pump aktiv blockeras ny start (sätter bit3/code 3).
-  - Mode Switch (MW100): 0=Neutral, 1=Lokalt läge, 2=Fjärrläge. Fysisk 1-0-2 switch och API.
+  - Mode Switch (MW100): 0=Neutral, 1=Lokalt läge, 2=Fjärrläge.
   - Test Mode (MW80): 1=Test mode active för försäsongskontroll.
   - ErrorReset (MW82): Skriv 1 för att återställa fel (PLC nollar automatiskt).
-  - Markfuktgivare: Analog input %IW0 (0-10V) skalas till MW30 (0-100%).
-  - Tryckvakt: Digital input %IX0.4 (DI5) läses till MW33 (0=ingen tryck, 1=tryck OK).
-  - Flödesvakt: Digital input %IX0.6 (DI7) läses till MW55 (0=ingen flöde, 1=flöde OK).
-  - Säkerhetslogik: Pump stoppar automatiskt vid tryck-timeout (10s) eller flödesförlust (5s).
+  - Markfuktgivare: Analog input %IW0 (A1, 0-10V) skalas till MW30 (0-100%).
+  - Jordtemperatur: Analog input %IW1 (A2, 0-10V) lagras i MW37 (råvärde).
 *)
 
 PROGRAM Fotbollsplan_Master
@@ -31,23 +29,21 @@ PROGRAM Fotbollsplan_Master
     Ventil_4 : BOOL; Ventil_5 : BOOL; Ventil_6 : BOOL; Ventil_7 : BOOL;
     Signal_Pump : BOOL; (* Går till Mjukstartare (Soft Starter) via Relä 8 *)
 
-    (* FYSISKA KNAPPAR / SWITCHAR *)
-    Stop_Puls        : BOOL; (* %IX0.0 - DI1 *)
-    Start_Puls       : BOOL; (* %IX0.1 - DI2 *)
-    Mode_Auto        : BOOL; (* %IX0.2 - DI3 Auto läge från 1-0-2 brytare *)
-    Reset_Button     : BOOL; (* %IX0.3 - DI4 Reset/Kvittera larm *)
-    Switch_Pressure  : BOOL; (* %IX0.4 - DI5 Tryckvakt (NO/NC) via Terminal X3 *)
-    Test_Button      : BOOL; (* %IX0.5 *)
-    Flow_Switch      : BOOL; (* %IX0.6 - DI7 Flödesvakt via Terminal X3 *)
-    EStop_NC         : BOOL; (* %IX0.7 - DI8 Nödstopp *)
-    Mode_Manual      : BOOL; (* %IX1.1 - DI10 Manuell läge från 1-0-2 brytare *)
-    Menu_Left        : BOOL; (* %IX1.2 - DI11 Meny Vänster/Upp *)
-    Menu_Right       : BOOL; (* %IX1.3 - DI12 Meny Höger/Ner *)
-    Menu_OK          : BOOL; (* %IX1.4 - DI13 Meny OK/Välj *)
-    Menu_Back        : BOOL; (* %IX1.5 - DI14 Meny Tillbaka *)
+    (* FYSISKA KNAPPAR / SWITCHAR - UPPDATERAD HÅRDVARUMAPPNING *)
+    Stop_Puls        : BOOL; (* %IX0.0 - I01 - Stoppknapp S202 (Momentary) *)
+    Start_Puls       : BOOL; (* %IX0.1 - I02 - Startknapp S201 (Momentary) *)
+    EStop_NC         : BOOL; (* %IX0.2 - I03 - Nödstopp S205 (Maintained signal) *)
+    Reset_Button     : BOOL; (* %IX0.3 - I04 - Resetknapp S203 (Momentary) *)
+    Button_Set_Auto  : BOOL; (* %IX0.4 - I05 - Auto-läge S204 (PULSE/MOMENTARY - latched) *)
+    Button_Set_Manual: BOOL; (* %IX0.5 - I06 - Manuell-läge S204 (PULSE/MOMENTARY - latched) *)
+    Flow_Switch      : BOOL; (* %IX0.6 - I07 - Flödesvakt (Digital) *)
+    Soft_Starter_Fault:BOOL; (* %IX0.7 - I08 - Mjukstartare Fault Signal *)
+    Switch_Pressure  : BOOL; (* %IX1.0 - I09 - Tryckvakt (Digital) *)
+    Motor_Protection : BOOL; (* %IX1.1 - I10 - Motorskydd Q1 utlöst (KRITISK LARM) *)
 
     (* ANALOG INPUTS *)
-    Analog_Markfukt_Raw : INT; (* %IW0 - 0-10V analog input from soil moisture sensor *)
+    Analog_Markfukt_Raw : INT; (* %IW0 - A1 - 0-10V analog input from soil moisture sensor *)
+    Analog_Temp_Raw     : INT; (* %IW1 - A2 - 0-10V analog input from soil temperature sensor *)
 
     (* MODBUS / HOLDING REGISTER *)
     Remote_Command : INT; (* %MW10 *)
@@ -56,12 +52,13 @@ PROGRAM Fotbollsplan_Master
 
     Markfukt       : INT; (* %MW30 *)
     Regen_24h_mm   : INT; (* %MW31 *)
-    Temp_C         : INT; (* %MW32 *)
+    Temp_C         : INT; (* %MW32 - Temperatur (kan skrivas från Python eller läsas från analog A2) *)
     Pressure_Switch_Status : INT; (* %MW33 - Tryckvakt status (0=ingen tryck, 1=tryck OK) *)
     AutoOverride   : INT; (* %MW34 *)
 
     RegenThreshold_mm : INT; (* %MW35 *)
     MoistureThreshold : INT; (* %MW36 *)
+    Soil_Temp_Raw     : INT; (* %MW37 - Jordtemperatur råvärde från analog A2 (0-100 motsvarar sensor range) *)
 
     OpenDelaySec  : INT; (* %MW40 *)
     PauseDelaySec : INT; (* %MW41 *)
@@ -186,6 +183,19 @@ PROGRAM Fotbollsplan_Master
     PrevModeSwitchReg : INT := 0;  (* Tidigare värde av ModeSwitchReg för edge-detection *)
     LocalModeActive : BOOL := FALSE;  (* TRUE när lokalt läge är aktivt *)
     RemoteModeActive : BOOL := FALSE; (* TRUE när fjärrläge är aktivt *)
+    
+    (* Auto/Manual Mode Latch Logic (I05/I06 pulse inputs) *)
+    Prev_Button_Set_Auto : BOOL := FALSE;   (* För edge-detection av I05 *)
+    Prev_Button_Set_Manual : BOOL := FALSE; (* För edge-detection av I06 *)
+    System_Mode_Latched : INT := 1;         (* Latched mode: 1=Auto, 0=Manual *)
+    
+    (* Motor Protection Alarm *)
+    Motor_Protection_Alarm : BOOL := FALSE; (* TRUE när motorskydd har utlöst *)
+    Prev_Motor_Protection : BOOL := FALSE;  (* För edge-detection *)
+    
+    (* Soft Starter Fault *)
+    Soft_Starter_Fault_Active : BOOL := FALSE; (* TRUE när mjukstartare har fel *)
+    Prev_Soft_Starter_Fault : BOOL := FALSE;   (* För edge-detection *)
   END_VAR
 
   (* Init defaults *)
@@ -234,8 +244,99 @@ PROGRAM Fotbollsplan_Master
   IF Markfukt > MOISTURE_PERCENT_MAX THEN Markfukt := MOISTURE_PERCENT_MAX; END_IF;
   IF Markfukt < 0 THEN Markfukt := 0; END_IF;
 
+  (* JORDTEMPERATUR: Scale analog input A2 (0-10V = 0-27648) till temperatur *)
+  (* Antag att sensorn ger 0-10V för ett temperaturområde, t.ex. -20 till +50°C *)
+  (* Denna skalning kan justeras beroende på verklig sensor specifikation *)
+  (* För nu: lagra råvärde i MW37, och Python kan konvertera eller vi skalar här *)
+  IF Analog_Temp_Raw < 0 THEN
+    Soil_Temp_Raw := 0;
+  ELSIF Analog_Temp_Raw > ANALOG_INPUT_MAX THEN
+    Soil_Temp_Raw := ANALOG_INPUT_MAX;
+  ELSE
+    (* Lagra råvärde för nu - kan skalas i Python om sensor-specifikation finns *)
+    Soil_Temp_Raw := Analog_Temp_Raw;
+  END_IF;
+
+  (* AUTO/MANUAL MODE LATCH LOGIC *)
+  (* I05 (Button_Set_Auto) och I06 (Button_Set_Manual) är PULSE/MOMENTARY inputs *)
+  (* Vi måste latcha tillståndet när knappen trycks (rising edge detection) *)
+  
+  (* Detektera rising edge på Auto-knapp (I05) *)
+  IF Button_Set_Auto AND NOT Prev_Button_Set_Auto THEN
+    (* Användaren trycker på Auto-knapp - växla till Auto-läge *)
+    System_Mode_Latched := 1;  (* 1 = Auto *)
+    ModeIsAuto := TRUE;
+    ModeRegister := 1;
+  END_IF;
+  Prev_Button_Set_Auto := Button_Set_Auto;
+  
+  (* Detektera rising edge på Manual-knapp (I06) *)
+  IF Button_Set_Manual AND NOT Prev_Button_Set_Manual THEN
+    (* Användaren trycker på Manual-knapp - växla till Manual-läge *)
+    System_Mode_Latched := 0;  (* 0 = Manual *)
+    ModeIsAuto := FALSE;
+    ModeRegister := 0;
+  END_IF;
+  Prev_Button_Set_Manual := Button_Set_Manual;
+
+  (* MOTOR PROTECTION ALARM (I10) *)
+  (* I10 är hög signal = "Motorskydd utlöst" (Q1) *)
+  (* Detta är ett KRITISKT larm - stoppa systemet omedelbart *)
+  IF Motor_Protection AND NOT Prev_Motor_Protection THEN
+    (* Rising edge - motorskydd har utlöst *)
+    Motor_Protection_Alarm := TRUE;
+    BlockReason := 7;  (* Nytt block reason code för motorskydd *)
+    
+    (* SÄKERHETSÅTGÄRD: Stoppa pump omedelbart *)
+    Signal_Pump := FALSE;
+    
+    (* Stoppa sekvens *)
+    Steg := 0;
+    Nuvarande_Zon := 0;
+    ManualRun := FALSE;
+    
+    (* Sätt event mask bit för motorskydd (bit 5) *)
+    EventMask := EventMask OR 32;
+  END_IF;
+  Prev_Motor_Protection := Motor_Protection;
+  
+  (* Rensa motorskydd larm när reset trycks OCH motorskydd inte längre är aktivt *)
+  IF ErrorResetReg = 1 AND NOT Motor_Protection THEN
+    Motor_Protection_Alarm := FALSE;
+    IF BlockReason = 7 THEN
+      BlockReason := 0;
+    END_IF;
+    EventMask := EventMask AND NOT 32;  (* Rensa bit 5 *)
+  END_IF;
+
+  (* SOFT STARTER FAULT (I08) *)
+  (* I08 signal = Fault från mjukstartare *)
+  (* Vid fault - stoppa pump omedelbart *)
+  IF Soft_Starter_Fault AND NOT Prev_Soft_Starter_Fault THEN
+    (* Rising edge - mjukstartare har fel *)
+    Soft_Starter_Fault_Active := TRUE;
+    
+    (* SÄKERHETSÅTGÄRD: Stoppa pump omedelbart *)
+    Signal_Pump := FALSE;
+    
+    (* Sätt block reason - överskriv låg-prioritet fel (1-6), men inte kritiska (4, 7) *)
+    (* Prioritet: E-stop(4) > Motorskydd(7) > Soft starter(8) > Pressure/Flow(5,6) > Villkor(1-3) *)
+    IF BlockReason <> 4 AND BlockReason <> 7 THEN
+      BlockReason := 8;  (* Soft starter fault *)
+    END_IF;
+  END_IF;
+  Prev_Soft_Starter_Fault := Soft_Starter_Fault;
+  
+  (* Rensa soft starter fault när signalen går låg igen *)
+  IF NOT Soft_Starter_Fault THEN
+    Soft_Starter_Fault_Active := FALSE;
+    IF BlockReason = 8 THEN
+      BlockReason := 0;
+    END_IF;
+  END_IF;
+
   (* TRYCKVAKT: Digital input (NO/NC configurable) *)
-  (* Switch_Pressure (%IX0.4 - DI5) är digital ingång *)
+  (* Switch_Pressure (%IX1.0 - I09) är digital ingång *)
   (* PRESSURE_OK_STATE styr polaritet: TRUE=NO (sluter vid tryck), FALSE=NC (bryter vid tryck) *)
   IF Switch_Pressure = PRESSURE_OK_STATE THEN
     Pressure_Switch_Status := 1;  (* Tryck OK *)
@@ -244,7 +345,7 @@ PROGRAM Fotbollsplan_Master
   END_IF;
 
   (* FLÖDESVAKT: Digital input (NO/NC configurable) *)
-  (* Flow_Switch (%IX0.6 - DI7) är digital ingång *)
+  (* Flow_Switch (%IX0.6 - I07) är digital ingång *)
   (* FLOW_OK_STATE styr polaritet: TRUE=NO (sluter vid flöde), FALSE=NC (bryter vid flöde) *)
   IF Flow_Switch = FLOW_OK_STATE THEN
     FlowSwitchStatus := 1;  (* Flöde OK *)
@@ -252,17 +353,10 @@ PROGRAM Fotbollsplan_Master
     FlowSwitchStatus := 0;  (* Inget flöde *)
   END_IF;
 
-  (* MENYKNAPPAR: Läs status från DI11-DI14 och bygg bitmask i MW64 *)
-  (* bit0=Left (DI11), bit1=Right (DI12), bit2=OK (DI13), bit3=Back (DI14) *)
-  MenuButtonsReg := 0;
-  IF Menu_Left THEN MenuButtonsReg := MenuButtonsReg OR 1; END_IF;
-  IF Menu_Right THEN MenuButtonsReg := MenuButtonsReg OR 2; END_IF;
-  IF Menu_OK THEN MenuButtonsReg := MenuButtonsReg OR 4; END_IF;
-  IF Menu_Back THEN MenuButtonsReg := MenuButtonsReg OR 8; END_IF;
-
   (* ERROR RESET: Handle reset pulse from Modbus or physical button *)
   IF ErrorResetReg = 1 THEN
     (* Clear block reason if not E-stop (E-stop must be physically cleared) *)
+    (* Motor protection (7) and soft starter fault (8) can be reset *)
     IF BlockReason <> 4 THEN
       BlockReason := 0;
     END_IF;
@@ -287,6 +381,17 @@ PROGRAM Fotbollsplan_Master
     FlowLostDuringRun := FALSE;
     Tmr_PressureTimeout(IN := FALSE, PT := T#1s);
     Tmr_FlowTimeout(IN := FALSE, PT := T#1s);
+    
+    (* Clear motor protection alarm if motor protection input is no longer active *)
+    IF NOT Motor_Protection THEN
+      Motor_Protection_Alarm := FALSE;
+      EventMask := EventMask AND NOT 32;  (* Clear bit 5 *)
+    END_IF;
+    
+    (* Clear soft starter fault when reset (fault signal must go low first) *)
+    IF NOT Soft_Starter_Fault THEN
+      Soft_Starter_Fault_Active := FALSE;
+    END_IF;
     
     (* PLC auto-clears the reset register *)
     ErrorResetReg := 0;

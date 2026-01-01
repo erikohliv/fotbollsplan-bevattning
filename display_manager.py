@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """
 Display Manager for Fotbollsplan Bevattning
-Manages two I2C LCD displays:
-- Display 1 (D1): 20x4 without buttons - auto-rotating status views
-- Display 2 (D2): 2x8 with 4 buttons - interactive manual control
+Manages I2C LCD display and arcade buttons:
+- Display 1 (D1): 20x4 - auto-rotating status views
+- Arcade Buttons (4x): I2C button interface for menu navigation
+
+NOTE: Display 2 (D2) has been removed in hardware refactor V2.
+      All user interaction now via Display 1 + Arcade Buttons.
 
 Author: Fotbollsplan Bevattning System
 """
@@ -87,13 +90,137 @@ class Display1View(IntEnum):
     MODE_STATUS = 4
 
 
-class Display2View(IntEnum):
-    """Views for Display 2 (2x8)"""
-    OVERVIEW = 0
-    MODE_SELECT = 1      # Select mode: Auto/Manual/Test/Blow
-    ZONE_SELECT = 2      # Select zone (for Manual/Test/Blow)
-    TIME_SELECT = 3      # Select runtime (for Manual only)
-    CONFIRM = 4          # Confirm and start
+# Display2View and Display2Manager removed in hardware refactor V2
+# All user interaction now via Display 1 + I2C Arcade Buttons
+# class Display2View(IntEnum):
+#     """Views for Display 2 (2x8)"""
+#     OVERVIEW = 0
+#     MODE_SELECT = 1      # Select mode: Auto/Manual/Test/Blow
+#     ZONE_SELECT = 2      # Select zone (for Manual/Test/Blow)
+#     TIME_SELECT = 3      # Select runtime (for Manual only)
+#     CONFIRM = 4          # Confirm and start
+
+
+class ArcadeButtonManager:
+    """
+    Manager for I2C Arcade Buttons (4 buttons)
+    Replaces Display 2 menu buttons and PLC DI11-DI14
+    
+    Buttons:
+    - Button 1: Up/Increase
+    - Button 2: Down/Decrease  
+    - Button 3: OK/Select
+    - Button 4: Back/Cancel
+    """
+    
+    def __init__(self, i2c_addr: int = 0x20, bus_num: int = 1):
+        """
+        Initialize Arcade Button Manager
+        
+        Args:
+            i2c_addr: I2C address of the button controller
+            bus_num: I2C bus number (default: 1 for Raspberry Pi)
+        """
+        self.i2c_addr = i2c_addr
+        self.bus_num = bus_num
+        self.bus = None
+        
+        # Button state
+        self.button_states = {
+            'up': False,
+            'down': False,
+            'ok': False,
+            'back': False
+        }
+        
+        # Security lock
+        self.locked = False
+        self.unlock_sequence = []  # User-configurable unlock sequence
+        self.lock_timeout = 600  # 10 minutes in seconds
+        self.last_activity = time.time()
+        
+        if smbus is None:
+            logger.warning("smbus/smbus2 not available - arcade buttons disabled")
+            return
+            
+        try:
+            self.bus = smbus.SMBus(bus_num)
+            logger.info(f"Arcade Button Manager initialized at I2C address 0x{i2c_addr:02X}")
+        except Exception as e:
+            logger.error(f"Failed to initialize arcade buttons: {e}")
+    
+    def read_buttons(self) -> dict:
+        """
+        Read current button states from I2C
+        
+        Returns:
+            dict: Button states {'up': bool, 'down': bool, 'ok': bool, 'back': bool}
+        """
+        if not self.bus:
+            return self.button_states
+        
+        try:
+            # ==================================================================
+            # WARNING: PLACEHOLDER IMPLEMENTATION
+            # This code assumes a simple I2C button controller where a single
+            # byte read returns button states as a bitmask (bit 0-3).
+            # 
+            # This MUST be updated to match your actual hardware:
+            # - PCF8574 I/O expander: Use read_byte() but may need inversion
+            # - MCP23008/MCP23017: Need register address and proper init
+            # - Custom controller: Implement according to datasheet
+            # 
+            # Test thoroughly before production use!
+            # ==================================================================
+            data = self.bus.read_byte(self.i2c_addr)
+            
+            self.button_states = {
+                'up': bool(data & 0x01),
+                'down': bool(data & 0x02),
+                'ok': bool(data & 0x04),
+                'back': bool(data & 0x08)
+            }
+            
+            # Update activity timestamp if any button pressed
+            if any(self.button_states.values()):
+                self.last_activity = time.time()
+            
+            return self.button_states
+            
+        except Exception as e:
+            logger.debug(f"Error reading arcade buttons: {e}")
+            return self.button_states
+    
+    def check_lock_timeout(self):
+        """Check if buttons should be locked due to inactivity"""
+        if time.time() - self.last_activity > self.lock_timeout:
+            self.locked = True
+    
+    def unlock(self, sequence: list) -> bool:
+        """
+        Attempt to unlock with button sequence
+        
+        Args:
+            sequence: List of button presses to match unlock_sequence
+            
+        Returns:
+            bool: True if unlocked successfully
+        """
+        if sequence == self.unlock_sequence:
+            self.locked = False
+            self.last_activity = time.time()
+            logger.info("Arcade buttons unlocked")
+            return True
+        return False
+    
+    def close(self):
+        """Close I2C bus connection"""
+        if self.bus:
+            try:
+                self.bus.close()
+            except Exception:
+                pass
+
 
 
 class LCD_I2C:
@@ -618,6 +745,10 @@ class Display1Manager:
 
 class Display2Manager:
     """
+    DEPRECATED: Display 2 has been removed in hardware refactor V2.
+    This class is kept for backwards compatibility but is not used.
+    All user interaction now via Display 1 + I2C Arcade Buttons.
+    
     Manages Display 2: 2x8 LCD with 4 buttons (Up, Down, Left, Right)
     Interactive manual control interface with complete menu system
     """
@@ -1193,8 +1324,8 @@ def main():
     parser = argparse.ArgumentParser(description="Display Manager for Fotbollsplan Bevattning")
     parser.add_argument("--d1-addr", type=lambda x: int(x, 0), default=0x27,
                         help="I2C address for Display 1 (20x4)")
-    parser.add_argument("--d2-addr", type=lambda x: int(x, 0), default=0x3F,
-                        help="I2C address for Display 2 (2x8)")
+    parser.add_argument("--arcade-addr", type=lambda x: int(x, 0), default=0x20,
+                        help="I2C address for Arcade Buttons (default: 0x20)")
     parser.add_argument("--modbus-host", default="127.0.0.1",
                         help="Modbus TCP host")
     parser.add_argument("--modbus-port", type=int, default=502,
@@ -1219,7 +1350,7 @@ def main():
     args = parser.parse_args()
     
     display1 = None
-    display2 = None
+    arcade_buttons = None
     scheduler = None
     auto_mode_scheduler = None
     
@@ -1235,14 +1366,12 @@ def main():
             )
             display1.start()
             
-            # Initialize Display 2
-            logger.info("Initializing Display 2 (2x8)...")
-            display2 = Display2Manager(
-                i2c_addr=args.d2_addr,
-                modbus_host=args.modbus_host,
-                modbus_port=args.modbus_port
+            # Initialize Arcade Buttons
+            logger.info("Initializing Arcade Buttons...")
+            arcade_buttons = ArcadeButtonManager(
+                i2c_addr=args.arcade_addr
             )
-            display2.start()
+            logger.info("Arcade buttons initialized. Configure unlock sequence in config.")
         else:
             logger.info("Running in simulation mode (no I2C)")
         
@@ -1281,8 +1410,8 @@ def main():
     finally:
         if display1:
             display1.stop()
-        if display2:
-            display2.stop()
+        if arcade_buttons:
+            arcade_buttons.close()
         if scheduler:
             scheduler.stop()
         if auto_mode_scheduler:
