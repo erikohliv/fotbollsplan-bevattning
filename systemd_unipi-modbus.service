@@ -1,0 +1,17 @@
+[Unit]
+Description=UniPi 1.1 Modbus TCP Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/home/kamp/fotbollsplan-bevattning
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/home/kamp/fotbollsplan-bevattning/.venv/bin/python3 /home/kamp/fotbollsplan-bevattning/unipi_modbus_server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

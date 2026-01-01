@@ -5,12 +5,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-Group=pi
-WorkingDirectory=/home/pi/fotbollsplan-bevattning
+User=kamp
+Group=kamp
+WorkingDirectory=/home/kamp/fotbollsplan-bevattning
 Environment="PYTHONUNBUFFERED=1"
-EnvironmentFile=/home/pi/fotbollsplan-bevattning/api_.env
-ExecStart=/home/pi/fotbollsplan-bevattning/.venv/bin/python3 /home/pi/fotbollsplan-bevattning/display_manager.py
+EnvironmentFile=/home/kamp/fotbollsplan-bevattning/api_.env
+ExecStart=/home/kamp/fotbollsplan-bevattning/.venv/bin/python3 /home/kamp/fotbollsplan-bevattning/display_manager.py
 Restart=on-failure
 RestartSec=10
 

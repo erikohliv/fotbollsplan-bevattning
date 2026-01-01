@@ -5,11 +5,11 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=pi
-Group=pi
-WorkingDirectory=/home/pi/fotbollsplan-bevattning
+User=kamp
+Group=kamp
+WorkingDirectory=/home/kamp/fotbollsplan-bevattning
 Environment="PYTHONUNBUFFERED=1"
-ExecStart=/home/pi/fotbollsplan-bevattning/.venv/bin/python3 /home/pi/fotbollsplan-bevattning/bevattning_scheduler.py --run-now --auto-start
+ExecStart=/home/kamp/fotbollsplan-bevattning/.venv/bin/python3 /home/kamp/fotbollsplan-bevattning/bevattning_scheduler.py --run-now --auto-start
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=bevattning-scheduler

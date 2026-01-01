@@ -4,12 +4,12 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=pi
-Group=pi
-WorkingDirectory=/home/pi/fotbollsplan-bevattning
+User=kamp
+Group=kamp
+WorkingDirectory=/home/kamp/fotbollsplan-bevattning
 Environment="PYTHONUNBUFFERED=1"
-EnvironmentFile=/home/pi/fotbollsplan-bevattning/api_.env
-ExecStart=/home/pi/fotbollsplan-bevattning/.venv/bin/uvicorn api_main:app --host 0.0.0.0 --port 8000
+EnvironmentFile=/home/kamp/fotbollsplan-bevattning/api_.env
+ExecStart=/home/kamp/fotbollsplan-bevattning/.venv/bin/uvicorn api_main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=5
 
