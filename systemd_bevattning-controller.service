@@ -1,0 +1,18 @@
+[Unit]
+Description=Bevattning Controller - System 2.0 (Weather + PLC Control)
+After=network-online.target bevattning-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/fotbollsplan-bevattning
+Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=/home/pi/fotbollsplan-bevattning/api_.env
+ExecStart=/home/pi/fotbollsplan-bevattning/.venv/bin/python3 /home/pi/fotbollsplan-bevattning/bevattning_controller.py --loop --interval 60 --read-markfukt
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
