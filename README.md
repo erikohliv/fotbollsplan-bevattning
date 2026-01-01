@@ -12,6 +12,8 @@ Systemet använder ett hybridnät med PEM 90/75/50 rör. **Viktigt**: Zon 7 har 
 
 ## Installation på Raspberry Pi
 
+> 📖 **Fullständig installations-guide:** Se [INSTALL_SYSTEM2.md](INSTALL_SYSTEM2.md) för detaljerad guide med troubleshooting, hårdvarutester och System 2.0-funktioner.
+
 ## 🚀 Installation (System 2.0)
 
 ### ✨ Ett-kommando installation (REKOMMENDERAT)
