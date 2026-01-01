@@ -54,9 +54,18 @@ MW_TID_HORN = 21
 MW_MARKFUKT = 30
 MW_REGEN24 = 31
 MW_TEMP = 32
-MW_BLOCK_REASON = 73  # BlockReasonReg: 0=OK, 1=Rain, 2=Moisture, 3=Anti-collision, 4=E-stop
+MW_SOIL_TEMP_RAW = 37        # Jordtemperatur råvärde från analog A2 (0-27648 motsvarar 0-10V)
+MW_BLOCK_REASON = 73  # BlockReasonReg: 0=OK, 1=Rain, 2=Moisture, 3=Anti-collision, 4=E-stop, 5=Pressure, 6=Flow, 7=Motor protection, 8=Soft starter fault, 9=24VDC fuse, 10=24VAC fuse
 
 MK_REG_ADDR = 100  # exempelfält för extern markfukt-läsning
+
+# Digital Inputs - Säkringsövervakning
+DI_FUSE_24VDC = 10   # %IX1.2 = I11 - 24VDC säkring (PLC, sensorer)
+DI_FUSE_24VAC = 11   # %IX1.3 = I12 - 24VAC säkring (ventiler) - FÖRBERED
+
+# Block Reason Codes
+BLOCK_REASON_FUSE_24VDC = 9   # 24VDC säkring utlöst
+BLOCK_REASON_FUSE_24VAC = 10  # 24VAC säkring utlöst (framtida)
 
 # Weather cache to avoid excessive API calls in loop mode.
 # Simple global cache is sufficient for single-threaded controller script.
@@ -222,6 +231,83 @@ def check_season():
     return False, None
 
 
+def check_sensor_voltage(sensor_value_raw: int, sensor_type: str, max_value: int = 27648) -> tuple:
+    """
+    Kontrollera om sensor-signal är giltig (>= 1.0V).
+    
+    OBS: Denna funktion används för råa analog-värden (0-27648 motsvarar 0-10V).
+    För sensor-register som redan lagrar konverterade %-värden (t.ex. MW_MARKFUKT),
+    använd istället tröskel-baserad validering (se main_once()).
+    
+    Args:
+        sensor_value_raw: Råvärde från sensor (0-27648 för analog 0-10V)
+        sensor_type: Sensor-namn för loggning ("Markfukt", "Temperatur")
+        max_value: Max råvärde (default 27648 motsvarar 10V)
+    
+    Returns:
+        (ok: bool, voltage: float)
+        - ok=True: Signal >= 1.0V
+        - ok=False: Signal < 1.0V (kabelbrott/fel)
+    
+    Användning:
+        - Temperatur sensor (MW_SOIL_TEMP_RAW): check_sensor_voltage(temp_raw, "Temperatur", 27648)
+        - Framtida: Markfukt råvärde från %IW0 om tillgängligt
+    """
+    voltage = (sensor_value_raw / max_value) * 10.0
+    
+    if voltage < 1.0:
+        logger.error("🚨 SENSORFEL: %s signal %.2fV < 1.0V (Kabelbrott/Fel?)", sensor_type, voltage)
+        logger.error("   → Automatik stoppad")
+        logger.error("   → Använd '/command/start-fallback' för manuell körning")
+        return False, voltage
+    
+    logger.debug("✅ %s sensor OK: %.2fV", sensor_type, voltage)
+    return True, voltage
+
+
+def check_power_fuses(client, unit=DEFAULT_MODBUS_UNIT) -> tuple:
+    """
+    Kontrollera båda säkringarna (24VDC och 24VAC).
+    
+    Returns:
+        (ok: bool, reason: str, block_code: int)
+        - ok=True: Alla säkringar OK
+        - ok=False + reason + block_code: Vilken säkring som utlöst
+    """
+    try:
+        # Läs båda discrete inputs samtidigt (I11-I12)
+        rr = client.read_discrete_inputs(DI_FUSE_24VDC, 2, unit=unit)
+        
+        if rr is None or (hasattr(rr, "isError") and rr.isError()):
+            logger.warning("Kunde inte läsa säkrings-status")
+            return True, "OK", 0  # Fail-safe: tillåt körning om läsning misslyckas
+        
+        fuse_24vdc = rr.bits[0]  # I11
+        fuse_24vac = rr.bits[1]  # I12
+        
+        # Kontrollera 24VDC (PLC/Sensorer) - KRITISKT
+        if not fuse_24vdc:
+            logger.error("🚨 KRITISKT: 24VDC säkring utlöst (I11=0)")
+            logger.error("   → PLC, sensorer och styrning påverkad!")
+            logger.error("   → Kontrollera säkringsautomater och elkoppling")
+            return False, "24VDC säkring utlöst", BLOCK_REASON_FUSE_24VDC
+        
+        # Kontrollera 24VAC (Ventiler) - KRITISKT
+        if not fuse_24vac:
+            logger.error("🚨 KRITISKT: 24VAC säkring utlöst (I12=0)")
+            logger.error("   → Solenoid-ventiler (R1-R7) fungerar EJ!")
+            logger.error("   → Kontrollera säkringsautomater för 24VAC")
+            return False, "24VAC säkring utlöst", BLOCK_REASON_FUSE_24VAC
+        
+        # Båda OK
+        logger.debug("✅ Säkringar OK: 24VDC=1, 24VAC=1")
+        return True, "OK", 0
+        
+    except Exception as e:
+        logger.warning("Fel vid säkrings-kontroll: %s", e)
+        return True, "OK", 0  # Fail-safe
+
+
 def prompt_user_fallback(reason: str) -> str:
     """
     Prompt användare för beslut när automatik inte fungerar
@@ -311,12 +397,40 @@ def pulse_remote_command(host, port, unit, cmd_reg=MW_REMOTE_CMD, cmd_value=50, 
 def main_once(args):
     logger.info("=== Bevattningsscript Körning Startad ===")
     
-    # Kontrollera säsong först
+    # === STEG 1: KRITISK SÄKERHETS-KONTROLL - SÄKRINGAR ===
+    if not args.simulate and not args.dry_run:
+        client = open_modbus_client(args.host, args.port)
+        try:
+            if client.connect():
+                fuses_ok, fuse_reason, block_code = check_power_fuses(client, args.unit)
+                client.close()
+                
+                if not fuses_ok:
+                    logger.error("⛔ BEVATTNING BLOCKERAD: %s", fuse_reason)
+                    logger.error("   → Ingen bevattning (inklusive Fallback) tillåten")
+                    return {
+                        "error": fuse_reason,
+                        "block_reason": block_code,
+                        "wrote": False
+                    }
+            else:
+                logger.warning("Kunde inte ansluta för säkrings-kontroll")
+        except Exception as e:
+            logger.warning("Fel vid säkrings-kontroll: %s", e)
+            try:
+                client.close()
+            except:
+                pass
+    
+    # === STEG 2: Kontrollera säsong ===
     season_block, season_warning = check_season()
     if season_block:
         logger.error(season_warning)
         logger.error("BEVATTNING AVBRUTEN: Vinterperiod")
-        return
+        return {
+            "error": "Vinterperiod",
+            "wrote": False
+        }
     if season_warning:
         logger.warning(season_warning)
     
@@ -326,33 +440,15 @@ def main_once(args):
     # Hantera fallback om väderdata saknas
     weather_failed = (temp is None or regn is None)
     if weather_failed:
-        logger.warning("Väderdata ej tillgänglig från API")
-        
-        # I interaktivt läge, prompt användare
-        if not args.simulate and not args.dry_run:
-            decision = prompt_user_fallback("Open-Meteo API nere")
-            
-            if decision == "abort":
-                logger.info("Användare avbröt körning")
-                return
-            elif decision == "force":
-                logger.warning("FORCE MODE: Användare tvingar körning utan väderdata")
-                temp = 15.0  # Säkert antagande
-                regn = 0.0   # Inga  regn antas
-            elif decision == "sensor":
-                logger.info("Använder endast sensor-data")
-                temp = 15.0  # Neutral temperatur
-                regn = 0.0   # Använd sensor istället
-        else:
-            # I simulate/dry-run, använd fallback-värden
-            logger.warning("Väderdata ej tillgänglig, använder fallback-värden")
-            if temp is None:
-                temp = 15.0
-            if regn is None:
-                regn = 0.0
+        logger.error("🚨 VÄDERDATA EJ TILLGÄNGLIG: Open-Meteo API nere")
+        logger.error("   → Automatik stoppad")
+        logger.error("   → Använd '/command/start-fallback' för manuell körning")
+        return {
+            "error": "Weather API unavailable",
+            "wrote": False
+        }
 
     markfukt = args.simulate_markfukt_value if args.simulate else 30
-    sensor_failed = False
     
     if args.read_markfukt and not args.simulate:
         logger.info("Läser markfukt från Modbus register %d...", MK_REG_ADDR)
@@ -360,26 +456,30 @@ def main_once(args):
             MK_REG_ADDR, host=args.host, port=args.port, unit=args.unit
         )
         if markfukt_sensor_value is not None:
+            # TODO: För fullständig spänningsvalidering, läs råvärdet från analog input (%IW0)
+            # Nuvarande: MK_REG_ADDR (100) kan innehålla redan konverterat %-värde
+            # Om värdet är mycket lågt (< 10%), indikerar det möjligt sensorfel
+            if markfukt_sensor_value < 10:
+                logger.error("🚨 MARKFUKT-SENSOR FEL: Värde %d%% är ovanligt lågt (möjligt kabelbrott)", markfukt_sensor_value)
+                logger.error("   → Automatik stoppad")
+                logger.error("   → Använd '/command/start-fallback' för manuell körning")
+                return {
+                    "error": "Sensor fault (Markfukt < 10%)",
+                    "sensor": "moisture",
+                    "value": markfukt_sensor_value,
+                    "wrote": False
+                }
+            
             markfukt = markfukt_sensor_value
             logger.info("Markfukt läst från sensor: %d%%", markfukt)
         else:
-            sensor_failed = True
-            logger.warning("Markfuktsensor ej tillgänglig")
-            
-            # Prompt användare om både väder och sensor har fel
-            if weather_failed:
-                decision = prompt_user_fallback("Både API och sensor nere")
-                if decision == "abort":
-                    logger.info("Användare avbröt körning")
-                    return
-                elif decision == "force":
-                    logger.warning("FORCE MODE: Användare tvingar körning utan data")
-                    markfukt = 30  # Säkert antagande
-                else:
-                    logger.info("Använder standard markfukt-värde")
-                    markfukt = 30
-            else:
-                logger.info("Använder simulerad markfukt pga sensor-fel")
+            logger.error("🚨 MARKFUKT-SENSOR EJ TILLGÄNGLIG")
+            logger.error("   → Automatik stoppad")
+            logger.error("   → Använd '/command/start-fallback' för manuell körning")
+            return {
+                "error": "Moisture sensor unavailable",
+                "wrote": False
+            }
     else:
         logger.info("Använder %s markfukt: %d%%", "simulerad" if args.simulate else "standard", markfukt)
 

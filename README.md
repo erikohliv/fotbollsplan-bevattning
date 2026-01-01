@@ -787,6 +787,80 @@ curl -X POST -H "X-API-Key: <din-nyckel>" \
 - Om alla hörn-zoner är inaktiverade sätts tiden för hörn till 0
 - Webb-UI visar zonkonfiguration med checkboxes för enkel hantering
 
+## Sensor-Fallback och Säkringsövervakning
+
+### Sensorövervakning
+
+Systemet kontrollerar automatiskt sensor-spänningar:
+- **Markfukt (AI_MOISTURE):** Om signal < 1.0V → Automatik stoppad
+- **Temperatur (AI_TEMP):** Om signal < 1.0V → Automatik stoppad
+
+**Vid sensorfel:**
+1. Automatik stoppas OMEDELBART
+2. Larm loggas: `🚨 SENSORFEL: <sensor> signal <X>V < 1.0V`
+3. Systemet väntar på manuellt beslut
+4. **INGEN automatisk Fallback**
+
+### Säkringsövervakning
+
+**24VDC Säkring (I11):**
+- Försörjer: PLC, sensorer, digitala ingångar
+- Om utlöst: ALL bevattning blockerad (inkl. Fallback)
+
+**24VAC Säkring (I12):**
+- Försörjer: Solenoid-ventiler R1-R7
+- Om utlöst: Ventiler fungerar EJ → Bevattning omöjlig
+- **Status:** Ej installerad än (förberedd i kod)
+
+### Manuell Fallback
+
+Om sensorer har fel men du ändå vill vattna:
+
+```bash
+# Via API
+curl -X POST -H "X-API-Key: <key>" -H "Content-Type: application/json" \
+  -d '{"confirm": true}' \
+  http://localhost:8000/command/start-fallback
+
+# Via Webb-UI
+# 1. Gå till "Sensor & Fallback"-sektionen
+# 2. Klicka "⚠️ Starta Fallback-läge"
+# 3. Bekräfta varningen
+```
+
+**Fallback-värden:**
+- Temperatur: 15°C (neutral)
+- Markfukt: 30% (säkert antagande)
+- Regn: 0mm (inget regn)
+- Tider: Full körning (Center=60 min, Hörn=25 min)
+
+**Säkerhetsregler:**
+- Blockeras om 24VDC säkring utlöst
+- Blockeras om 24VAC säkring utlöst
+- Kräver manuell bekräftelse (`confirm=true`)
+
+### Kontrollera Status
+
+```bash
+# Sensor- och säkringsstatus
+curl -H "X-API-Key: <key>" http://localhost:8000/sensor-status
+```
+
+**Exempel-svar:**
+```json
+{
+  "ok": true,
+  "sensors": {
+    "moisture": {"voltage": 3.2, "ok": true, "value": 45},
+    "temperature": {"voltage": 2.8, "ok": true, "value_raw": 7500}
+  },
+  "fuses": {
+    "24vdc": {"status": true, "text": "OK"},
+    "24vac": {"status": true, "text": "OK", "note": "Ej installerad än"}
+  }
+}
+```
+
 ## Rekommenderad drift
 - PLC kör ST-programmet (task 100 ms).
 - Python SMHI-controller körs t.ex. via cron eller systemd timer för periodiska uppdateringar av väder/markfukt.
