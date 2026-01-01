@@ -6,6 +6,7 @@ Bevattning_controller.py (uppdaterad)
 - Pulserar Remote_Command (MW10) vid behov.
 - Fallback och begränsning av rimliga värden.
 - Kan köras en gång eller i loop.
+- Stöd för zon-exkludering via zone_config.py
 """
 from datetime import datetime
 import time
@@ -14,6 +15,14 @@ import csv
 import argparse
 import logging
 import requests
+
+# Import zone configuration handler
+try:
+    from zone_config import ZoneConfig
+    HAS_ZONE_CONFIG = True
+except ImportError:
+    HAS_ZONE_CONFIG = False
+    logging.warning("zone_config.py saknas, alla zoner kommer köras")
 
 try:
     from pymodbus.client import ModbusTcpClient
@@ -397,6 +406,38 @@ def main_once(args):
 
     tid_center = int(BASE_TID_CENTER * faktor)
     tid_horn = int(BASE_TID_HORN * faktor)
+    
+    # Kontrollera zonkonfiguration och anpassa tider
+    if HAS_ZONE_CONFIG:
+        try:
+            zone_config = ZoneConfig()
+            enabled_zones = zone_config.get_enabled_zones()
+            disabled_zones = zone_config.get_disabled_zones()
+            
+            if disabled_zones:
+                logger.info("📋 Zone configuration loaded: %d enabled, %d disabled", 
+                           len(enabled_zones), len(disabled_zones))
+                for zone_id in disabled_zones:
+                    logger.info("⏭️  Zone %d is disabled by user", zone_id)
+            
+            # Zoner 1-3 är center, 4-7 är hörn
+            center_zones = [1, 2, 3]
+            horn_zones = [4, 5, 6, 7]
+            
+            # Kontrollera om alla center-zoner är inaktiverade
+            center_enabled = any(zone_id in enabled_zones for zone_id in center_zones)
+            horn_enabled = any(zone_id in enabled_zones for zone_id in horn_zones)
+            
+            if not center_enabled:
+                tid_center = 0
+                logger.info("⏭️  All center zones (1-3) disabled, setting tid_center=0")
+            
+            if not horn_enabled:
+                tid_horn = 0
+                logger.info("⏭️  All horn zones (4-7) disabled, setting tid_horn=0")
+                
+        except Exception as e:
+            logger.warning("Kunde inte läsa zonkonfiguration: %s, fortsätter utan zonfiltrering", e)
 
     logger.info("Väder: temp=%.1fC regn24h=%.1fmm markfukt=%s%% => %s => tider %d/%d min",
                 temp, regn, markfukt, anledning, tid_center, tid_horn)
