@@ -12,6 +12,101 @@ Systemet använder ett hybridnät med PEM 90/75/50 rör. **Viktigt**: Zon 7 har 
 
 ## Installation på Raspberry Pi
 
+## 🚀 Installation (System 2.0)
+
+### ✨ Ett-kommando installation (REKOMMENDERAT)
+
+För en helt ny Raspberry Pi med Raspberry Pi OS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/erikohliv/fotbollsplan-bevattning/main/setup.sh | bash
+```
+
+Eller klona först och kör sedan:
+
+```bash
+git clone https://github.com/erikohliv/fotbollsplan-bevattning.git
+cd fotbollsplan-bevattning
+sudo bash setup.sh
+```
+
+**Detta installerar automatiskt:**
+- ✅ Systempaket (Python 3, I2C-verktyg, build-verktyg)
+- ✅ I2C-aktivering för Display 1 (20x4 LCD) och Arkadknappar (PCF8574)
+- ✅ Python Virtual Environment (.venv)
+- ✅ Alla Python-beroenden (pymodbus, requests, smbus2, passlib, etc.)
+- ✅ Konfigurationsfil (api_.env) med Modbus, OpenMeteo och SMTP
+- ✅ Superadmin-användare med bcrypt-hashing
+- ✅ Systemd services för autostart
+
+**Tid:** ~10 minuter
+
+### 🔧 Efter installationen
+
+1. **Starta om** för att aktivera I2C:
+   ```bash
+   sudo reboot
+   ```
+
+2. **Verifiera I2C-enheter**:
+   ```bash
+   i2cdetect -y 1
+   # Du ska se: 0x27 (Display 1) och 0x20 (Arkadknappar)
+   ```
+
+3. **Starta tjänsterna**:
+   ```bash
+   sudo systemctl start bevattning-controller
+   sudo systemctl start display-manager
+   sudo systemctl start bevattning-api
+   ```
+
+4. **Kör hårdvarutester**:
+   ```bash
+   cd fotbollsplan-bevattning
+   source .venv/bin/activate
+   python3 relay_test.py --host <plc-ip>
+   python3 email_test.py
+   ```
+
+### 🧪 Hårdvarutester
+
+#### Relay Test
+Testar alla reläer och ingångar:
+```bash
+python3 relay_test.py --host 192.168.1.100
+```
+
+**Vad som testas:**
+- ✅ Relä 1-7 (ventiler)
+- ✅ Relä 8 (pump) - endast om motorskydd (DI10) är AV
+- ✅ Digitala ingångar (knappar och sensorer)
+- ✅ Analoga ingångar (markfukt, temperatur)
+
+**Säkerhet:** Motorskydd verifieras automatiskt innan pump-test
+
+#### Email Test
+Testar e-postnotifieringar:
+```bash
+python3 email_test.py --send-alarm-test
+```
+
+**Vad som testas:**
+- ✅ SMTP-anslutning
+- ✅ Test-mail
+- ✅ Larm-notifieringar
+
+### 🔍 Systemverifiering
+
+Kör när som helst för att kontrollera systemstatus:
+```bash
+bash verify.sh
+```
+
+---
+
+## Installation på Raspberry Pi (Äldre metoder)
+
 ### Komplett installation (Rekommenderat för nya system)
 För helt ny installation på Raspberry Pi 4 med Debian Bookworm Lite:
 
