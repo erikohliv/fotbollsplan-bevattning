@@ -1710,10 +1710,12 @@ def get_sensor_status(x_api_key: Optional[str] = Header(None)):
         moisture_percent = sensor_regs.registers[0]  # 0-100%
         temp_raw = temp_regs.registers[0]  # 0-27648 motsvarar 0-10V
         
-        # Beräkna indikativ spänning (baserat på antagande om linjär skala)
-        # OBS: Detta är approximativt - för exakt spänning, läs direkt från analog input
+        # Beräkna spänningar
+        # OBS: Markfukt lagras som % (0-100) i PLC, inte som råvärde
+        # Voltage approximation antar linjär skala, men verklig sensor kan ha annan kurva
+        # För exakt spänning krävs direkt läsning från analog input (%IW0)
         moisture_voltage_approx = (moisture_percent / 100.0) * 10.0  # Approximation
-        temp_voltage = (temp_raw / 27648.0) * 10.0
+        temp_voltage = (temp_raw / 27648.0) * 10.0  # Faktisk spänning från råvärde
         
         fuse_24vdc = fuse_inputs.bits[0]
         fuse_24vac = fuse_inputs.bits[1]

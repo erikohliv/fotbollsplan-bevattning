@@ -235,6 +235,10 @@ def check_sensor_voltage(sensor_value_raw: int, sensor_type: str, max_value: int
     """
     Kontrollera om sensor-signal är giltig (>= 1.0V).
     
+    OBS: Denna funktion används för råa analog-värden (0-27648 motsvarar 0-10V).
+    För sensor-register som redan lagrar konverterade %-värden (t.ex. MW_MARKFUKT),
+    använd istället tröskel-baserad validering (se main_once()).
+    
     Args:
         sensor_value_raw: Råvärde från sensor (0-27648 för analog 0-10V)
         sensor_type: Sensor-namn för loggning ("Markfukt", "Temperatur")
@@ -244,6 +248,10 @@ def check_sensor_voltage(sensor_value_raw: int, sensor_type: str, max_value: int
         (ok: bool, voltage: float)
         - ok=True: Signal >= 1.0V
         - ok=False: Signal < 1.0V (kabelbrott/fel)
+    
+    Användning:
+        - Temperatur sensor (MW_SOIL_TEMP_RAW): check_sensor_voltage(temp_raw, "Temperatur", 27648)
+        - Framtida: Markfukt råvärde från %IW0 om tillgängligt
     """
     voltage = (sensor_value_raw / max_value) * 10.0
     
