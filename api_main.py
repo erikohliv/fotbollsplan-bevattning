@@ -105,6 +105,14 @@ except ImportError:
     user_manager = None
     superadmin_manager = None
 
+# Import zone configuration
+try:
+    from zone_config import ZoneConfig
+    HAS_ZONE_CONFIG = True
+except ImportError:
+    logger.warning("zone_config module not available - zone management endpoints will be disabled")
+    HAS_ZONE_CONFIG = False
+
 
 def require_key(x_api_key: Optional[str]):
     if x_api_key != API_KEY:
@@ -284,6 +292,12 @@ class TestZoneCommand(BaseModel):
     zone: Optional[int] = None  # Om None, testa alla zoner sekventiellt
     duration_seconds: int = 60  # Testlängd per zon (default 60 sekunder)
     all_zones_confirmed: bool = False  # Säkerhetskontroll för test av alla zoner
+
+
+class ZoneToggleRequest(BaseModel):
+    """Request model för zon-toggle"""
+    enabled: Optional[bool] = None  # Om None, toggle mellan enabled/disabled
+    name: Optional[str] = None      # Valfri beskrivning
 
 
 @app.get("/status")
@@ -488,6 +502,128 @@ def config(cfg: ConfigUpdate, x_api_key: Optional[str] = Header(None)):
             rr = client.write_register(MW_MODE_OVERRIDE, 1 if cfg.mode_override == 1 else 0, unit=MODBUS_UNIT)
             _ensure_modbus_ok(rr, f"write mode_override value={cfg.mode_override}")
     return {"ok": True}
+
+
+@app.get("/zones/status")
+def get_zones_status(x_api_key: Optional[str] = Header(None)):
+    """
+    Hämta status för alla zoner (enabled/disabled).
+    
+    Returns:
+        {
+            "ok": true,
+            "zones": [
+                {"zone": 1, "enabled": true, "name": "Zone 1", "last_modified": "..."},
+                ...
+            ],
+            "enabled_count": 6,
+            "disabled_count": 1,
+            "timestamp": 1234567890
+        }
+    """
+    require_key(x_api_key)
+    
+    if not HAS_ZONE_CONFIG:
+        raise HTTPException(
+            status_code=501,
+            detail="Zone configuration module not available"
+        )
+    
+    try:
+        zone_config = ZoneConfig()
+        all_zones = zone_config.get_all_zones()
+        enabled_zones = zone_config.get_enabled_zones()
+        disabled_zones = zone_config.get_disabled_zones()
+        
+        zones_list = []
+        for zone_id in sorted(all_zones.keys()):
+            zone_data = all_zones[zone_id]
+            zones_list.append({
+                "zone": zone_id,
+                "enabled": zone_data["enabled"],
+                "name": zone_data["name"],
+                "last_modified": zone_data["last_modified"]
+            })
+        
+        return {
+            "ok": True,
+            "zones": zones_list,
+            "enabled_count": len(enabled_zones),
+            "disabled_count": len(disabled_zones),
+            "timestamp": int(time.time())
+        }
+    except Exception as e:
+        logger.error("Fel vid hämtning av zonkonfiguration: %s", e)
+        raise HTTPException(status_code=500, detail=f"Fel vid hämtning av zonkonfiguration: {str(e)}")
+
+
+@app.post("/zones/{zone_id}/toggle")
+def toggle_zone(zone_id: int, request: Optional[ZoneToggleRequest] = None, x_api_key: Optional[str] = Header(None)):
+    """
+    Aktivera/Inaktivera en zon.
+    
+    Args:
+        zone_id: Zon-nummer (1-7)
+        request: Optional body med enabled (true/false) och name
+    
+    Returns:
+        {
+            "ok": true,
+            "zone": 5,
+            "enabled": false,
+            "message": "Zone 5 disabled successfully",
+            "timestamp": 1234567890
+        }
+    """
+    require_key(x_api_key)
+    
+    if not HAS_ZONE_CONFIG:
+        raise HTTPException(
+            status_code=501,
+            detail="Zone configuration module not available"
+        )
+    
+    try:
+        zone_config = ZoneConfig()
+        
+        # Validera zon-ID
+        if zone_id < MIN_ZONE or zone_id > MAX_ZONE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid zone_id {zone_id}. Must be between {MIN_ZONE} and {MAX_ZONE}"
+            )
+        
+        # Hantera request body (kan vara None om inget skickas)
+        if request is None:
+            request = ZoneToggleRequest()
+        
+        # Om enabled är None, toggle
+        if request.enabled is None:
+            new_enabled = zone_config.toggle_zone(zone_id)
+            action = "enabled" if new_enabled else "disabled"
+            logger.info("[USER_ACTION] Zone %d toggled to %s - timestamp=%s", 
+                       zone_id, action, int(time.time()))
+        else:
+            zone_config.set_zone_enabled(zone_id, request.enabled, name=request.name)
+            new_enabled = request.enabled
+            action = "enabled" if new_enabled else "disabled"
+            logger.info("[USER_ACTION] Zone %d set to %s - timestamp=%s", 
+                       zone_id, action, int(time.time()))
+        
+        return {
+            "ok": True,
+            "zone": zone_id,
+            "enabled": new_enabled,
+            "message": f"Zone {zone_id} {action} successfully",
+            "timestamp": int(time.time())
+        }
+        
+    except ValueError as e:
+        logger.warning("Invalid zone_id %d: %s", zone_id, e)
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("Fel vid uppdatering av zon %d: %s", zone_id, e)
+        raise HTTPException(status_code=500, detail=f"Fel vid uppdatering av zon: {str(e)}")
 
 
 @app.post("/menu/test-bevattning")
@@ -779,6 +915,45 @@ label { font-weight: bold; margin-right: 5px; }
 }
 .message.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
 .message.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+.zone-item { 
+  display: flex; 
+  align-items: center; 
+  padding: 8px; 
+  margin: 5px 0; 
+  background: white; 
+  border-radius: 4px; 
+  border: 1px solid #ddd;
+}
+.zone-item label {
+  flex: 1;
+  margin: 0;
+  cursor: pointer;
+}
+.zone-item input[type="checkbox"] {
+  margin-right: 10px;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+.zone-item.disabled {
+  background: #f8f8f8;
+  opacity: 0.7;
+}
+.zone-status {
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: bold;
+  margin-left: 10px;
+}
+.zone-status.enabled {
+  background: #d4edda;
+  color: #155724;
+}
+.zone-status.disabled {
+  background: #f8d7da;
+  color: #721c24;
+}
 </style>
 </head>
 <body>
@@ -825,6 +1000,18 @@ label { font-weight: bold; margin-right: 5px; }
       <button onclick="startAuto()">Starta Auto</button>
       <button class="danger" onclick="stopAll()">Stoppa</button>
     </div>
+  </div>
+  
+  <div class="section">
+    <h3>Zon-konfiguration</h3>
+    <p style="color: #666; font-size: 12px; margin-top: 0;">
+      Inaktivera zoner som inte ska vattnas (t.ex. vid trasig spridare). 
+      Inaktiverade zoner hoppas över automatiskt i Auto-läget.
+    </p>
+    <div id="zone-config-list" style="margin: 10px 0;">
+      Laddar zoner...
+    </div>
+    <button onclick="loadZoneConfig()">Uppdatera Status</button>
   </div>
   
   <div class="section">
@@ -890,6 +1077,7 @@ if (!key) {
 } else {
   localStorage.setItem('apiKey', key);
   loadStatus();
+  loadZoneConfig(); // Load zone configuration on page load
   // Auto-refresh status every 5 seconds
   setInterval(loadStatus, 5000);
 }
@@ -1187,6 +1375,82 @@ async function resetErrors() {
     showMessage('Nätverksfel: ' + err.message, true);
   }
 }
+
+async function loadZoneConfig() {
+  try {
+    const r = await fetch('/zones/status', {headers: {'X-API-Key': key}});
+    
+    if (!r.ok) {
+      document.getElementById('zone-config-list').innerHTML = '<p style="color: #721c24;">Kunde inte ladda zonkonfiguration</p>';
+      return;
+    }
+    
+    const data = await r.json();
+    const listEl = document.getElementById('zone-config-list');
+    
+    if (!data.zones || data.zones.length === 0) {
+      listEl.innerHTML = '<p style="color: #666;">Inga zoner konfigurerade</p>';
+      return;
+    }
+    
+    let html = '';
+    for (const zone of data.zones) {
+      const checked = zone.enabled ? 'checked' : '';
+      const statusClass = zone.enabled ? 'enabled' : 'disabled';
+      const statusText = zone.enabled ? 'AKTIV' : 'INAKTIV';
+      const itemClass = zone.enabled ? '' : ' disabled';
+      
+      html += `
+        <div class="zone-item${itemClass}">
+          <input type="checkbox" id="zone-${zone.zone}" ${checked} onchange="toggleZone(${zone.zone})">
+          <label for="zone-${zone.zone}">
+            <strong>Zon ${zone.zone}</strong> - ${zone.name}
+          </label>
+          <span class="zone-status ${statusClass}">${statusText}</span>
+        </div>
+      `;
+    }
+    
+    html += `<p style="font-size: 11px; color: #666; margin-top: 10px;">
+      ${data.enabled_count} aktiv(a) | ${data.disabled_count} inaktiv(a)
+    </p>`;
+    
+    listEl.innerHTML = html;
+  } catch (err) {
+    document.getElementById('zone-config-list').innerHTML = 
+      '<p style="color: #721c24;">Nätverksfel: ' + err.message + '</p>';
+  }
+}
+
+async function toggleZone(zoneId) {
+  try {
+    const r = await fetch(`/zones/${zoneId}/toggle`, {
+      method: 'POST',
+      headers: {
+        'X-API-Key': key,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!r.ok) {
+      const err = await r.json();
+      showMessage('Fel: ' + (err.detail || 'Okänt fel'), true);
+      // Reload to revert checkbox state
+      loadZoneConfig();
+      return;
+    }
+    
+    const result = await r.json();
+    showMessage(result.message);
+    // Reload zone config to update UI
+    setTimeout(loadZoneConfig, 500);
+  } catch (err) {
+    showMessage('Nätverksfel: ' + err.message, true);
+    // Reload to revert checkbox state
+    loadZoneConfig();
+  }
+}
+
 </script>
 </body>
 </html>
