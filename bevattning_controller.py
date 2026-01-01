@@ -28,8 +28,9 @@ DEFAULT_MODBUS_PORT = 502
 DEFAULT_MODBUS_UNIT = 1
 
 LOG_FIL = os.path.join(os.path.expanduser("~"), "bevattning_log.csv")
-DEFAULT_LATITUDE = "56.10"
-DEFAULT_LONGITUDE = "14.45"
+# Default coordinates for Håkanryd, Bromölla
+DEFAULT_LATITUDE = "56.05"    # Håkanryd, Bromölla
+DEFAULT_LONGITUDE = "14.40"   # Håkanryd, Bromölla
 FORECAST_HOURS = 24
 
 BASE_TID_CENTER = 60   # minuter per center-zon
