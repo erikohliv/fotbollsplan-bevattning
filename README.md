@@ -744,6 +744,49 @@ curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
   -d '{"zone":1,"action":"stop"}' http://localhost:8000/zone-control
 ```
 
+### Zon-Exkludering (Zone Exclusion)
+
+Om en spridare går sönder kan du inaktivera den zonen via API. Inaktiverade zoner hoppas automatiskt över i Auto-läget.
+
+```bash
+# Hämta status för alla zoner
+curl -H "X-API-Key: <din-nyckel>" http://localhost:8000/zones/status
+
+# Exempel-svar:
+# {
+#   "ok": true,
+#   "zones": [
+#     {"zone": 1, "enabled": true, "name": "Zone 1", "last_modified": "2026-01-01T12:00:00"},
+#     {"zone": 5, "enabled": false, "name": "Zone 5 (Sönder spridare)", "last_modified": "2026-01-01T14:30:00"},
+#     ...
+#   ],
+#   "enabled_count": 6,
+#   "disabled_count": 1
+# }
+
+# Inaktivera zon 5 (sönder spridare)
+curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
+  -d '{"enabled": false, "name": "Zone 5 (Sönder spridare)"}' \
+  http://localhost:8000/zones/5/toggle
+
+# Aktivera zon 5 igen (när spridaren är lagad)
+curl -X POST -H "Content-Type: application/json" -H "X-API-Key: <din-nyckel>" \
+  -d '{"enabled": true, "name": "Zone 5 (Fixed)"}' \
+  http://localhost:8000/zones/5/toggle
+
+# Toggle zon 3 (växla mellan enabled/disabled)
+curl -X POST -H "X-API-Key: <din-nyckel>" \
+  http://localhost:8000/zones/3/toggle
+```
+
+**Viktigt:**
+- Inaktiverade zoner hoppas över automatiskt i Auto-läget
+- Zonkonfiguration sparas i `zone_config.json` och bevaras vid omstart
+- Zoner 1-3 är center-zoner, 4-7 är hörn-zoner
+- Om alla center-zoner är inaktiverade sätts tiden för center till 0
+- Om alla hörn-zoner är inaktiverade sätts tiden för hörn till 0
+- Webb-UI visar zonkonfiguration med checkboxes för enkel hantering
+
 ## Rekommenderad drift
 - PLC kör ST-programmet (task 100 ms).
 - Python SMHI-controller körs t.ex. via cron eller systemd timer för periodiska uppdateringar av väder/markfukt.
