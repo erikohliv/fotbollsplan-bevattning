@@ -1,0 +1,259 @@
+#!/usr/bin/env python3
+"""
+IK Kamp Fotbollsplan Bevattning - Mobilvänligt Dashboard
+Förbättrad version med fotbollsplans-visualisering och klubbfärger
+"""
+import os
+import logging
+import json
+from datetime import datetime
+from typing import Dict, Any, List
+import dash
+from dash import dcc, html, Input, Output, State, callback_context
+import plotly.graph_objects as go
+from dotenv import load_dotenv
+import requests
+load_dotenv()
+# Konfiguration
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
+API_KEY = os.getenv("API_KEY", "kamp")  # Default till kamp
+DASH_PORT = int(os.getenv("DASH_PORT", "8051"))  # Ny port för att inte kollidera
+DASH_HOST = os.getenv("DASH_HOST", "0.0.0.0")
+# Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+# IK Kamp Klubbfärger
+COLORS = {
+    'primary': '#FFD700',      # Gul
+    'secondary': '#003A70',    # Blå
+    'accent': '#8B1538',       # Vinröd
+    'success': '#4CAF50',      # Grön (aktiv)
+    'danger': '#f44336',       # Röd (fel)
+    'warning': '#ff9800',      # Orange (varning)
+    'background': '#f5f5f5',
+    'card': '#ffffff',
+    'text': '#333333',
+    'grass': '#2d5016',        # Mörkgrön (gräs)
+    'grass_light': '#3d6b1f',  # Ljusare gräs
+    'field_line': '#ffffff',   # Vita linjer
+    'zone_active': '#4CAF50',
+    'zone_inactive': '#808080',
+    'zone_scheduled': '#FFD700',
+    'pump_on': '#003A70',
+    'pump_off': '#9e9e9e',
+}
+# Dash app
+app = dash.Dash(
+    __name__,
+    title="IK Kamp Bevattning",
+    update_title="⚡ Uppdaterar...",
+    meta_tags=[
+        {"name": "viewport", "content": "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"}
+    ]
+)
+def make_api_request(endpoint: str, method: str = "GET", json_data: Dict = None) -> Dict[str, Any]:
+def create_football_field_figure(zones_data: List[Dict]) -> go.Figure:
+# App Layout
+app.layout = html.Div([
+    # Header med klubbfärger
+    html.Div([
+        html.Div([
+            html.H1("💧 IK Kamp Bevattning", 
+                   style={'color': COLORS['primary'], 'margin': '0', 'fontSize': '24px'}),
+            html.P("Fotbollsplan Bevattningssystem", 
+                  style={'color': 'white', 'margin': '5px 0 0 0', 'fontSize': '14px'})
+        ], style={'flex': '1'}),
+        html.Div(id='user-info', style={'color': 'white', 'fontSize': '12px'})
+    ], style={
+        'background': f'linear-gradient(135deg, {COLORS["secondary"]} 0%, {COLORS["accent"]} 100%)',
+        'padding': '15px 20px',
+        'display': 'flex',
+        'alignItems': 'center',
+        'justifyContent': 'space-between'
+    }),
+], style={
+})
+# Callbacks
+@app.callback(
+    Output('hidden-process-data', 'children'),
+    [Input('interval-update', 'n_intervals')]
+)
+def update_data(n):
+    """Hämta processdata från API"""
+    data = make_api_request("/process-view")
+    return json.dumps(data)
+
+
+@app.callback(
+    Output('field-graph', 'figure'),
+    [Input('hidden-process-data', 'children')]
+)
+def update_field(process_json):
+    """Uppdatera fotbollsplan"""
+    if not process_json:
+        return go.Figure()
+@app.callback(
+    [Output('pump-animation', 'children'),
+     Output('pump-status-text', 'children')],
+    [Input('hidden-process-data', 'children')]
+)
+def update_pump_status(process_json):
+    """Uppdatera pump-status med animation"""
+    if not process_json:
+        return "⚫", "Laddar..."
+    
+    try:
+        data = json.loads(process_json)
+        if data.get('ok') and 'pump' in data:
+            pump = data['pump']
+            if pump['on']:
+                animation = html.Div("💧", className='pump-active')
+                status = html.Span([
+                    html.Span("PUMP AKTIV", style={'color': COLORS['pump_on'], 'fontWeight': 'bold'}),
+                    html.Br(),
+                    html.Span(f"Status: {pump.get('status', 'OK')}", style={'fontSize': '14px'})
+                ])
+                return animation, status
+            else:
+                return "⚫", html.Span("Pump avstängd", style={'color': COLORS['pump_off']})
+    except Exception as e:
+        logger.error(f"Error updating pump: {e}")
+    
+    return "⚫", "Fel vid hämtning"
+
+
+                             style={'fontSize': '20px', 'color': COLORS['secondary']})
+                ], style={'marginBottom': '10px'}),
+                             style={'fontSize': '20px', 'color': COLORS['accent']})
+                ])
+            ])
+    except Exception as e:
+        logger.error(f"Error updating sensors: {e}")
+    
+
+
+@app.callback(
+    Output('error-status', 'children'),
+    [Input('hidden-process-data', 'children')]
+def update_error_status(process_json):
+    """Uppdatera felstatus"""
+    if not process_json:
+        return "Laddar..."
+    
+    try:
+        data = json.loads(process_json)
+        if data.get('ok'):
+            block = data.get('block_status', {})
+            error_details = data.get('error_details', {})
+            
+            if block.get('blocked'):
+                return html.Div([
+                    html.H3("⚠️ Blockering", style={'color': COLORS['danger'], 'margin': '0 0 10px 0'}),
+                    html.Div(block.get('text', 'Okänt fel'), style={'fontWeight': 'bold'}),
+                    html.Div(block.get('explanation', ''), style={'fontSize': '14px', 'marginTop': '5px'})
+                ], style={
+                    'padding': '15px',
+                    'backgroundColor': '#ffebee',
+                    'borderRadius': '8px',
+                    'borderLeft': f'4px solid {COLORS["danger"]}'
+                })
+            
+            # Check for any active errors
+            active_errors = [e for e in error_details.values() if e.get('active')]
+            if active_errors:
+                return html.Div([
+                    html.H3("⚠️ Varningar", style={'color': COLORS['warning'], 'margin': '0 0 10px 0'}),
+                    html.Div([
+                        html.Div(f"• {err.get('text', 'Okänt')}", style={'marginBottom': '5px'})
+                        for err in active_errors
+                    ])
+                ])
+            
+            return html.Div([
+                html.Span("✅ ", style={'fontSize': '24px'}),
+                html.Span("System OK", style={'fontWeight': 'bold', 'color': COLORS['success']})
+            ])
+    except Exception as e:
+        logger.error(f"Error in error status: {e}")
+    
+    return "Fel vid hämtning"
+
+
+@app.callback(
+    [Output('zone-modal', 'style'),
+     Output('modal-zone-title', 'children'),
+     Output('store-selected-zone', 'data')],
+    [Input('field-graph', 'clickData'),
+     Input('btn-close-modal', 'n_clicks')],
+    [State('zone-modal', 'style')]
+)
+def toggle_zone_modal(clickData, close_clicks, current_style):
+# ===== KNAPPAR OCH AKTIVITETSLOGG CALLBACKS =====
+@app.callback(
+    Output('modal-feedback', 'children'),
+    [Input('btn-zone-start', 'n_clicks'),
+     Input('btn-zone-stop', 'n_clicks'),
+     Input('btn-timer-5', 'n_clicks'),
+     Input('btn-timer-10', 'n_clicks'),
+     Input('btn-timer-15', 'n_clicks'),
+     Input('btn-timer-30', 'n_clicks'),
+     Input('btn-stop-all', 'n_clicks')],
+    [State('store-selected-zone', 'data')]
+)
+def handle_zone_controls(start_clicks, stop_clicks, t5, t10, t15, t30, stop_all_clicks, selected_zone):
+    """Hantera zon-kontroller"""
+    ctx = callback_context
+    
+    if not ctx.triggered or selected_zone is None:
+        return ""
+    
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # Användarnamn (TODO: hämta från session/inloggning)
+    user = "admin"  # Placeholder - kommer från inloggning senare
+    
+    try:
+        if trigger_id == 'btn-zone-start':
+            result = make_api_request("/command/manual", method="POST", json_data={"zone": selected_zone, "user": user})
+            if result.get('ok'):
+                return html.Div([
+                    html.Span("✅ ", style={'fontSize': '20px'}),
+                    f"Zon {selected_zone} startad!"
+                ], style={'color': COLORS['success'], 'padding': '10px', 'backgroundColor': '#e8f5e9', 'borderRadius': '4px'})
+            else:
+                return html.Div([
+                    html.Span("❌ ", style={'fontSize': '20px'}),
+                    f"Fel: {result.get('error', 'Okänt fel')}"
+                ], style={'color': COLORS['danger'], 'padding': '10px', 'backgroundColor': '#ffebee', 'borderRadius': '4px'})
+        
+        elif trigger_id == 'btn-zone-stop' or trigger_id == 'btn-stop-all':
+            result = make_api_request("/command/stop", method="POST", json_data={"user": user})
+            if result.get('ok'):
+                return html.Div([
+                    html.Span("✅ ", style={'fontSize': '20px'}),
+                    "Bevattning stoppad!"
+                ], style={'color': COLORS['success'], 'padding': '10px', 'backgroundColor': '#e8f5e9', 'borderRadius': '4px'})
+        
+        elif trigger_id.startswith('btn-timer'):
+            minutes = int(trigger_id.split('-')[-1])
+            return html.Div([
+                html.Span("⏱️ ", style={'fontSize': '20px'}),
+                f"Timer satt: {minutes} minuter (TODO: Implementera schemaläggning)"
+            ], style={'color': COLORS['info'], 'padding': '10px', 'backgroundColor': '#e3f2fd', 'borderRadius': '4px'})
+    
+    except Exception as e:
+        logger.error(f"Error in zone control: {e}")
+        return html.Div([
+            html.Span("❌ ", style={'fontSize': '20px'}),
+            f"Fel: {str(e)}"
+        ], style={'color': COLORS['danger'], 'padding': '10px', 'backgroundColor': '#ffebee', 'borderRadius': '4px'})
+    
+    return ""
+
+
+@app.callback(
+    Output('activity-log', 'children'),
+    [Input('interval-update', 'n_intervals')]
+)
+def update_activity_log_real(n):
+if __name__ == '__main__':

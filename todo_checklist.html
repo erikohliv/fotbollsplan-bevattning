@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TODO Checklista - Fotbollsplan Bevattning</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            background: #48bb78;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .progress-section {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 2px solid #e2e8f0;
+        }
+        
+        .progress-bar-container {
+            background: #e2e8f0;
+            border-radius: 10px;
+            height: 30px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        
+        .progress-bar {
+            background: linear-gradient(90deg, #48bb78 0%, #38a169 100%);
+            height: 100%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #e2e8f0;
+        }
+        
+        .section-icon {
+            font-size: 2em;
+        }
+        
+        .section-title {
+            font-size: 1.5em;
+            color: #2d3748;
+            flex: 1;
+        }
+        
+        .section-counter {
+            background: #edf2f7;
+            color: #4a5568;
+            padding: 6px 12px;
+            border-radius: 12px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        
+        .subsection {
+            margin-bottom: 25px;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #cbd5e0;
+        }
+        
+        .subsection-title {
+            font-size: 1.2em;
+            color: #2d3748;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+        
+        .todo-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .todo-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: translateX(4px);
+        }
+        
+        .todo-item.completed {
+            opacity: 0.6;
+            background: #f0fff4;
+            border-color: #48bb78;
+        }
+        
+        .todo-item.completed .todo-text {
+            text-decoration: line-through;
+            color: #68d391;
+        }
+        
+        .checkbox {
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border: 2px solid #cbd5e0;
+            border-radius: 6px;
+            cursor: pointer;
+            flex-shrink: 0;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+        
+        .checkbox:checked {
+            background: #48bb78;
+            border-color: #48bb78;
+        }
+        
+        .checkbox:checked::after {
+            content: '✓';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        
+        .todo-text {
+            flex: 1;
+            color: #2d3748;
+            line-height: 1.5;
+        }
+        
+        .priority-critical {
+            border-left-color: #f56565;
+            border-left-width: 4px;
+        }
+        
+        .priority-high {
+            border-left-color: #ed8936;
+            border-left-width: 4px;
+        }
+        
+        .priority-medium {
+            border-left-color: #ecc94b;
+            border-left-width: 4px;
+        }
+        
+        .badge-critical {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        
+        .contacts-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        .contacts-table th,
+        .contacts-table td {
+            border: 1px solid #e2e8f0;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        .contacts-table th {
+            background: #edf2f7;
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        .completed-section {
+            background: #f0fff4;
+            border-color: #48bb78;
+        }
+        
+        .completed-section .section-header {
+            border-bottom-color: #48bb78;
+        }
+        
+        .warning-box {
+            background: #fff5f5;
+            border: 2px solid #fc8181;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .warning-box strong {
+            color: #c53030;
+            font-size: 1.1em;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.5em;
+            }
+            
+            .content {
+                padding: 15px;
+            }
+            
+            .section-title {
+                font-size: 1.2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💧 TODO Checklista - Fotbollsplan Bevattning System 2.0</h1>
+            <div class="status-badge">System installerat - Väntar på hårdvara & 24V-drift</div>
+            <p style="margin-top: 10px; opacity: 0.9;">Senast uppdaterad: 2026-01-01</p>
+        </div>
+        
+        <div class="content">
+            <div class="progress-section">
+                <h3>📊 Total Framsteg</h3>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progressBar">0%</div>
+                </div>
+                <p style="margin-top: 10px; color: #4a5568;">
+                    <span id="completedCount">0</span> av <span id="totalCount">0</span> uppgifter klara
+                </p>
+            </div>
+
+            <!-- KRITISKT -->
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-icon">🔴</span>
+                    <h2 class="section-title">KRITISKT - Före 24V-driftsättning</h2>
+                    <span class="section-counter" data-section="critical">0/0</span>
+                </div>
+
+                <div class="subsection priority-critical">
+                    <h3 class="subsection-title">Säkerhetssystem</h3>
+                    <div class="todo-item" data-id="critical-1">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Beställ 24VAC säkring med hjälpkontakt</strong> (I12 - för övervakningssignal till PLC)</div>
+                    </div>
+                    <div class="todo-item" data-id="critical-2">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Beställ rätt modell med NO/NC hjälpkontakt</div>
+                    </div>
+                    <div class="todo-item" data-id="critical-3">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Kontrollera spänning/strömnivå (ventiler drar X ampere)</div>
+                    </div>
+                    <div class="todo-item" data-id="critical-4">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Planera montering i elskåp</div>
+                    </div>
+                    <div class="todo-item" data-id="critical-5">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Verifiera nödstopp (I03)</strong> fungerar mekaniskt</div>
+                    </div>
+                    <div class="todo-item" data-id="critical-6">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Testa att maintained signal bryter korrekt</div>
+                    </div>
+                    <div class="todo-item" data-id="critical-7">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Verifiera att PLC reagerar (BlockReason=4)</div>
+                    </div>
+                    <div class="todo-item" data-id="critical-8">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Verifiera motorskydd (I10)</strong> är anslutet korrekt</div>
+                    </div>
+                    <div class="todo-item" data-id="critical-9">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Kontrollera att NO/NC är rätt kopplat till GPIO 18</div>
+                    </div>
+                    <div class="todo-item" data-id="critical-10">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Testa med simulator om möjligt</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- HÅRDVARA -->
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-icon">🟡</span>
+                    <h2 class="section-title">HÅRDVARA - Installation & Uppgradering</h2>
+                    <span class="section-counter" data-section="hardware">0/0</span>
+                </div>
+
+                <div class="subsection priority-high">
+                    <h3 class="subsection-title">Användarinterface</h3>
+                    <div class="todo-item" data-id="hw-1">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Installera arkadknapparna (4st via PCF8574 på I2C)</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="hw-2">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Montera fysiska knappar i kontrollpanel</div>
+                    </div>
+                    <div class="todo-item" data-id="hw-3">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Anslut till PCF8574 (0x27 alternativt 0x20 om konflikt)</div>
+                    </div>
+                    <div class="todo-item" data-id="hw-4">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Testa avläsning med <code>i2cdetect -y 1</code></div>
+                    </div>
+                    <div class="todo-item" data-id="hw-5">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Verifiera debouncing i display_manager.py</div>
+                    </div>
+                    <div class="todo-item" data-id="hw-6">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Installera I2C-enhet för knappar (PCF8574)</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="hw-7">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Löd/anslut PCF8574-modul</div>
+                    </div>
+                    <div class="todo-item" data-id="hw-8">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Konfigurera I2C-adress (undvik konflikt med display på 0x27)</div>
+                    </div>
+                    <div class="todo-item" data-id="hw-9">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Uppdatera hardware_map.csv med slutgiltig adress</div>
+                    </div>
+                </div>
+
+                <div class="subsection priority-medium">
+                    <h3 class="subsection-title">Sensorer</h3>
+                    <div class="todo-item" data-id="hw-10">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>DI13 & DI14 (GPIO 27 & 22)</strong> - Beslut: Installera eller dokumentera som "reserved"?</div>
+                    </div>
+                </div>
+
+                <div class="subsection priority-high">
+                    <h3 class="subsection-title">Analog Input Kalibrering</h3>
+                    <div class="todo-item" data-id="hw-11">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>ADC (ADS1115) - Testa när 24V är på</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="hw-12">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">AI1 (Markfukt 0-10V) - verifiera skalning 0-100%</div>
+                    </div>
+                    <div class="todo-item" data-id="hw-13">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">AI2 (Jordtemperatur 0-10V) - kalibrera temperaturomvandling</div>
+                    </div>
+                    <div class="todo-item" data-id="hw-14">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text">Justera voltage scaling i unipi_modbus_server.py om behövs</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DOKUMENTATION -->
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-icon">📋</span>
+                    <h2 class="section-title">DOKUMENTATION - Manualer & Scheman</h2>
+                    <span class="section-counter" data-section="docs">0/0</span>
+                </div>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">Hårdvarudokumentation</h3>
+                    <div class="todo-item" data-id="doc-1">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Uppdatera dokumentation med rätt manualer och uppgifter om all hårdvara</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="doc-2">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Skapa kopplingsschema (Electrical Wiring Diagram)</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="doc-3">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Uppdatera vattenledningarna (Pipe Network Documentation)</strong></div>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">Systemarkitektur</h3>
+                    <div class="todo-item" data-id="doc-4">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Dokumentera Python + .st hybrid-arkitektur</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="doc-5">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Skapa en Wiki (GitHub Wiki eller separat)</strong></div>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">Operationell Dokumentation</h3>
+                    <div class="todo-item" data-id="doc-6">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Lägg upp all annan dokumentation</strong> (driftkort, underhåll, larm, backup, etc.)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SYSTEM -->
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-icon">⚙️</span>
+                    <h2 class="section-title">SYSTEM - Konfiguration & Testing</h2>
+                    <span class="section-counter" data-section="system">0/0</span>
+                </div>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">Python-kod</h3>
+                    <div class="todo-item" data-id="sys-1">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Implementera arkadknapps-läsning i display_manager.py</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="sys-2">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Förbättra pump_protection.py</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="sys-3">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Zone Config integration</strong></div>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">Email & Notifikationer</h3>
+                    <div class="todo-item" data-id="sys-4">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Testa email-notiser vid alla larmtyper</strong> (8 olika BlockReasons)</div>
+                    </div>
+                </div>
+
+                <div class="subsection">
+                    <h3 class="subsection-title">PLC-program</h3>
+                    <div class="todo-item" data-id="sys-5">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Verifiera att .st-filen kan laddas (om behövs)</strong></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 24V POWER-ON -->
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-icon">🔋</span>
+                    <h2 class="section-title">24V POWER-ON - Driftsättning</h2>
+                    <span class="section-counter" data-section="poweron">0/0</span>
+                </div>
+
+                <div class="subsection priority-critical">
+                    <h3 class="subsection-title">Pre-flight Check</h3>
+                    <div class="todo-item" data-id="power-1">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Visuell inspektion av elkopplingar</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="power-2">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Mät spänningar FÖRE belastning</strong></div>
+                    </div>
+                </div>
+
+                <div class="subsection priority-critical">
+                    <h3 class="subsection-title">Power-on Sekvens</h3>
+                    <div class="todo-item" data-id="power-3">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Steg 1: Sätt på 24VDC</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="power-4">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Steg 2: Sätt på 24VAC (ventiler)</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="power-5">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Steg 3: Testa pump UTAN vatten</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="power-6">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Steg 4: Testa med vatten (en zon)</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="power-7">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Steg 5: Full sekvens (alla zoner)</strong></div>
+                    </div>
+                </div>
+
+                <div class="subsection priority-high">
+                    <h3 class="subsection-title">Post-power Testing</h3>
+                    <div class="todo-item" data-id="power-8">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Säkerhetstest</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="power-9">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Långtidstest (3 dagar)</strong></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- REMOTE ACCESS -->
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-icon">🌐</span>
+                    <h2 class="section-title">REMOTE ACCESS & MONITORING</h2>
+                    <span class="section-counter" data-section="remote">0/0</span>
+                </div>
+
+                <div class="subsection">
+                    <div class="todo-item" data-id="remote-1">
+                        <input type="checkbox" class="checkbox" checked disabled>
+                        <div class="todo-text"><strong>Tailscale konfigurerat</strong> ✅ (IP: 100.124.254.103)</div>
+                    </div>
+                    <div class="todo-item" data-id="remote-2">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Skapa Dashboard för övervakning</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="remote-3">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Backup & Recovery</strong></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ANVÄNDARMANUALER -->
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-icon">📝</span>
+                    <h2 class="section-title">ANVÄNDARMANUALER</h2>
+                    <span class="section-counter" data-section="manuals">0/0</span>
+                </div>
+
+                <div class="subsection">
+                    <div class="todo-item" data-id="manual-1">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>LCD-interface Manual</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="manual-2">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>API Manual (för tekniker)</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="manual-3">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Underhållsmanual</strong></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FRAMTIDA -->
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-icon">🎯</span>
+                    <h2 class="section-title">FRAMTIDA FÖRBÄTTRINGAR (Backlog)</h2>
+                    <span class="section-counter" data-section="future">0/0</span>
+                </div>
+
+                <div class="subsection">
+                    <div class="todo-item" data-id="future-1">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Väderprognosintegration</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="future-2">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Markfuktsensor-array</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="future-3">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Energioptimering</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="future-4">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>Webgränssnitt för slutanvändare</strong></div>
+                    </div>
+                    <div class="todo-item" data-id="future-5">
+                        <input type="checkbox" class="checkbox">
+                        <div class="todo-text"><strong>OTA-uppdateringar</strong></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KLART -->
+            <div class="section completed-section">
+                <div class="section-header">
+                    <span class="section-icon">✅</span>
+                    <h2 class="section-title">KLART (Dokumentation)</h2>
+                </div>
+
+                <div class="subsection">
+                    <div class="todo-item completed" data-id="done-1">
+                        <input type="checkbox" class="checkbox" checked disabled>
+                        <div class="todo-text">Python-kod installerad (System 2.0)</div>
+                    </div>
+                    <div class="todo-item completed" data-id="done-2">
+                        <input type="checkbox" class="checkbox" checked disabled>
+                        <div class="todo-text">Systemd-services konfigurerade</div>
+                    </div>
+                    <div class="todo-item completed" data-id="done-3">
+                        <input type="checkbox" class="checkbox" checked disabled>
+                        <div class="todo-text">Modbus TCP-server fungerar</div>
+                    </div>
+                    <div class="todo-item completed" data-id="done-4">
+                        <input type="checkbox" class="checkbox" checked disabled>
+                        <div class="todo-text">Email-notiser testade</div>
+                    </div>
+                    <div class="todo-item completed" data-id="done-5">
+                        <input type="checkbox" class="checkbox" checked disabled>
+                        <div class="todo-text">Tailscale konfigurerat</div>
+                    </div>
+                    <div class="todo-item completed" data-id="done-6">
+                        <input type="checkbox" class="checkbox" checked disabled>
+                        <div class="todo-text">SMTP_SETUP_GUIDE.md skapad</div>
+                    </div>
+                    <div class="todo-item completed" data-id="done-7">
+                        <input type="checkbox" class="checkbox" checked disabled>
+                        <div class="todo-text">UNIPI_GPIO_MAPPING.md skapad</div>
+                    </div>
+                    <div class="todo-item completed" data-id="done-8">
+                        <input type="checkbox" class="checkbox" checked disabled>
+                        <div class="todo-text">TAILSCALE_ACCESS.md skapad</div>
+                    </div>
+                    <div class="todo-item completed" data-id="done-9">
+                        <input type="checkbox" class="checkbox" checked disabled>
+                        <div class="todo-text">requirements.txt uppdaterad</div>
+                    </div>
+                    <div class="todo-item completed" data-id="done-10">
+                        <input type="checkbox" class="checkbox" checked disabled>
+                        <div class="todo-text">Venv konfigurerat</div>
+                    </div>
+                    <div class="todo-item completed" data-id="done-11">
+                        <input type="checkbox" class="checkbox" checked disabled>
+                        <div class="todo-text">User management implementerat (superadmin)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KONTAKTER -->
+            <div class="section">
+                <div class="section-header">
+                    <span class="section-icon">📞</span>
+                    <h2 class="section-title">KONTAKTER & LEVERANTÖRER</h2>
+                </div>
+
+                <table class="contacts-table">
+                    <thead>
+                        <tr>
+                            <th>Typ</th>
+                            <th>Företag/Person</th>
+                            <th>Telefon</th>
+                            <th>Email</th>
+                            <th>Anteckningar</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Elinstallatör</td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>VVS</td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>UniPi support</td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>Pump-leverantör</td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td>Sensor-leverantör</td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- VARNING -->
+            <div class="warning-box">
+                <strong>⚠️ VIKTIG PÅMINNELSE:</strong>
+                <p style="margin-top: 10px;">
+                    <strong>TA ALDRIG BORT .st-FILEN</strong> utan att först implementera full sekvenslogik 
+                    (OpenDelay, CloseDelay, state machine) i Python. Risk för vattenslag!
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API endpoint
+        const API_BASE = window.location.origin;
+
+        // Load saved state from server
+        async function loadState() {
+            try {
+                const response = await fetch(API_BASE + '/api/state');
+                const data = await response.json();
+                const items = data.items || {};
+                
+                const checkboxes = document.querySelectorAll('.todo-item:not(.completed) .checkbox:not([disabled])');
+                checkboxes.forEach(checkbox => {
+                    const todoItem = checkbox.closest('.todo-item');
+                    const id = todoItem.dataset.id;
+                    if (items[id] === true) {
+                        checkbox.checked = true;
+                        todoItem.classList.add('completed');
+                    }
+                });
+                updateProgress();
+            } catch (error) {
+                console.error('Failed to load state:', error);
+                // Fallback to localStorage if server is unavailable
+                loadStateLocal();
+            }
+        }
+
+        // Fallback: Load from localStorage
+        function loadStateLocal() {
+            const checkboxes = document.querySelectorAll('.todo-item:not(.completed) .checkbox:not([disabled])');
+            checkboxes.forEach(checkbox => {
+                const todoItem = checkbox.closest('.todo-item');
+                const id = todoItem.dataset.id;
+                const saved = localStorage.getItem('todo-' + id);
+                if (saved === 'true') {
+                    checkbox.checked = true;
+                    todoItem.classList.add('completed');
+                }
+            });
+            updateProgress();
+        }
+
+        // Save state to server
+        async function saveState(id, checked) {
+            try {
+                const response = await fetch(API_BASE + '/api/toggle/' + id, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ checked: checked })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to save to server');
+                }
+                
+                // Also save to localStorage as backup
+                localStorage.setItem('todo-' + id, checked);
+            } catch (error) {
+                console.error('Failed to save state:', error);
+                // Fallback to localStorage only
+                localStorage.setItem('todo-' + id, checked);
+            }
+        }
+
+        // Update progress bar and counters
+        function updateProgress() {
+            const allCheckboxes = document.querySelectorAll('.todo-item:not(.completed) .checkbox:not([disabled])');
+            const checkedCheckboxes = document.querySelectorAll('.todo-item:not(.completed) .checkbox:not([disabled]):checked');
+            
+            const total = allCheckboxes.length;
+            const completed = checkedCheckboxes.length;
+            const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+            
+            document.getElementById('progressBar').style.width = percentage + '%';
+            document.getElementById('progressBar').textContent = percentage + '%';
+            document.getElementById('completedCount').textContent = completed;
+            document.getElementById('totalCount').textContent = total;
+
+            // Update section counters
+            const sections = ['critical', 'hardware', 'docs', 'system', 'poweron', 'remote', 'manuals', 'future'];
+            sections.forEach(section => {
+                const sectionElement = document.querySelector(`[data-section="${section}"]`);
+                if (sectionElement) {
+                    const sectionCheckboxes = sectionElement.closest('.section').querySelectorAll('.todo-item:not(.completed) .checkbox:not([disabled])');
+                    const sectionChecked = sectionElement.closest('.section').querySelectorAll('.todo-item:not(.completed) .checkbox:not([disabled]):checked');
+                    sectionElement.textContent = `${sectionChecked.length}/${sectionCheckboxes.length}`;
+                }
+            });
+        }
+
+        // Handle checkbox changes
+        document.addEventListener('change', function(e) {
+            if (e.target.classList.contains('checkbox') && !e.target.disabled) {
+                const todoItem = e.target.closest('.todo-item');
+                const id = todoItem.dataset.id;
+                
+                if (e.target.checked) {
+                    todoItem.classList.add('completed');
+                } else {
+                    todoItem.classList.remove('completed');
+                }
+                
+                saveState(id, e.target.checked);
+                updateProgress();
+            }
+        });
+
+        // Handle todo item clicks (toggle checkbox)
+        document.addEventListener('click', function(e) {
+            const todoItem = e.target.closest('.todo-item');
+            if (todoItem && !todoItem.classList.contains('completed') && e.target.tagName !== 'INPUT') {
+                const checkbox = todoItem.querySelector('.checkbox');
+                if (checkbox && !checkbox.disabled) {
+                    checkbox.checked = !checkbox.checked;
+                    checkbox.dispatchEvent(new Event('change'));
+                }
+            }
+        });
+
+        // Initialize
+        loadState();
+    </script>
+</body>
+</html>

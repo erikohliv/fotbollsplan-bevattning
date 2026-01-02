@@ -13,8 +13,13 @@ from dotenv import load_dotenv
 import requests
 from activity_logger import log_activity, get_activity_log
 
-# Import UniPi I2C hardware controller
-from unipi_hardware import get_hardware, cleanup_hardware
+try:
+    from pymodbus.client import ModbusTcpClient
+except Exception:
+    try:
+        from pymodbus.client.sync import ModbusTcpClient
+    except Exception:
+        ModbusTcpClient = None
 
 # Import pump protection module
 from pump_protection import PumpState
@@ -37,11 +42,13 @@ def _setup_logger() -> logging.Logger:
 
 logger = _setup_logger()
 
-USER_HARDWARE_ERROR = "Hårdvarukommunikation misslyckades. Försök igen eller kontakta drift."
+USER_MODBUS_ERROR = "PLC-kommunikation misslyckades. Försök igen eller kontakta drift."
 
 API_KEY = os.getenv("API_KEY", "change-me")
-
-# Hardware settings (I2C används direkt)
+MODBUS_HOST = os.getenv("MODBUS_HOST", "127.0.0.1")
+MODBUS_PORT = int(os.getenv("MODBUS_PORT", "502"))
+MODBUS_UNIT = int(os.getenv("MODBUS_UNIT", "1"))
+MODBUS_TIMEOUT = int(os.getenv("MODBUS_TIMEOUT", "3"))
 
 MW_REMOTE_CMD = 10
 MW_TID_CENTER = 20
@@ -100,14 +107,8 @@ BLOCK_REASON_UNKNOWN = -1
 # Global state för pump-skydd
 _pump_protection_state = PumpState()
 
-app = FastAPI(title="Bevattning API", version="0.3 (I2C Direct)")
+app = FastAPI(title="Bevattning API", version="0.3")
 security = HTTPBasic()
-
-# Cleanup hardware on shutdown
-@app.on_event("shutdown")
-def shutdown_event():
-    logger.info("Shutting down - cleaning up hardware")
-    cleanup_hardware()
 
 # Import user management functionality
 try:
@@ -202,29 +203,54 @@ def clamp_temp(value: int) -> int:
     return max(-30, min(50, value))
 
 
-# ============================================================================
-# Hardware Access Functions (I2C Direct)
-# ============================================================================
+def _modbus_has_error(rr) -> bool:
+    return rr is None or (hasattr(rr, "isError") and rr.isError())
 
-def get_hardware_controller():
-    """Hämta hårdvarukontroller (singleton)"""
+
+def _raise_modbus_error(context: str):
+    logger.warning(
+        "Modbusfel: %s (host=%s port=%s unit=%s)",
+        context,
+        MODBUS_HOST,
+        MODBUS_PORT,
+        MODBUS_UNIT,
+    )
+    raise HTTPException(status_code=502, detail=USER_MODBUS_ERROR)
+
+
+def _ensure_modbus_ok(rr, context: str):
+    if _modbus_has_error(rr):
+        _raise_modbus_error(context)
+
+
+def mb_client():
+    if ModbusTcpClient is None:
+        raise HTTPException(status_code=500, detail="pymodbus not installed")
+    return ModbusTcpClient(MODBUS_HOST, port=MODBUS_PORT, timeout=MODBUS_TIMEOUT)
+
+
+@contextmanager
+def get_modbus_connection():
+    """Context manager for Modbus connections to ensure proper cleanup."""
+    client = mb_client()
     try:
-        return get_hardware()
-    except Exception as e:
-        logger.error("Hårdvarufel: %s", e)
-        raise HTTPException(status_code=502, detail=USER_HARDWARE_ERROR) from e
+        if not client.connect():
+            _raise_modbus_error("connect")
+        logger.debug("Modbusanslutning etablerad")
+        yield client
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Modbus-undantag: %s", exc)
+        raise HTTPException(status_code=502, detail=USER_MODBUS_ERROR) from exc
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
 
-
-# ============================================================================
-# MODBUS COMPATIBILITY LAYER - DEPRECATED
-# ============================================================================
-# NOTE: Following functions use Modbus to communicate with PLC (.st file)
-# These are kept for backward compatibility but may not work with I2C-only mode.
-# For direct relay control, use the I2C hardware controller instead.
-# ============================================================================
 
 def read_regs(address, count=1):
-    """DEPRECATED: Read Modbus registers from PLC. Use I2C hardware controller instead."""
     with get_modbus_connection() as client:
         rr = client.read_holding_registers(address, count, unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr, f"read_holding_registers addr={address} count={count}")
@@ -233,7 +259,6 @@ def read_regs(address, count=1):
 
 
 def write_reg(address, value):
-    """DEPRECATED: Write Modbus register to PLC. Use I2C hardware controller instead."""
     with get_modbus_connection() as client:
         rr = client.write_register(address, int(value), unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr, f"write_register addr={address} value={value}")
@@ -242,7 +267,7 @@ def write_reg(address, value):
 
 
 def write_regs_bulk(start_address, values):
-    """DEPRECATED: Write multiple Modbus registers. Use I2C hardware controller instead."""
+    """Write multiple registers at once for better performance."""
     with get_modbus_connection() as client:
         rr = client.write_registers(start_address, [int(v) for v in values], unit=MODBUS_UNIT)
         _ensure_modbus_ok(rr, f"write_registers start={start_address} values={values}")
@@ -297,33 +322,68 @@ class ZoneToggleRequest(BaseModel):
 @app.get("/status")
 def status(x_api_key: Optional[str] = Header(None)):
     require_key(x_api_key)
+    # Read registers including safety monitoring registers
+    # Group 1: MW50-53 (zone, pump, steg, selected_zone)
+    # Group 2: MW54-56 (pressure_alarm, flow_switch_status, flow_alarm)
+    #          Note: MW55 is flow switch status, intentionally read together with alarms for efficiency
+    # Group 3: MW70-73 (heartbeat data)
+    # Group 4: MW_MODE (mode switch status)
+    # Group 5: MW33 (pressure switch status)
+    with get_modbus_connection() as client:
+        rr1 = client.read_holding_registers(MW_STATUS_ZONE, 4, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr1, "read status registers MW50-53")
+        rr_safety = client.read_holding_registers(MW_PRESSURE_ALARM, 3, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr_safety, "read safety registers MW54-56 (alarm+flow)")
+        rr2 = client.read_holding_registers(MW_HEARTBEAT, 4, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr2, "read heartbeat registers MW70-73")
+        rr3 = client.read_holding_registers(MW_MODE, 1, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr3, f"read mode register MW{MW_MODE}")
+        rr_pressure_switch = client.read_holding_registers(MW_PRESSURE_SWITCH, 1, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr_pressure_switch, f"read pressure switch register MW{MW_PRESSURE_SWITCH}")
     
-    # Läs relälägen via I2C
-    hw = get_hardware_controller()
-    relay_state = hw.get_relay_state()
+    mode_value = rr3.registers[0]
+    mode_text = {
+        0: "Inget läge valt",
+        1: "Lokalt läge aktivt",
+        2: "Fjärrläge aktivt"
+    }
+    pump_on = rr1.registers[1] == 1
+    pressure_ok = rr_pressure_switch.registers[0] == 1
+    # Safety register mapping: [MW54=pressure_alarm, MW55=flow_switch, MW56=flow_alarm]
+    pressure_alarm = rr_safety.registers[0]  # MW54: 0=OK, 1=Timeout, 2=Unexpected
+    flow_ok = rr_safety.registers[1] == 1    # MW55: FlowSwitchStatus (0/1)
+    flow_alarm = rr_safety.registers[2]      # MW56: 0=OK, 1=Timeout, 2=Torrkörning
     
-    # Hitta vilken zon som är aktiv (relä 1-7)
-    active_zone = None
-    for zone in range(1, 8):
-        if hw.get_relay_state(zone):
-            active_zone = zone
-            break
-    
-    # Relä 8 är pumpen
-    pump_on = hw.get_relay_state(8)
+    # Digital sensor safety flags based on alarm registers
+    # Alarm codes:
+    # Pressure: 0=OK, 1=Timeout (no pressure within 10s of pump start), 2=Unexpected (pressure when pump off)
+    # Flow: 0=OK, 1=Initial timeout, 2=Torrkörning (flow lost during operation)
+    safety_flags = {
+        "tryck_timeout": pressure_alarm == 1,        # No pressure after pump start
+        "oväntat_tryck": pressure_alarm == 2,        # Pressure detected when pump is off
+        "torrkorning": flow_alarm == 2,              # Flow lost during pump operation
+        "flöde_timeout": flow_alarm == 1,            # Initial flow timeout
+        "tryck_ok": pressure_ok,                     # Current pressure switch state
+        "flöde_ok": flow_ok,                         # Current flow switch state
+    }
     
     return {
-        "zone": active_zone if active_zone else 0,
-        "active_zone": active_zone,
-        "pump_running": pump_on,
+        "zone": rr1.registers[0],
         "pump_on": pump_on,
-        "relay_state": relay_state,
-        "relay_states": {
-            f"relay_{i}": bool((relay_state >> (i-1)) & 1) for i in range(1, 9)
-        },
-        "mode": 2,  # Fjärrläge (direktstyrning via I2C)
-        "mode_text": "I2C Direktstyrning",
-        "last_update": datetime.now().isoformat()
+        "steg": rr1.registers[2],
+        "selected_zone": rr1.registers[3],
+        "heartbeat_bit": rr2.registers[0],
+        "heartbeat_count": rr2.registers[1],
+        "eventmask": rr2.registers[2],
+        "block_reason": rr2.registers[3],
+        "mode": mode_value,
+        "mode_text": mode_text.get(mode_value, f"Okänt läge {mode_value}"),
+        "pressure_switch": pressure_ok,              # Digital: 0=no pressure, 1=pressure OK
+        "pressure_alarm": pressure_alarm,            # 0=OK, 1=Timeout, 2=Unexpected
+        "flow_switch": flow_ok,                      # Digital: 0=no flow, 1=flow OK
+        "flow_alarm": flow_alarm,                    # 0=OK, 1=Timeout, 2=Torrkörning
+        "safety": safety_flags,
+        "timestamp": int(time.time())
     }
 
 
@@ -362,7 +422,9 @@ def start_night_program(x_api_key: Optional[str] = Header(None), pulse_seconds: 
 @app.post("/command/manual")
 def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
     """
-    Start manual irrigation for selected zone - Direct I2C control
+    Start manual irrigation for selected zone.
+    Manual mode runs only the selected zone (not a full sequence),
+    using the same times as auto mode (Set_Tid_Center for zones 1-3, Set_Tid_Horn for zones 4-7).
     """
     require_key(x_api_key)
     zone = validate_zone(cmd.zone)
@@ -372,16 +434,15 @@ def start_manual(cmd: ManualCommand, x_api_key: Optional[str] = Header(None)):
     # Log activity
     log_activity(f"Startade Zon {zone} (manuell)", user=user, zone=zone)
     
-    # Aktivera relä direkt via I2C
-    hw = get_hardware_controller()
-    success = hw.set_relay(zone, True)
-    
-    if not success:
-        logger.error("Kunde inte aktivera zon %s", zone)
-        raise HTTPException(status_code=502, detail=USER_HARDWARE_ERROR)
-    
-    logger.info("[USER_ACTION] Manuell körning startad - zon=%s relä=%s user=%s", zone, zone, user)
-    return {"ok": True, "zone": zone, "relay": zone, "user": user}
+    # Write selected zone and pulse manual start
+    with get_modbus_connection() as client:
+        rr = client.write_register(MW_SET_SELECTED, zone, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr, f"set selected zone {zone}")
+        # Pulse manual start
+        rr = client.write_register(MW_MANUAL_START, 1, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr, f"manual start for zone {zone}")
+    logger.info("[USER_ACTION] Manuell körning startad - zon=%s user=%s", zone, user)
+    return {"ok": True, "zone": zone, "user": user, "note": "Manual mode runs only the selected zone using auto times"}
 
 
 @app.post("/command/set-zone")
@@ -415,15 +476,13 @@ def stop(cmd: StopCommand = None, x_api_key: Optional[str] = Header(None)):
     # Log activity
     log_activity("Stoppade bevattning", user=user)
     
-    # Stäng av alla reläer via I2C
-    hw = get_hardware_controller()
-    success = hw.all_off()
-    
-    if not success:
-        logger.error("Kunde inte stänga av alla reläer")
-        raise HTTPException(status_code=502, detail=USER_HARDWARE_ERROR)
-    
-    logger.info("[USER_ACTION] Stopp-kommando verkställt - alla reläer avstängda - user=%s", user)
+    # Reuse connection for multiple writes
+    with get_modbus_connection() as client:
+        rr = client.write_register(MW_REMOTE_CMD, 0, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr, "stop remote command")
+        rr = client.write_register(MW_MODE_OVERRIDE, 0, unit=MODBUS_UNIT)
+        _ensure_modbus_ok(rr, "reset mode override")
+    logger.info("[USER_ACTION] Stopp-kommando verkställt - pump och sekvens stoppad - user=%s", user)
     return {"ok": True, "user": user}
 
 
@@ -2017,10 +2076,10 @@ def get_process_view(x_api_key: Optional[str] = Header(None)):
 @app.post("/zone-control")
 def zone_control(cmd: ZoneControlCommand, x_api_key: Optional[str] = Header(None)):
     """
-    Styr individuella zoner via webb-gränssnittet (I2C Direct Control).
+    Styr individuella zoner via webb-gränssnittet.
     Åtgärder:
-    - start: Starta vald zon direkt via I2C
-    - stop: Stoppa all bevattning (stäng alla reläer)
+    - start: Starta vald zon (kräver duration_minutes om inte default används)
+    - stop: Stoppa all bevattning
     """
     require_key(x_api_key)
     
@@ -2029,41 +2088,41 @@ def zone_control(cmd: ZoneControlCommand, x_api_key: Optional[str] = Header(None
                 zone, cmd.action, int(time.time()))
     
     if cmd.action == "start":
-        logger.info("[ZONE_EVENT] Zon %s STARTAS via zone-control (I2C)", zone)
+        logger.info("[ZONE_EVENT] Zon %s STARTAS via process view", zone)
         
-        # Direkt I2C-kontroll av relä
-        hw = get_hardware_controller()
-        hw.set_relay(zone, True)
+        # Sätt vald zon och starta manuell körning
+        with get_modbus_connection() as client:
+            rr = client.write_register(MW_SET_SELECTED, zone, unit=MODBUS_UNIT)
+            _ensure_modbus_ok(rr, f"set zone {zone} via zone-control")
+            
+            # Pulsera manuell start
+            rr = client.write_register(MW_MANUAL_START, 1, unit=MODBUS_UNIT)
+            _ensure_modbus_ok(rr, f"start zone {zone} via zone-control")
         
-        # Logga aktivitet
-        log_activity("zone_start", cmd.user if hasattr(cmd, 'user') else "api", zone, 
-                    {"method": "zone-control", "mode": "i2c_direct"})
-        
-        logger.info("[ZONE_EVENT] Zon %s STARTAD (I2C direktstyrning)", zone)
+        logger.info("[ZONE_EVENT] Zon %s STARTAD - använder auto-tider", zone)
         return {
             "ok": True,
             "action": "start",
             "zone": zone,
-            "message": f"Zon {zone} startad (I2C direktstyrning)"
+            "message": f"Zon {zone} startad (använder auto-tider)"
         }
     
     elif cmd.action == "stop":
-        logger.info("[PUMP_EVENT] STOPP-kommando via zone-control (I2C)")
+        logger.info("[PUMP_EVENT] STOPP-kommando för zon %s via process view", zone)
         
-        # Stäng alla reläer via I2C
-        hw = get_hardware_controller()
-        hw.all_off()
+        with get_modbus_connection() as client:
+            rr = client.write_register(MW_REMOTE_CMD, 0, unit=MODBUS_UNIT)
+            _ensure_modbus_ok(rr, "stop via zone-control")
+            
+            rr = client.write_register(MW_MODE_OVERRIDE, 0, unit=MODBUS_UNIT)
+            _ensure_modbus_ok(rr, "reset mode override via zone-control")
         
-        # Logga aktivitet
-        log_activity("manual_stop", cmd.user if hasattr(cmd, 'user') else "api", None,
-                    {"method": "zone-control", "mode": "i2c_direct"})
-        
-        logger.info("[PUMP_EVENT] Alla reläer STÄNGDA via zone-control (I2C)")
+        logger.info("[PUMP_EVENT] Bevattning STOPPAD via process view")
         return {
             "ok": True,
             "action": "stop",
             "zone": zone,
-            "message": "All bevattning stoppad (I2C direktstyrning)"
+            "message": "Bevattning stoppad"
         }
     
     else:

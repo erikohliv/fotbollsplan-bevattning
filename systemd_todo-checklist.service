@@ -1,0 +1,14 @@
+[Unit]
+Description=TODO Checklist Web Server
+After=network.target
+
+[Service]
+Type=simple
+User=kamp
+WorkingDirectory=/home/kamp/fotbollsplan-bevattning
+ExecStart=/home/kamp/fotbollsplan-bevattning/.venv/bin/python3 /home/kamp/fotbollsplan-bevattning/todo_backend.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -111,14 +111,18 @@ class ArcadeButtonManager:
     - Button 2: Down/Decrease  
     - Button 3: OK/Select
     - Button 4: Back/Cancel
+    
+    Security:
+    - Auto-locks after 10 minutes of inactivity
+    - Unlock sequence: DOWN → UP → UP → OK
     """
     
-    def __init__(self, i2c_addr: int = 0x20, bus_num: int = 1):
+    def __init__(self, i2c_addr: int = 0x21, bus_num: int = 1):
         """
         Initialize Arcade Button Manager
         
         Args:
-            i2c_addr: I2C address of the button controller
+            i2c_addr: I2C address of the button controller (default: 0x21)
             bus_num: I2C bus number (default: 1 for Raspberry Pi)
         """
         self.i2c_addr = i2c_addr
@@ -135,7 +139,7 @@ class ArcadeButtonManager:
         
         # Security lock
         self.locked = False
-        self.unlock_sequence = []  # User-configurable unlock sequence
+        self.unlock_sequence = ['down', 'up', 'up', 'ok']  # Unlock: NER → UPP → UPP → OK
         self.lock_timeout = 600  # 10 minutes in seconds
         self.last_activity = time.time()
         

@@ -1,0 +1,197 @@
+[
+  {
+    "timestamp": "2026-01-02T13:27:57.317155",
+    "time": "13:27",
+    "date": "2026-01-02",
+    "user": "api",
+    "action": "manual_stop",
+    "zone": null,
+    "details": {
+      "method": "zone-control",
+      "mode": "i2c_direct"
+    }
+  },
+  {
+    "timestamp": "2026-01-02T13:27:45.317923",
+    "time": "13:27",
+    "date": "2026-01-02",
+    "user": "api",
+    "action": "zone_start",
+    "zone": 2,
+    "details": {
+      "method": "zone-control",
+      "mode": "i2c_direct"
+    }
+  },
+  {
+    "timestamp": "2026-01-02T13:14:05.201110",
+    "time": "13:14",
+    "date": "2026-01-02",
+    "user": "unknown",
+    "action": "Startade Zon 1 (manuell)",
+    "zone": 1,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T13:13:55.917012",
+    "time": "13:13",
+    "date": "2026-01-02",
+    "user": "unknown",
+    "action": "Stoppade bevattning",
+    "zone": null,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T13:13:43.817705",
+    "time": "13:13",
+    "date": "2026-01-02",
+    "user": "unknown",
+    "action": "Startade Zon 3 (manuell)",
+    "zone": 3,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:17:59.992820",
+    "time": "12:17",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Stoppade bevattning",
+    "zone": null,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:17:52.974164",
+    "time": "12:17",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Startade Zon 1 (manuell)",
+    "zone": 1,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:17:49.454437",
+    "time": "12:17",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Stoppade bevattning",
+    "zone": null,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:17:42.935295",
+    "time": "12:17",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Startade Zon 7 (manuell)",
+    "zone": 7,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:17:39.423532",
+    "time": "12:17",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Stoppade bevattning",
+    "zone": null,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:17:32.910085",
+    "time": "12:17",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Startade Zon 6 (manuell)",
+    "zone": 6,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:17:29.390520",
+    "time": "12:17",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Stoppade bevattning",
+    "zone": null,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:17:22.872638",
+    "time": "12:17",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Startade Zon 5 (manuell)",
+    "zone": 5,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:17:19.360828",
+    "time": "12:17",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Stoppade bevattning",
+    "zone": null,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:17:12.847469",
+    "time": "12:17",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Startade Zon 4 (manuell)",
+    "zone": 4,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:17:09.327061",
+    "time": "12:17",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Stoppade bevattning",
+    "zone": null,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:17:02.807811",
+    "time": "12:17",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Startade Zon 3 (manuell)",
+    "zone": 3,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:16:59.292011",
+    "time": "12:16",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Stoppade bevattning",
+    "zone": null,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:16:52.774091",
+    "time": "12:16",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Startade Zon 2 (manuell)",
+    "zone": 2,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:16:49.261544",
+    "time": "12:16",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Stoppade bevattning",
+    "zone": null,
+    "details": {}
+  },
+  {
+    "timestamp": "2026-01-02T12:16:42.748019",
+    "time": "12:16",
+    "date": "2026-01-02",
+    "user": "api-relay-test",
+    "action": "Startade Zon 1 (manuell)",
+    "zone": 1,
+    "details": {}
+  }
+]

@@ -905,4 +905,4 @@ def handle_zone_click(clickData, process_json):
 if __name__ == '__main__':
     logger.info(f"Starting Dash app on {DASH_HOST}:{DASH_PORT}")
     logger.info(f"API URL: {API_URL}")
-    app.run_server(host=DASH_HOST, port=DASH_PORT, debug=False)
+    app.run(host=DASH_HOST, port=DASH_PORT, debug=False)
