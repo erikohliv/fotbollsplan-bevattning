@@ -16,7 +16,7 @@ DI_CONFIG = {
     6: {'name': 'Flödesvakt', 'type': 'NO', 'high_means': 'ALARM', 'critical': False},
     8: {'name': 'Tryckvakt', 'type': 'NO', 'high_means': 'ALARM', 'critical': False},
     
-    # NC-kontakter (Normally Closed): HIGH = LARM/Fel
+    # NC-kontakter (Normally Closed): HIGH = OK, LOW = LARM (fail-safe)
     2: {'name': 'Nödstopp S205', 'type': 'NC', 'high_means': 'ALARM', 'critical': True, 'note': 'PLC blockerar (BlockReason=4). Måste vridas upp fysiskt!'},
     7: {'name': 'Mjukstartare Fault', 'type': 'NC', 'high_means': 'ALARM', 'critical': False, 'note': '🟡 PLC stoppar pump (BlockReason=8, auto-reset)'},
     9: {'name': 'Motorskydd Q1', 'type': 'NC', 'high_means': 'ALARM', 'critical': True, 'note': 'PLC stoppar pump (BlockReason=7). Måste resetas på Q1!'},
@@ -48,13 +48,16 @@ def is_alarm(index, gpio_state):
         True om larm, False om OK
     """
     config = get_di_info(index)
-    
-    if config['high_means'] == 'ALARM':
-        # HIGH betyder larm (NC-kontakter, övervakningar)
-        return gpio_state
-    else:
-        # För knappar/switchar finns inget "larm"
-        return False
+    gpio_bool = bool(gpio_state)
+    # NC: LOW = LARM
+    if config.get('type') == 'NC':
+        return not gpio_bool
+
+    # NO sensors with ALARM meaning: HIGH = LARM
+    if config.get('high_means') == 'ALARM':
+        return gpio_bool
+
+    return False
 
 
 def is_di_ok(index, gpio_state):
@@ -70,13 +73,17 @@ def is_di_ok(index, gpio_state):
     """
     config = get_di_info(index)
     gpio_bool = bool(gpio_state)
-    
-    if config['high_means'] == 'ALARM':
-        # För NC och övervakningar: LOW=OK, HIGH=LARM
+
+    # NC: HIGH = OK, LOW = LARM
+    if config.get('type') == 'NC':
+        return bool(gpio_bool)
+
+    # NO with ALARM meaning: HIGH = LARM -> OK when not HIGH
+    if config.get('high_means') == 'ALARM':
         return not gpio_bool
-    else:
-        # För knappar/switchar: Ingen OK/Fail-tolkning
-        return True
+
+    # Buttons/switches considered OK for safety checks
+    return True
 
 
 def get_status_text(index, gpio_state):
@@ -87,15 +94,18 @@ def get_status_text(index, gpio_state):
         ('OK', '⚠️  LARM', '⚠️  AKTIV', etc.)
     """
     config = get_di_info(index)
-    
-    if config['high_means'] == 'ALARM':
-        # NC-kontakter och övervakningar
-        return '⚠️  LARM' if gpio_state else 'OK'
-    elif config['high_means'] == 'PRESSED':
+    gpio_bool = bool(gpio_state)
+    if config.get('type') == 'NC' and config.get('high_means') == 'ALARM':
+        # NC: LOW = LARM
+        return '⚠️  LARM' if not gpio_bool else 'OK'
+    if config.get('high_means') == 'ALARM':
+        # NO: HIGH = LARM
+        return '⚠️  LARM' if gpio_bool else 'OK'
+    elif config.get('high_means') == 'PRESSED':
         # Knappar
-        return '⚠️  TRYCKT' if gpio_state else 'OK'
-    elif config['high_means'] == 'ACTIVE':
+        return '⚠️  TRYCKT' if gpio_bool else 'OK'
+    elif config.get('high_means') == 'ACTIVE':
         # Switchar/lägen
-        return '⚠️  AKTIV' if gpio_state else 'OK'
+        return '⚠️  AKTIV' if gpio_bool else 'OK'
     else:
         return 'OK'

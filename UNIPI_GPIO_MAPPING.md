@@ -222,9 +222,9 @@ client.write_coil(0, True, slave=1)  # R1 ON
 ## ⚠️ Viktiga Notiser
 
 1. **GPIO-konflikt:** PCF8574 (knappar på 0x20) och MCP23008 (reläer på 0x20) delar adress men är på olika I2C-bussar eller har olika chip-select
-2. **Pull-resistors:** GPIO-ingångar är konfigurerade med `pull_up_down=GPIO.PUD_DOWN`
-3. **NC-kontakter:** DI11 och DI12 (säkringar) är Normally Closed - de är HIGH när säkringen är OK
-4. **Spänningsnivåer:** Alla GPIO-ingångar är 3.3V logik (0V=LOW, 3.3V=HIGH)
+2. **Pull-resistors:** GPIO-ingångar konfigureras i mjukvara med `GPIO.PUD_UP` (pull-up). UniPi förväntar sig pull-up för korrekt läsning av DI.
+3. **NC-kontakter:** DI3, DI8, DI10, DI11 och DI12 är Normally Closed (Fail-safe) — **GPIO HIGH (1) = OK, GPIO LOW (0) = LARM**.
+4. **Spänningsnivåer:** Inkommande signaler kan vara 5–24V DC via optoisolator; UniPi översätter till 3.3V GPIO-nivåer internt.
 5. **24V-isolering:** UniPi 1.1 har optoisolerade ingångar, 24V → 3.3V-omvandlare
 
 ---
