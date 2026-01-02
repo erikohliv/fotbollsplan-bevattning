@@ -90,6 +90,21 @@ class Display1View(IntEnum):
     MODE_STATUS = 4
 
 
+class MenuState(IntEnum):
+    """Menu states for arcade button navigation"""
+    AUTO_ROTATE = 0        # Auto-rotating views (default)
+    MAIN_MENU = 1          # Huvudmeny
+    ZONE_SELECT = 2        # Välj zon
+    TIME_SELECT = 3        # Välj tid (minuter)
+    SCHEDULE_SELECT = 4    # Start nu eller schemalägg
+    SCHEDULE_TIME = 5      # Välj starttid (HH:MM)
+    CONFIRM = 6            # Bekräfta start
+    RUNNING = 7            # Körning pågår
+    ERROR_VIEW = 8         # Felmeddelande
+    UNLOCK_VIEW = 9        # Unlock-prompt
+    TIMEOUT_WARNING = 10   # Timeout-varning (60s kvar)
+
+
 # Display2View and Display2Manager removed in hardware refactor V2
 # All user interaction now via Display 1 + I2C Arcade Buttons
 # class Display2View(IntEnum):
@@ -155,34 +170,32 @@ class ArcadeButtonManager:
     
     def read_buttons(self) -> dict:
         """
-        Read current button states from I2C
+        Read current button states from PCF8574 I/O expander
+        
+        PCF8574 Logic:
+        - Active LOW: Button pressed = 0, not pressed = 1
+        - P0 (bit 0) = UP
+        - P1 (bit 1) = DOWN
+        - P2 (bit 2) = LEFT/BACK
+        - P3 (bit 3) = OK
         
         Returns:
-            dict: Button states {'up': bool, 'down': bool, 'ok': bool, 'back': bool}
+            dict: Button states {'up': bool, 'down': bool, 'left': bool, 'ok': bool}
+                  True = button pressed, False = not pressed
         """
         if not self.bus:
             return self.button_states
         
         try:
-            # ==================================================================
-            # WARNING: PLACEHOLDER IMPLEMENTATION
-            # This code assumes a simple I2C button controller where a single
-            # byte read returns button states as a bitmask (bit 0-3).
-            # 
-            # This MUST be updated to match your actual hardware:
-            # - PCF8574 I/O expander: Use read_byte() but may need inversion
-            # - MCP23008/MCP23017: Need register address and proper init
-            # - Custom controller: Implement according to datasheet
-            # 
-            # Test thoroughly before production use!
-            # ==================================================================
+            # Read byte from PCF8574
             data = self.bus.read_byte(self.i2c_addr)
             
+            # Invert logic (Active LOW): pressed = 0 → True
             self.button_states = {
-                'up': bool(data & 0x01),
-                'down': bool(data & 0x02),
-                'ok': bool(data & 0x04),
-                'back': bool(data & 0x08)
+                'up':   not bool(data & 0x01),  # P0
+                'down': not bool(data & 0x02),  # P1
+                'left': not bool(data & 0x04),  # P2 (renamed from 'back')
+                'ok':   not bool(data & 0x08)   # P3
             }
             
             # Update activity timestamp if any button pressed
@@ -195,27 +208,124 @@ class ArcadeButtonManager:
             logger.debug(f"Error reading arcade buttons: {e}")
             return self.button_states
     
-    def check_lock_timeout(self):
-        """Check if buttons should be locked due to inactivity"""
-        if time.time() - self.last_activity > self.lock_timeout:
-            self.locked = True
-    
-    def unlock(self, sequence: list) -> bool:
+    def read_buttons_debounced(self, delay: float = 0.05) -> dict:
         """
-        Attempt to unlock with button sequence
+        Read buttons with debouncing to avoid false triggers
         
         Args:
-            sequence: List of button presses to match unlock_sequence
+            delay: Debounce delay in seconds (default: 50ms)
             
+        Returns:
+            dict: Debounced button states
+        """
+        buttons1 = self.read_buttons()
+        time.sleep(delay)
+        buttons2 = self.read_buttons()
+        
+        # Return only if both readings are identical
+        return {k: v for k, v in buttons1.items() if buttons1[k] == buttons2[k]}
+    
+    def wait_for_button_release(self):
+        """Wait until all buttons are released"""
+        while any(self.read_buttons().values()):
+            time.sleep(0.05)
+    
+    def get_button_press(self) -> str:
+        """
+        Wait for a single button press and return which button
+        
+        Returns:
+            str: 'up', 'down', 'left', 'ok', or None if timeout
+        """
+        self.wait_for_button_release()  # Wait for all buttons to be released first
+        
+        timeout = 30  # 30 second timeout
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            buttons = self.read_buttons_debounced()
+            
+            if buttons.get('up'):
+                self.wait_for_button_release()
+                return 'up'
+            elif buttons.get('down'):
+                self.wait_for_button_release()
+                return 'down'
+            elif buttons.get('left'):
+                self.wait_for_button_release()
+                return 'left'
+            elif buttons.get('ok'):
+                self.wait_for_button_release()
+                return 'ok'
+            
+            time.sleep(0.1)
+        
+        return None  # Timeout
+    
+    def check_unlock_sequence(self) -> bool:
+        """
+        Check if user has entered the unlock sequence: DOWN → UP → UP → OK
+        
         Returns:
             bool: True if unlocked successfully
         """
-        if sequence == self.unlock_sequence:
+        sequence = []
+        timeout = 5  # 5 seconds to complete sequence
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout and len(sequence) < 4:
+            button = self.get_button_press()
+            if button:
+                sequence.append(button)
+                logger.debug(f"Unlock sequence: {sequence}")
+        
+        # Check if sequence matches: ['down', 'up', 'up', 'ok']
+        if sequence == ['down', 'up', 'up', 'ok']:
             self.locked = False
             self.last_activity = time.time()
-            logger.info("Arcade buttons unlocked")
+            logger.info("🔓 Arcade buttons unlocked")
             return True
+        
+        logger.debug(f"Unlock failed: {sequence}")
         return False
+    
+    def get_time_until_lock(self) -> int:
+        """
+        Get remaining time before auto-lock in seconds
+        
+        Returns:
+            int: Seconds until lock (0 if already locked)
+        """
+        if self.locked:
+            return 0
+        
+        elapsed = time.time() - self.last_activity
+        remaining = max(0, self.lock_timeout - elapsed)
+        return int(remaining)
+    
+    def check_lock_timeout(self) -> bool:
+        """
+        Check if buttons should be locked due to inactivity
+        
+        Returns:
+            bool: True if lock timeout warning should be shown (60s remaining)
+        """
+        elapsed = time.time() - self.last_activity
+        
+        # Lock if timeout exceeded
+        if elapsed > self.lock_timeout:
+            if not self.locked:
+                logger.info("🔒 Auto-lock: 10 min inactivity")
+                self.locked = True
+            return False
+        
+        # Return True if warning should be shown (60s remaining)
+        remaining = self.lock_timeout - elapsed
+        return 50 < remaining < 70  # Show warning between 60-50s remaining
+    
+    def reset_activity_timer(self):
+        """Reset inactivity timer (called on any button press)"""
+        self.last_activity = time.time()
     
     def close(self):
         """Close I2C bus connection"""
@@ -539,28 +649,49 @@ class ModbusReader:
 
 class Display1Manager:
     """
-    Manages Display 1: 20x4 LCD with auto-rotating views
-    Views cycle automatically every 3-5 seconds
+    Manages Display 1: 20x4 LCD with auto-rotating views + arcade button menu
+    
+    Features:
+    - Auto-rotating status views (5 views)
+    - Interactive menu via arcade buttons
+    - Quick-start: Hold OK for 3s to start last zone
+    - Lock/unlock with sequence: DOWN → UP → UP → OK
+    - Timeout warning at 60s remaining
     """
     
-    def __init__(self, i2c_addr: int = 0x27, modbus_host: str = "127.0.0.1",
-                 modbus_port: int = 502, update_interval: float = 4.0):
+    def __init__(self, i2c_addr: int = 0x27, button_addr: int = 0x21,
+                 modbus_host: str = "127.0.0.1", modbus_port: int = 502, 
+                 update_interval: float = 4.0):
         """
         Initialize Display 1 Manager
         
         Args:
-            i2c_addr: I2C address of the 20x4 display
+            i2c_addr: I2C address of the 20x4 display (default: 0x27)
+            button_addr: I2C address of arcade buttons PCF8574 (default: 0x21)
             modbus_host: Modbus TCP host
             modbus_port: Modbus TCP port
             update_interval: Seconds between view updates (3-5 recommended)
         """
         self.lcd = LCD_I2C(i2c_addr, rows=4, cols=20)
+        self.buttons = ArcadeButtonManager(button_addr)
         self.modbus = ModbusReader(modbus_host, modbus_port)
         self.update_interval = update_interval
         self.current_view = Display1View.STATUS
+        self.menu_state = MenuState.AUTO_ROTATE
         self.running = False
         self.thread = None
         self.last_data = {}
+        
+        # Menu state
+        self.selected_zone = 1
+        self.selected_time = 10  # minutes
+        self.selected_schedule_mode = 0  # 0=nu, 1=schemalägg
+        self.selected_hour = 6
+        self.selected_minute = 0
+        self.menu_selection = 0
+        self.error_list = []
+        self.error_scroll_index = 0
+        self.last_started_zone = 1  # For quick-start
     
     def get_system_status(self) -> Dict[str, Any]:
         """Read current system status from Modbus"""

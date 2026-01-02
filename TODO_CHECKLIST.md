@@ -133,10 +133,32 @@
 ## ⚙️ SYSTEM - Konfiguration & Testing
 
 ### Python-kod
-- [ ] **Implementera arkadknapps-läsning i `display_manager.py`**
-  - [ ] Läs PCF8574 via I2C
-  - [ ] Mappa knappar till funktioner (Select Zone, Start, Stop, Menu?)
-  - [ ] Integrera med befintlig LCD-logik
+- [x] **Implementera arkadknapps-läsning i `display_manager.py`**
+  - [x] Läs PCF8574 via I2C (Active LOW logik)
+  - [x] Debouncing implementerad (50ms)
+  - [x] Unlock-sekvens: NER → UPP → UPP → OK
+  - [x] Auto-lock timeout (10 min)
+  - [x] Timeout-varning (60s kvar)
+- [x] **Menyhantering implementerad**
+  - [x] Huvudmeny (Starta Zon, Stoppa Pump)
+  - [x] Zonval (1-7)
+  - [x] Tidsval (5-60 min, steg 5 min)
+  - [x] Schemaläggning (Nu eller senare)
+  - [x] Starttidsval (HH:MM)
+  - [x] Bekräftelse före start
+  - [x] Snabbstart (håll OK 3s)
+- [x] **Display-förbättringar**
+  - [x] Progressbar för sekvens
+  - [x] Låsindikator (🔒/🔓)
+  - [x] E-stop med reset-instruktioner
+  - [x] Felmeddelanden med förklaringar
+  - [x] Bekräftelsevy efter start
+- [ ] **Testa med verklig hårdvara**
+  - [ ] PCF8574 knappavläsning
+  - [ ] Unlock-sekvens fungerar
+  - [ ] Alla menyer navigerbara
+  - [ ] Modbus-kommunikation vid start/stopp
+  - [ ] Användartest på fotbollsplan
 
 - [ ] **Förbättra `pump_protection.py`**
   - [ ] Kalibrera SLANGBROTT_FLOW_THRESHOLD efter verklig pump
