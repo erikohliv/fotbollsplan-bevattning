@@ -298,25 +298,29 @@ def check_power_fuses(client, unit=DEFAULT_MODBUS_UNIT) -> tuple:
             logger.warning("Kunde inte läsa säkrings-status")
             return True, "OK", 0  # Fail-safe: tillåt körning om läsning misslyckas
         
-        fuse_24vdc = rr.bits[0]  # I11
-        fuse_24vac = rr.bits[1]  # I12
+        fuse_24vdc_raw = rr.bits[0]  # I11 RAW GPIO
+        fuse_24vac_raw = rr.bits[1]  # I12 RAW GPIO
+        
+        # Använd di_config för korrekt tolkning (NC: HIGH=LARM, LOW=OK)
+        fuse_24vdc_ok = is_di_ok(10, fuse_24vdc_raw)  # DI11 = index 10
+        fuse_24vac_ok = is_di_ok(11, fuse_24vac_raw)  # DI12 = index 11
         
         # Kontrollera 24VDC (PLC/Sensorer) - KRITISKT
-        if not fuse_24vdc:
-            logger.error("🚨 KRITISKT: 24VDC säkring utlöst (I11=0)")
+        if not fuse_24vdc_ok:
+            logger.error("🚨 KRITISKT: 24VDC säkring utlöst (I11 HIGH=LARM)")
             logger.error("   → PLC, sensorer och styrning påverkad!")
             logger.error("   → Kontrollera säkringsautomater och elkoppling")
             return False, "24VDC säkring utlöst", BLOCK_REASON_FUSE_24VDC
         
         # Kontrollera 24VAC (Ventiler) - KRITISKT
-        if not fuse_24vac:
-            logger.error("🚨 KRITISKT: 24VAC säkring utlöst (I12=0)")
+        if not fuse_24vac_ok:
+            logger.error("🚨 KRITISKT: 24VAC säkring utlöst (I12 HIGH=LARM)")
             logger.error("   → Solenoid-ventiler (R1-R7) fungerar EJ!")
             logger.error("   → Kontrollera säkringsautomater för 24VAC")
             return False, "24VAC säkring utlöst", BLOCK_REASON_FUSE_24VAC
         
         # Båda OK
-        logger.debug("✅ Säkringar OK: 24VDC=1, 24VAC=1")
+        logger.debug("✅ Säkringar OK: 24VDC=OK, 24VAC=OK")
         return True, "OK", 0
         
     except Exception as e:

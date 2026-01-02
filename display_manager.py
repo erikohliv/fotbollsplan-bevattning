@@ -11,6 +11,7 @@ NOTE: Display 2 (D2) has been removed in hardware refactor V2.
 Author: Fotbollsplan Bevattning System
 """
 
+import os
 import time
 import threading
 import logging

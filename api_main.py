@@ -19,6 +19,9 @@ from unipi_hardware import get_hardware, cleanup_hardware
 # Import pump protection module
 from pump_protection import PumpState
 
+# Import DI configuration for correct interpretation
+from di_config import is_di_ok
+
 load_dotenv()
 
 API_LOGGER_NAME = "bevattning.api"
@@ -1698,8 +1701,9 @@ def get_sensor_status(x_api_key: Optional[str] = Header(None)):
         moisture_voltage_approx = (moisture_percent / 100.0) * 10.0  # Approximation
         temp_voltage = (temp_raw / 27648.0) * 10.0  # Faktisk spänning från råvärde
         
-        fuse_24vdc = fuse_inputs.bits[0]
-        fuse_24vac = fuse_inputs.bits[1]
+        # Säkringar: Använd di_config för korrekt tolkning (NC: HIGH=LARM, LOW=OK)
+        fuse_24vdc = is_di_ok(10, fuse_inputs.bits[0])  # DI11 = index 10
+        fuse_24vac = is_di_ok(11, fuse_inputs.bits[1])  # DI12 = index 11
     
     return {
         "ok": True,
@@ -1786,19 +1790,20 @@ def start_fallback(cmd: FallbackCommand, x_api_key: Optional[str] = Header(None)
         fuse_inputs = client.read_discrete_inputs(DI_FUSE_24VDC, 2, unit=MODBUS_UNIT)
         _ensure_modbus_ok(fuse_inputs, "read fuse status for fallback")
         
-        fuse_24vdc = fuse_inputs.bits[0]
-        fuse_24vac = fuse_inputs.bits[1]
+        # Säkringar: Använd di_config för korrekt tolkning (NC: HIGH=LARM, LOW=OK)
+        fuse_24vdc_ok = is_di_ok(10, fuse_inputs.bits[0])  # DI11 = index 10
+        fuse_24vac_ok = is_di_ok(11, fuse_inputs.bits[1])  # DI12 = index 11
         
-        if not fuse_24vdc:
+        if not fuse_24vdc_ok:
             raise HTTPException(
                 status_code=503,
-                detail="KRITISKT: 24VDC säkring utlöst (I11=0). Fallback EJ tillåten."
+                detail="KRITISKT: 24VDC säkring utlöst (I11 HIGH=LARM). Fallback EJ tillåten."
             )
         
-        if not fuse_24vac:
+        if not fuse_24vac_ok:
             raise HTTPException(
                 status_code=503,
-                detail="KRITISKT: 24VAC säkring utlöst (I12=0). Ventiler fungerar EJ."
+                detail="KRITISKT: 24VAC säkring utlöst (I12 HIGH=LARM). Ventiler fungerar EJ."
             )
         
         # Säkringar OK → Skriv Fallback-värden

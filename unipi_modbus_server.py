@@ -78,8 +78,8 @@ class UniPi11Modbus:
                 GPIO.setmode(GPIO.BCM)
                 GPIO.setwarnings(False)
                 for pin in DI_GPIO_PINS:
-                    GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-                logger.info(f"✓ {len(DI_GPIO_PINS)} digitala ingångar initialiserade")
+                    GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)  # PULL-UP för NC-kontakter!
+                logger.info(f"✓ {len(DI_GPIO_PINS)} digitala ingångar initialiserade med pull-up")
             else:
                 logger.warning("✗ GPIO inte tillgängligt - digitala ingångar inaktiverade")
             
@@ -168,30 +168,22 @@ class UniPi11Modbus:
     
     def read_digital_inputs(self):
         """
-        Läs alla digitala ingångar (DI1-DI12)
+        Läs alla digitala ingångar (DI1-DI12) RAW - INGEN INVERTERING!
         
-        OBS: Vissa ingångar är inverterade (NC-kontakter):
-        - DI3 (index 2): Nödstopp (NC) - LOW = OK, HIGH = LARM
-        - DI10 (index 9): Motorskydd (NC) - LOW = OK, HIGH = LARM
-        - DI11 (index 10): 24VDC säkring (NC) - LOW = OK, HIGH = LARM
-        - DI12 (index 11): 24VAC säkring (NC) - LOW = OK, HIGH = LARM
+        Modbus speglar GPIO-tillståndet direkt:
+        - GPIO HIGH (1) → Modbus TRUE
+        - GPIO LOW (0) → Modbus FALSE
+        
+        Applikationslagret ansvarar för att tolka vad HIGH/LOW betyder
+        för varje specifik ingång (NC vs NO, säkerhet vs knapp).
         """
         if not GPIO_AVAILABLE:
             return [False] * 12
         
-        # Index för NC-kontakter som ska inverteras
-        NC_INPUTS = [2, 9, 10, 11]  # DI3, DI10, DI11, DI12
-        
         try:
             inputs = []
-            for idx, pin in enumerate(DI_GPIO_PINS):
-                # GPIO.input returnerar 1 (HIGH) eller 0 (LOW)
+            for pin in DI_GPIO_PINS:
                 state = GPIO.input(pin)
-                
-                # Invertera NC-kontakter
-                if idx in NC_INPUTS:
-                    state = not state  # LOW (0) blir TRUE, HIGH (1) blir FALSE
-                
                 inputs.append(bool(state))
             return inputs
         except Exception as e:
