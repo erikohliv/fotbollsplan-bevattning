@@ -40,6 +40,10 @@ except ImportError:
     ModbusIOException = ConnectionException = Exception
 
 
+# Configuration from environment
+MODBUS_HOST = os.getenv('MODBUS_HOST', '127.0.0.1')
+MODBUS_PORT = int(os.getenv('MODBUS_PORT', '502'))
+
 # Modbus register addresses (from existing system)
 MW_REMOTE_CMD = 10
 MW_STATUS_ZONE = 50

@@ -15,6 +15,10 @@ import csv
 import argparse
 import logging
 import requests
+from dotenv import load_dotenv
+
+# Ladda environment-variabler från api_.env
+load_dotenv("api_.env")
 
 # Import zone configuration handler
 try:
@@ -35,9 +39,12 @@ except Exception:
     except Exception:
         ModbusTcpClient = None
 
-DEFAULT_MODBUS_HOST = "127.0.0.1"
-DEFAULT_MODBUS_PORT = 502
-DEFAULT_MODBUS_UNIT = 1
+# API och Modbus-konfiguration från environment
+API_URL = os.getenv('API_URL', 'http://127.0.0.1:8000')
+API_KEY = os.getenv('API_KEY', '')
+DEFAULT_MODBUS_HOST = os.getenv('MODBUS_HOST', '127.0.0.1')
+DEFAULT_MODBUS_PORT = int(os.getenv('MODBUS_PORT', '502'))
+DEFAULT_MODBUS_UNIT = int(os.getenv('MODBUS_UNIT', '1'))
 
 LOG_FIL = os.path.join(os.path.expanduser("~"), "bevattning_log.csv")
 # Default coordinates for Håkanryd, Bromölla
