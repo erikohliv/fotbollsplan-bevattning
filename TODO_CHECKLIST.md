@@ -1,24 +1,40 @@
 # TODO Checklista - Fotbollsplan Bevattning System 2.0
 
-**Status:** System installerat, väntar på hårdvarukompletteringar och 24V-driftsättning
-**Senast uppdaterad:** 2026-01-01
+**Status:** Grundsystem OPERATIVT - Display, Reläer, DI fungerar! ✅
+**Senast uppdaterad:** 2026-01-02 18:20
 
 ---
 
 ## 🔴 KRITISKT - Före 24V-driftsättning
 
+### ✅ SLUTFÖRDA SYSTEM-FIXES (2026-01-02)
+- [x] **Display LCD initialisering** - Robusta timings implementerade (2s delay + retry)
+- [x] **GPIO "busy" problem** - Stoppade pigpiod.service
+- [x] **Kernel-moduler** - Installerade från repo.unipi.technology
+- [x] **DI NC-invertering** - DI3, DI10, DI11, DI12 inverterade i kod
+- [x] **Modbus TCP** - Port 502 fungerar, alla DI/Reläer läsbara
+- [x] **Relätest** - R1-R7 klickar korrekt (R8 finns ej på MCP23008)
+
 ### Säkerhetssystem
 - [ ] **Beställ 24VAC säkring med hjälpkontakt** (I12 - för övervakningssignal till PLC)
-  - [ ] Beställ rätt modell med NO/NC hjälpkontakt
+  - [ ] Beställ rätt modell med NC hjälpkontakt (Fail-safe)
   - [ ] Kontrollera spänning/strömnivå (ventiler drar X ampere)
   - [ ] Planera montering i elskåp
 
+- [ ] **Komplett DI-checkout** (PLANERAD - senare)
+  - [x] DI3 (Nödstopp NC) läser HIGH (1) = OK ✅
+  - [x] DI11 (24VDC NC) läser HIGH (1) = OK ✅
+  - [ ] Trigga varje DI individuellt med `test_di_monitor.py`
+  - [ ] Verifiera att NC-kontakter (DI3, DI10, DI11, DI12) visar korrekt status
+
 - [ ] **Verifiera nödstopp (I03)** fungerar mekaniskt
+  - [x] NC-invertering implementerad i kod ✅
   - [ ] Testa att maintained signal bryter korrekt
   - [ ] Verifiera att PLC reagerar (BlockReason=4)
 
 - [ ] **Verifiera motorskydd (I10)** är anslutet korrekt
-  - [ ] Kontrollera att NO/NC är rätt kopplat till GPIO 18
+  - [x] NC-invertering implementerad i kod ✅
+  - [ ] Kontrollera att NC är rätt kopplat till GPIO 9
   - [ ] Testa med simulator om möjligt
 
 ---

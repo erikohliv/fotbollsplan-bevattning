@@ -167,15 +167,31 @@ class UniPi11Modbus:
             return [False] * 8
     
     def read_digital_inputs(self):
-        """Läs alla digitala ingångar (DI1-DI12)"""
+        """
+        Läs alla digitala ingångar (DI1-DI12)
+        
+        OBS: Vissa ingångar är inverterade (NC-kontakter):
+        - DI3 (index 2): Nödstopp (NC) - LOW = OK, HIGH = LARM
+        - DI10 (index 9): Motorskydd (NC) - LOW = OK, HIGH = LARM
+        - DI11 (index 10): 24VDC säkring (NC) - LOW = OK, HIGH = LARM
+        - DI12 (index 11): 24VAC säkring (NC) - LOW = OK, HIGH = LARM
+        """
         if not GPIO_AVAILABLE:
             return [False] * 12
         
+        # Index för NC-kontakter som ska inverteras
+        NC_INPUTS = [2, 9, 10, 11]  # DI3, DI10, DI11, DI12
+        
         try:
             inputs = []
-            for pin in DI_GPIO_PINS:
+            for idx, pin in enumerate(DI_GPIO_PINS):
                 # GPIO.input returnerar 1 (HIGH) eller 0 (LOW)
                 state = GPIO.input(pin)
+                
+                # Invertera NC-kontakter
+                if idx in NC_INPUTS:
+                    state = not state  # LOW (0) blir TRUE, HIGH (1) blir FALSE
+                
                 inputs.append(bool(state))
             return inputs
         except Exception as e:
