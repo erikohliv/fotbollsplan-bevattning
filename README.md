@@ -4,8 +4,60 @@
 - **PLC (ST):** Säker/sekvenslogik, anti-vattenslag, E-stop, zonbyte, flödesvaktsskydd.
 - **Python controller:** Hämtar Open-Meteo, markfukt (valfritt), skriver Modbus-register, pulserar start.
 - **FastAPI-backend:** API/Webb-UI + Modbus-brygga. Skyddas med API-nyckel.
-- **Display Manager:** Hanterar två I2C LCD-displayer för status och manuell styrning. Menyknappar läses från PLC via Modbus.
-- **Hårdvara:** UNIPI 1.1, Raspberry Pi 3 (Debian Bookworm). Pump styrs direkt via Relä 8 → Mjukstartare. Tryckvakt (DI5) och Flödesvakt (DI7) via Terminal X3 för säkerhetsövervakning.
+- **Display Manager:** Hanterar I2C LCD-display (20x4) för status och manuell styrning. Menyknappar läses via I2C (PCF8574).
+- **Dashboard Hub:** Central webbpanel med navigering till alla gränssnitt (port 8090).
+- **Hårdvara:** UNIPI 1.1, Raspberry Pi 3/4 (Debian Bookworm). Pump styrs direkt via Relä 8 → Mjukstartare. Tryckvakt (DI5) och Flödesvakt (DI7) via Terminal X3 för säkerhetsövervakning.
+
+## Webbgränssnitt
+
+Systemet har flera webbgränssnitt för styrning och övervakning:
+
+### 🏠 Dashboard Hub (Port 8090) - **STARTA HÄR**
+**URL:** `http://<raspberry-pi-ip>:8090` (lokalt) eller `http://<tailscale-ip>:8090` (fjärr)
+
+Central kontrollpanel med:
+- Snabb systemöversikt (zon, pump, läge, larm)
+- Länkar till alla andra gränssnitt
+- Tjänstestatus (online/offline)
+- Auto-uppdatering var 2:a sekund
+
+**Rekommenderad startsida** - härifrån når du allt annat!
+
+### 💧 Bevattning API (Port 8000)
+Huvudstyrning för bevattningssystemet:
+- Starta/stoppa zoner manuellt
+- Konfigurera bevattningstider
+- Sensor-fallback vid fel
+- Zon-exkludering (inaktivera trasiga zoner)
+- Felsökning och felåterställning
+
+### 🔌 DI Monitor (Port 8081)
+Realtidsövervakning av digitala ingångar:
+- Alla 12 DI visas live (uppdatering var 0.5 sekund)
+- Färgkodning: Grön=OK, Gul=Aktiv, Röd=Larm
+- Perfekt för att testa knappar och sensorer
+- Kritiska larm pulserar
+
+### 👥 Användarhantering (Port 8082)
+Administrera användarkonton:
+- Skapa nya användare (Operatör eller Admin)
+- Ta bort användare
+- Visa alla användarkonton
+- Kräver superadmin-inloggning
+
+### 📊 Process View (Port 8050)
+Grafisk visualisering med Plotly Dash:
+- Fotbollsplan med zonöversikt
+- Regnprognos och väderdata
+- Live processtatus
+
+### 📋 TODO Checklist (Port 8080)
+Projekthantering och checklista:
+- Installation och test-checklista
+- Progress-tracking
+- Kontaktinformation
+
+**Alla gränssnitt fungerar på både mobil och desktop!**
 
 ## Rörledningsnät och Zonspecifikationer
 Systemet använder ett hybridnät med PEM 90/75/50 rör. **Viktigt**: Zon 7 har PEM 50 (mindre dimension) medan Zon 5 har PEM 75, vilket ger naturlig tryckdämpning i Zon 7. Se [PIPE_NETWORK_DOCUMENTATION.md](PIPE_NETWORK_DOCUMENTATION.md) för detaljerad förklaring av hydraulik, tryckskillnader och varför dimensionen spelar roll.
@@ -776,6 +828,45 @@ journalctl -u bevattning-api -n 50
   - Meny Höger `%IX1.3` (DI12 - PLC-knapp)
   - Meny OK `%IX1.4` (DI13 - PLC-knapp)
   - Meny Tillbaka `%IX1.5` (DI14 - PLC-knapp)
+
+## Webb-åtkomst
+
+### Lokal åtkomst (samma nätverk)
+Hitta Raspberry Pi:s IP-adress:
+```bash
+hostname -I
+```
+
+Öppna Dashboard Hub i webbläsare:
+```
+http://<raspberry-pi-ip>:8090
+```
+
+### Fjärråtkomst via Tailscale
+Om Tailscale är konfigurerat (se [TAILSCALE_ACCESS.md](TAILSCALE_ACCESS.md)):
+```bash
+# Hämta Tailscale-IP
+sudo tailscale ip -4
+```
+
+Öppna Dashboard Hub:
+```
+http://<tailscale-ip>:8090
+```
+
+**Navigering:** Från Dashboard Hub når du alla andra gränssnitt via länkar.
+
+### Direkta länkar till specifika gränssnitt
+
+Om du vill gå direkt till ett specifikt gränssnitt:
+```
+Dashboard Hub:        http://<ip>:8090  ← REKOMMENDERAD STARTSIDA
+Bevattning API:       http://<ip>:8000
+DI Monitor:           http://<ip>:8081
+Användarhantering:    http://<ip>:8082
+Process View:         http://<ip>:8050
+TODO Checklist:       http://<ip>:8080
+```
 
 ## Snabbtest av API
 ```bash

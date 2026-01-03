@@ -491,6 +491,12 @@ install_systemd_services() {
         "systemd_bevattning-controller.service:bevattning-controller.service"
         "systemd_bevattning-scheduler.service:bevattning-scheduler.service"
         "systemd_bevattning-scheduler.timer:bevattning-scheduler.timer"
+        "systemd_unipi-modbus.service:unipi-modbus.service"
+        "systemd_todo-checklist.service:todo-checklist.service"
+        "systemd_di-monitor.service:di-monitor.service"
+        "systemd_dashboard-hub.service:dashboard-hub.service"
+        "systemd_user-management.service:user-management.service"
+        "systemd_dash-process-view.service:dash-process-view.service"
     )
     
     # Installera varje service
@@ -520,10 +526,20 @@ install_systemd_services() {
     
     # Aktivera services
     print_info "Aktiverar services..."
+    
+    # Grundläggande services
     systemctl enable bevattning-controller.service 2>/dev/null || print_warning "Kunde inte aktivera bevattning-controller"
     systemctl enable bevattning-api.service 2>/dev/null || print_warning "Kunde inte aktivera bevattning-api"
     systemctl enable display-manager.service 2>/dev/null || print_warning "Kunde inte aktivera display-manager"
     systemctl enable bevattning-scheduler.timer 2>/dev/null || print_warning "Kunde inte aktivera bevattning-scheduler.timer"
+    systemctl enable unipi-modbus.service 2>/dev/null || print_warning "Kunde inte aktivera unipi-modbus"
+    
+    # Webbgränssnitt (System 2.0)
+    systemctl enable dashboard-hub.service 2>/dev/null || print_warning "Kunde inte aktivera dashboard-hub"
+    systemctl enable di-monitor.service 2>/dev/null || print_warning "Kunde inte aktivera di-monitor"
+    systemctl enable user-management.service 2>/dev/null || print_warning "Kunde inte aktivera user-management"
+    systemctl enable todo-checklist.service 2>/dev/null || print_warning "Kunde inte aktivera todo-checklist"
+    systemctl enable dash-process-view.service 2>/dev/null || print_warning "Kunde inte aktivera dash-process-view"
     
     print_success "systemd services installerade och aktiverade"
     print_warning "Services startar automatiskt efter omstart"
@@ -568,11 +584,18 @@ main() {
     echo "  ✓ Systempaket (Python 3, I2C-verktyg, build-verktyg)"
     echo "  ✓ I2C för Display 1 och Arkadknappar"
     echo "  ✓ Python Virtual Environment"
-    echo "  ✓ Python-beroenden"
+    echo "  ✓ Python-beroenden (inkl. Flask, Dash, FastAPI)"
     echo "  ✓ api_.env konfiguration"
     echo "  ✓ Superadmin-användare"
     echo "  ✓ Tailscale (valfritt)"
-    echo "  ✓ systemd services"
+    echo "  ✓ systemd services (11 tjänster)"
+    echo "  ✓ 6 webbgränssnitt:"
+    echo "     • Dashboard Hub (8090) - Startsida"
+    echo "     • Bevattning API (8000) - Huvudstyrning"
+    echo "     • DI Monitor (8081) - Knapp/Sensor-övervakning"
+    echo "     • Användarhantering (8082) - Användaradmin"
+    echo "     • Process View (8050) - Grafisk visualisering"
+    echo "     • TODO Checklist (8080) - Projektlista"
     echo
     
     read -p "Vill du fortsätta? (Y/n): " -n 1 -r
@@ -626,21 +649,30 @@ main() {
     echo "     (Du ska se: 0x27 för Display 1, 0x20 för Arkadknappar)"
     echo
     echo "  3. Starta tjänsterna:"
+    echo "     ${GREEN}sudo systemctl start unipi-modbus${NC}"
     echo "     ${GREEN}sudo systemctl start bevattning-controller${NC}"
-    echo "     ${GREEN}sudo systemctl start display-manager${NC}"
     echo "     ${GREEN}sudo systemctl start bevattning-api${NC}"
+    echo "     ${GREEN}sudo systemctl start display-manager${NC}"
+    echo "     ${GREEN}sudo systemctl start dashboard-hub${NC}"
+    echo "     ${GREEN}sudo systemctl start di-monitor${NC}"
+    echo "     ${GREEN}sudo systemctl start user-management${NC}"
     echo
-    echo "  4. Kör hårdvarutester:"
+    echo
+    echo "  4. Öppna webbgränssnitt:"
+    IP=$(hostname -I | awk '{print $1}')
+    echo "     ${GREEN}🏠 Dashboard Hub (STARTA HÄR): http://$IP:8090${NC}"
+    echo "     ${BLUE}ℹ  Härifrån når du alla andra gränssnitt!${NC}"
+    echo
+    echo "  5. Kör hårdvarutester (valfritt):"
     echo "     ${GREEN}cd $PROJECT_DIR${NC}"
     echo "     ${GREEN}source .venv/bin/activate${NC}"
     echo "     ${GREEN}python3 relay_test.py --host <plc-ip>${NC}"
     echo "     ${GREEN}python3 email_test.py${NC}"
     echo
-    echo "  5. Åtkomst till systemet:"
-    IP=$(hostname -I | awk '{print $1}')
-    echo "     Webb-UI:  ${GREEN}http://$IP:8000${NC}"
-    echo "     API Docs: ${GREEN}http://$IP:8000/docs${NC}"
-    echo "     Dash:     ${GREEN}http://$IP:8050${NC}"
+    echo "  ${BLUE}📚 Dokumentation:${NC}"
+    echo "     README.md - Översikt och snabbstart"
+    echo "     WEBBGRANSSNITT_GUIDE.md - Guide för alla webbgränssnitt"
+    echo "     TAILSCALE_ACCESS.md - Fjärråtkomst"
     echo
     
     read -p "Vill du starta om nu? (Y/n): " -n 1 -r

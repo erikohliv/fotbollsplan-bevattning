@@ -4,8 +4,11 @@ pymodbus==3.6.8
 python-dotenv==1.0.1
 requests==2.32.3
 dash==2.14.2
+dash-bootstrap-components>=1.0.0
 plotly==5.18.0
 pandas==2.1.4
 passlib[bcrypt]==1.7.4
 bcrypt==4.2.1
 httpx==0.28.1
+flask>=2.3.0
+flask-cors>=4.0.0

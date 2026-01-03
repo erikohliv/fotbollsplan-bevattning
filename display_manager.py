@@ -406,28 +406,59 @@ class LCD_I2C:
             raise RuntimeError("smbus/smbus2 library not available. Install with: pip install smbus2")
         
         # Vänta på att I2C-bussen ska stabiliseras efter boot
-        logger.info("Väntar 2 sekunder för I2C-buss stabilisering...")
-        time.sleep(2.0)
+        # Ökad delay för att säkerställa att I2C är helt redo
+        logger.info("Väntar 5 sekunder för I2C-buss stabilisering efter boot...")
+        time.sleep(5.0)
         
+        # Försök öppna I2C-bussen med retry
+        max_bus_retries = 5
+        for bus_attempt in range(max_bus_retries):
+            try:
         self.bus = smbus.SMBus(bus_num)
+                # Testa att bussen fungerar genom att försöka läsa från displayen
+                try:
+                    # Försök läsa en byte (kan misslyckas om displayen inte är redo)
+                    _ = self.bus.read_byte(self.i2c_addr)
+                except:
+                    # Det är OK om läsningen misslyckas, vi testar bara att bussen fungerar
+                    pass
+                logger.info("✅ I2C-buss öppnad och verifierad")
+                break
+            except Exception as e:
+                logger.warning(f"I2C-buss öppning misslyckades (försök {bus_attempt + 1}/{max_bus_retries}): {e}")
+                if bus_attempt < max_bus_retries - 1:
+                    time.sleep(2.0)
+                else:
+                    logger.error("Kunde inte öppna I2C-buss efter alla försök")
+                    raise
         
         # Robust initialisering med retry-logik
-        max_retries = 3
+        max_retries = 5  # Ökad från 3 till 5
         for attempt in range(max_retries):
             try:
                 logger.info(f"LCD initialisering försök {attempt + 1}/{max_retries}")
                 self._init_display()
+                # Ytterligare verifiering - skriv tomma rader för att säkerställa att displayen är klar
+                self._verify_display_ready()
                 logger.info("✅ LCD initialiserad framgångsrikt")
                 break
             except Exception as e:
                 logger.warning(f"LCD init misslyckades (försök {attempt + 1}): {e}")
                 if attempt < max_retries - 1:
-                    time.sleep(1.0)
+                    # Ökad delay mellan försök
+                    wait_time = 2.0 + (attempt * 1.0)  # 2s, 3s, 4s, 5s
+                    logger.info(f"Väntar {wait_time:.1f} sekunder innan nästa försök...")
+                    time.sleep(wait_time)
                     # Återställ bussen
                     try:
                         self.bus.close()
                     except:
                         pass
+                    try:
+                        self.bus = smbus.SMBus(bus_num)
+                    except Exception as bus_err:
+                        logger.error(f"Kunde inte återställa I2C-buss: {bus_err}")
+                        time.sleep(2.0)
                     self.bus = smbus.SMBus(bus_num)
                 else:
                     logger.error("LCD initialisering misslyckades efter alla försök")
@@ -458,55 +489,79 @@ class LCD_I2C:
     def _init_display(self):
         """Initialize the display in 4-bit mode"""
         # Längre initial fördröjning för att säkerställa att displayen är redo
-        time.sleep(0.1)  # 100ms initial delay
+        time.sleep(0.15)  # Ökad från 100ms till 150ms
         
-        # Testa att displayen svarar innan full init
+        # HARD RESET: Stäng av bakgrundsbelysning först för att "tvinga" en reset
         try:
-            self._write_byte(self.LCD_BACKLIGHT)  # Aktivera bakgrundsbelysning
-            time.sleep(0.05)
+            self._write_byte(self.LCD_NOBACKLIGHT)
+            time.sleep(0.1)
+        except:
+            pass
+        
+        # Aktivera bakgrundsbelysning igen
+        try:
+            self._write_byte(self.LCD_BACKLIGHT)
+            time.sleep(0.1)  # Ökad delay
         except Exception as e:
             logger.warning(f"LCD backlight test misslyckades: {e}")
         
         # Initialize in 4-bit mode (HD44780 spec)
         # Följer datasheet exakt för maximal kompatibilitet
+        # Första sekvensen - längre delays för säkerhet
         self._write_nibble(0x30)  # Function set: 8-bit
-        time.sleep(0.005)  # >4.1ms
+        time.sleep(0.010)  # Ökad från 5ms till 10ms
         
         self._write_nibble(0x30)  # Function set: 8-bit (andra gången)
-        time.sleep(0.005)  # >100us (använder 5ms för säkerhet)
+        time.sleep(0.010)  # Ökad delay
         
         self._write_nibble(0x30)  # Function set: 8-bit (tredje gången)
-        time.sleep(0.001)  # >100us
+        time.sleep(0.005)  # >100us (använder 5ms för säkerhet)
         
         self._write_nibble(0x20)  # Function set: växla till 4-bit
-        time.sleep(0.001)
+        time.sleep(0.005)  # Ökad delay
         
         # Function set: 4-bit, 2 line, 5x8 dots
         self._write_byte_data(self.LCD_FUNCTIONSET | self.LCD_4BITMODE | self.LCD_2LINE | self.LCD_5x8DOTS, 0)
-        time.sleep(0.001)
+        time.sleep(0.005)  # Ökad delay
         
         # Display control: display on, cursor off, blink off
         self._write_byte_data(self.LCD_DISPLAYCONTROL | self.LCD_DISPLAYON | self.LCD_CURSOROFF | self.LCD_BLINKOFF, 0)
-        time.sleep(0.001)
+        time.sleep(0.005)  # Ökad delay
         
-        # Clear display
+        # AGGRESSIV CLEAR: Rensa displayen flera gånger för att säkerställa att allt är borta
+        for clear_attempt in range(3):
         self.clear()
-        time.sleep(0.003)  # Clear behöver extra tid
+            time.sleep(0.010)  # Längre delay för clear
         
         # Entry mode: left to right
         self._write_byte_data(self.LCD_ENTRYMODESET | self.LCD_ENTRYLEFT | self.LCD_ENTRYSHIFTDECREMENT, 0)
-        time.sleep(0.003)  # Extra tid för att säkerställa att allt är klart
+        time.sleep(0.005)  # Extra tid för att säkerställa att allt är klart
         
         # Bekräfta att bakgrundsbelysningen är på
         self.backlight_on()
-        time.sleep(0.1)
+        time.sleep(0.15)  # Ökad från 100ms till 150ms
         
         logger.debug("LCD hardware initialized successfully")
     
+    def _verify_display_ready(self):
+        """Verifiera att displayen är redo genom att skriva tomma rader"""
+        try:
+            # Skriv tomma rader till alla rader för att säkerställa att displayen är klar
+            for row in range(self.rows):
+                self.write_line(row, " " * self.cols)
+            time.sleep(0.05)
+            logger.debug("Display verifierad - tomma rader skrivna")
+        except Exception as e:
+            logger.warning(f"Display-verifiering misslyckades: {e}")
+            # Kasta inte exception - det är bara en verifiering
+    
     def clear(self):
-        """Clear the display"""
+        """Clear the display - förbättrad för att säkerställa komplett rensning"""
         self._write_byte_data(self.LCD_CLEARDISPLAY, 0)
-        time.sleep(0.002)
+        time.sleep(0.005)  # Ökad från 2ms till 5ms - clear behöver mer tid
+        # Ytterligare en clear för att säkerställa att allt är borta
+        self._write_byte_data(self.LCD_CLEARDISPLAY, 0)
+        time.sleep(0.003)
     
     def set_cursor(self, row: int, col: int):
         """Set cursor position"""

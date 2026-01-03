@@ -2,6 +2,8 @@
 Description=Bevattning Display Manager - System 2.0
 After=network-online.target bevattning-api.service
 Wants=network-online.target
+# Vänta extra tid för att I2C-bussen ska vara redo efter boot
+StartLimitIntervalSec=60
 
 [Service]
 Type=simple
@@ -12,7 +14,9 @@ Environment="PYTHONUNBUFFERED=1"
 EnvironmentFile=/home/kamp/fotbollsplan-bevattning/api_.env
 ExecStart=/home/kamp/fotbollsplan-bevattning/.venv/bin/python3 /home/kamp/fotbollsplan-bevattning/display_manager.py
 Restart=on-failure
-RestartSec=10
+RestartSec=15
+# Ökad timeout för att ge displayen mer tid att initiera vid boot
+TimeoutStartSec=60
 
 [Install]
 WantedBy=multi-user.target

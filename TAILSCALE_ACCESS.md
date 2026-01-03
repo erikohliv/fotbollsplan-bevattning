@@ -7,34 +7,73 @@
 
 ## Tjänster du kan nå från jobbet
 
-### 1. FastAPI (Huvudgränssnitt)
+### 🏠 Dashboard Hub (Startsida - REKOMMENDERAD)
+```
+http://100.124.254.103:8090
+```
+- Central kontrollpanel med översikt
+- Länkar till alla andra gränssnitt
+- Systemstatus och larm
+- **STARTA HÄR** - härifrån når du allt annat!
+
+### 💧 Bevattning API (Huvudstyrning)
 ```
 http://100.124.254.103:8000
 ```
+- Starta/stoppa zoner
+- Konfigurera bevattningstider
+- Sensor-fallback och zonhantering
 - API-dokumentation: `http://100.124.254.103:8000/docs`
-- Health check: `http://100.124.254.103:8000/health`
 
-### 2. Dash Process View (Visualisering)
+### 🔌 DI Monitor (Knapp/Sensor-övervakning)
+```
+http://100.124.254.103:8081
+```
+- Realtidsövervakning av digitala ingångar (DI1-DI12)
+- Ser när knappar trycks (0.5s uppdatering)
+- Larm-övervakning (nödstopp, motorskydd, etc.)
+
+### 👥 Användarhantering
+```
+http://100.124.254.103:8082
+```
+- Skapa och ta bort användare
+- Administrera roller (Admin/Operatör)
+- Kräver superadmin-inloggning
+
+### 📊 Process View (Grafisk visualisering)
 ```
 http://100.124.254.103:8050
 ```
-- Realtidsöversikt av systemstatus
-- Modbus-register, pumptillstånd, sensorer
+- Fotbollsplan med zonöversikt
+- Regnprognos och väderdata
+- Live processtatus
 
-### 3. SSH (Terminalåtkomst)
+### 📋 TODO Checklist
+```
+http://100.124.254.103:8080
+```
+- Installation och test-checklista
+- Projekthantering
+
+### 🔧 SSH (Terminalåtkomst)
 ```bash
 ssh kamp@100.124.254.103
 ```
 
 ## Tjänster som körs
 
-| Tjänst | Port | Status | Autostart |
-|--------|------|--------|-----------|
-| bevattning-api | 8000 | ✅ | Ja |
-| unipi-modbus | 502 | ✅ | Ja |
-| dash-process-view | 8050 | ✅ | Ja |
-| display-manager | - | ✅ | Ja |
-| bevattning-controller | - | ✅ | Ja |
+| Tjänst | Port | Status | Autostart | Beskrivning |
+|--------|------|--------|-----------|-------------|
+| dashboard-hub | 8090 | ✅ | Ja | Central startsida |
+| bevattning-api | 8000 | ✅ | Ja | Huvudstyrning |
+| di-monitor | 8081 | ✅ | Ja | DI-övervakning |
+| user-management | 8082 | ✅ | Ja | Användarhantering |
+| dash-process-view | 8050 | ✅ | Ja | Grafisk visualisering |
+| todo-checklist | 8080 | ✅ | Ja | Projektchecklista |
+| unipi-modbus | 502 | ✅ | Ja | Modbus TCP-server |
+| display-manager | - | ✅ | Ja | LCD-display |
+| bevattning-controller | - | ✅ | Ja | Väder + logik |
 
 ## Kontrollera Tailscale-status
 ```bash

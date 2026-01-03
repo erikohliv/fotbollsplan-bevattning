@@ -860,30 +860,132 @@ def render_control_panel_ui():
 <!doctype html>
 <html>
 <head>
-<title>Bevattning</title>
+<title>Bevattning Kontrollpanel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-.container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-h2 { color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }
-.section { margin: 20px 0; padding: 15px; background: #f9f9f9; border-radius: 4px; }
-.section h3 { margin-top: 0; color: #555; }
-.status { background: #e8f5e9; padding: 10px; border-radius: 4px; font-family: monospace; white-space: pre-wrap; }
+body { 
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0; 
+  padding: 20px; 
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+}
+.container { 
+  max-width: 1400px; 
+  margin: 0 auto; 
+  background: white; 
+  padding: 0; 
+  border-radius: 12px; 
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  overflow: hidden;
+}
+.header {
+  background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+  color: white;
+  padding: 25px 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+.nav-links {
+  display: flex;
+  gap: 15px;
+}
+.nav-link {
+  color: white;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.1);
+  font-size: 14px;
+  transition: all 0.3s;
+}
+.nav-link:hover {
+  background: rgba(255,255,255,0.2);
+  transform: translateY(-2px);
+}
+.content {
+  padding: 30px;
+}
+.main-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+@media (max-width: 1024px) {
+  .main-grid {
+    grid-template-columns: 1fr;
+  }
+}
+h2 { 
+  color: #2d3748; 
+  border-bottom: 3px solid #4CAF50; 
+  padding-bottom: 10px;
+  margin-top: 0;
+  font-size: 22px;
+}
+.section { 
+  margin-bottom: 20px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+.section h3 { margin-top: 0; color: #555; font-size: 18px; }
+.status { 
+  background: linear-gradient(135deg, #e8f5e9 0%, #d4edda 100%);
+  padding: 15px;
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.6;
+  border: 2px solid #4CAF50;
+}
 .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 button { 
-  padding: 10px 20px; 
-  background: #4CAF50; 
+  padding: 12px 24px; 
+  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
   color: white; 
   border: none; 
-  border-radius: 4px; 
+  border-radius: 8px;
   cursor: pointer; 
   font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
 }
-button:hover { background: #45a049; }
-button:disabled { background: #ccc; cursor: not-allowed; }
-button.danger { background: #f44336; }
-button.danger:hover { background: #da190b; }
-button.night { background: #2196F3; }
-button.night:hover { background: #0b7dda; }
+button:hover { 
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+}
+button:active {
+  transform: translateY(0);
+}
+button:disabled { 
+  background: linear-gradient(135deg, #ccc 0%, #999 100%);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+button.danger { 
+  background: linear-gradient(135deg, #f44336 0%, #da190b 100%);
+  box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+}
+button.danger:hover { 
+  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
+}
+button.night { 
+  background: linear-gradient(135deg, #2196F3 0%, #0b7dda 100%);
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+button.night:hover { 
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
+}
 input, select { 
   padding: 8px; 
   border: 1px solid #ddd; 
@@ -938,15 +1040,103 @@ label { font-weight: bold; margin-right: 5px; }
   background: #f8d7da;
   color: #721c24;
 }
+.quick-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+.stat-card {
+  background: white;
+  padding: 15px;
+  border-radius: 8px;
+  border-left: 4px solid #4CAF50;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+.stat-card h4 {
+  margin: 0 0 8px 0;
+  color: #666;
+  font-size: 13px;
+  text-transform: uppercase;
+}
+.stat-card .value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #2d3748;
+}
+.stat-card.pump-on {
+  border-left-color: #4CAF50;
+  background: linear-gradient(135deg, #e8f5e9 0%, #f1f8f3 100%);
+}
+.stat-card.pump-off {
+  border-left-color: #999;
+}
+.stat-card.alarm {
+  border-left-color: #f44336;
+  background: linear-gradient(135deg, #ffe6e6 0%, #fff5f5 100%);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
 </style>
 </head>
 <body>
 <div class="container">
-  <h2>Bevattning Styrning</h2>
+  <div class="header">
+    <h1>💧 Bevattning Kontrollpanel</h1>
+    <div class="nav-links">
+      <a href="http://10.219.1.116:8081" class="nav-link" target="_blank">🔌 DI Monitor</a>
+      <a href="http://10.219.1.116:8050" class="nav-link" target="_blank">📊 Process View</a>
+      <a href="http://10.219.1.116:8080" class="nav-link" target="_blank">📋 TODO</a>
+    </div>
+  </div>
+  <div class="content">
   
-  <div class="section">
-    <h3>Status</h3>
-    <div id="status" class="status">Laddar...</div>
+  <div style="text-align: center; margin: 20px 0;">
+    <img src="/assets/logo" alt="IK Kamp" style="width: 70px; height: 70px;">
+  </div>
+  
+  <div class="quick-stats" id="quick-stats">
+    <div class="stat-card">
+      <h4>Aktiv Zon</h4>
+      <div class="value" id="stat-zone">-</div>
+    </div>
+    <div class="stat-card" id="stat-pump-card">
+      <h4>Pump Status</h4>
+      <div class="value" id="stat-pump">-</div>
+    </div>
+    <div class="stat-card">
+      <h4>Läge</h4>
+      <div class="value" id="stat-mode" style="font-size: 18px;">-</div>
+    </div>
+    <div class="stat-card">
+      <h4>Senaste Uppdatering</h4>
+      <div class="value" id="stat-time" style="font-size: 16px;">-</div>
+    </div>
+  </div>
+  
+  <div class="main-grid">
+    <div>
+      <div class="section">
+        <h2>📊 System Status</h2>
+        <div id="status" class="status">Laddar...</div>
+      </div>
+    </div>
+    <div>
+      <div class="section">
+        <h2>🔌 Digitala Ingångar</h2>
+        <div id="di-status" style="font-size: 12px;">
+          <p style="color: #999; text-align: center;">Laddar...</p>
+        </div>
+        <p style="font-size: 11px; color: #666; margin-top: 10px; text-align: center;">
+          <a href="http://10.219.1.116:8081" target="_blank" style="color: #4CAF50; text-decoration: none;">
+            → Öppna full DI Monitor
+          </a>
+        </p>
+      </div>
+    </div>
   </div>
   
   <div class="section">
@@ -1076,9 +1266,11 @@ if (!key) {
 } else {
   localStorage.setItem('apiKey', key);
   loadStatus();
+  loadDI();
   loadZoneConfig(); // Load zone configuration on page load
-  // Auto-refresh status every 5 seconds
-  setInterval(loadStatus, 5000);
+  // Auto-refresh status every 2 seconds (snabbare)
+  setInterval(loadStatus, 2000);
+  setInterval(loadDI, 1000);  // DI uppdateras varje sekund
 }
 
 function showMessage(msg, isError = false) {
@@ -1098,21 +1290,78 @@ async function loadStatus() {
     }
     const d = await r.json();
     
-    // Format status nicely
+    // Update quick stats
+    document.getElementById('stat-zone').innerText = d.zone > 0 ? `Zon ${d.zone}` : 'Ingen';
+    document.getElementById('stat-pump').innerText = d.pump_on ? '🟢 PÅ' : '⚪ AV';
+    document.getElementById('stat-mode').innerText = d.mode_text || 'Okänd';
+    document.getElementById('stat-time').innerText = new Date().toLocaleTimeString('sv-SE');
+    
+    // Update pump card styling
+    const pumpCard = document.getElementById('stat-pump-card');
+    if (d.pump_on) {
+      pumpCard.classList.add('pump-on');
+      pumpCard.classList.remove('pump-off');
+    } else {
+      pumpCard.classList.add('pump-off');
+      pumpCard.classList.remove('pump-on');
+    }
+    
+    // Format detailed status
     const blockReasons = ['OK', 'Regn > tröskel', 'Markfukt > tröskel', 'Anti-kollision', 'E-stop'];
     const blockReason = blockReasons[d.block_reason] || `Kod ${d.block_reason}`;
     
     document.getElementById('status').innerText = 
-      `Aktiv zon: ${d.zone}\\n` +
-      `Pump: ${d.pump_on ? 'PÅ' : 'AV'}\\n` +
-      `Steg: ${d.steg}\\n` +
-      `Vald zon: ${d.selected_zone}\\n` +
+      `Aktiv zon: ${d.zone > 0 ? 'Zon ' + d.zone : 'Ingen'}\\n` +
+      `Pump: ${d.pump_on ? '🟢 PÅ' : '⚪ AV'}\\n` +
+      `Sekvens-steg: ${d.steg || 0}\\n` +
+      `Vald zon: ${d.selected_zone || '-'}\\n` +
       `Läge: ${d.mode_text || 'Okänd'}\\n` +
       `Block status: ${blockReason}\\n` +
-      `Heartbeat: ${d.heartbeat_count}\\n` +
-      `Tid: ${new Date().toLocaleTimeString('sv-SE')}`;
+      `Heartbeat: ${d.heartbeat_count || 0}\\n` +
+      `Uppdaterad: ${new Date().toLocaleTimeString('sv-SE')}`;
   } catch (err) {
     document.getElementById('status').innerText = 'Fel vid status-hämtning: ' + err.message;
+  }
+}
+
+async function loadDI() {
+  try {
+    const r = await fetch('http://10.219.1.116:8081/api/digital-inputs');
+    if (!r.ok) return;
+    
+    const data = await r.json();
+    if (!data.ok) return;
+    
+    // Visa endast viktiga DI (knappar och kritiska sensorer)
+    const important = [1, 2, 6, 7, 8, 9];  // DI2(Start), DI3(Nöd), DI7(Flöde), DI8(Mjukstart), DI9(Tryck), DI10(Motor)
+    const inputs = data.inputs.filter((inp, idx) => important.includes(idx));
+    
+    let html = '<div style="display: grid; gap: 8px;">';
+    for (const input of inputs) {
+      let statusColor = '#d4edda';
+      let textColor = '#155724';
+      
+      if (input.is_alarm) {
+        statusColor = input.critical ? '#dc3545' : '#f8d7da';
+        textColor = input.critical ? 'white' : '#721c24';
+      } else if (input.is_active && input.type === 'NO') {
+        statusColor = '#fff3cd';
+        textColor = '#856404';
+      }
+      
+      html += `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: ${statusColor}; border-radius: 4px;">
+          <span style="font-weight: 600; color: ${textColor};">${input.di}</span>
+          <span style="color: ${textColor}; font-size: 11px;">${input.name.substring(0, 20)}</span>
+          <span style="font-weight: bold; color: ${textColor}; font-size: 11px;">${input.status}</span>
+        </div>
+      `;
+    }
+    html += '</div>';
+    
+    document.getElementById('di-status').innerHTML = html;
+  } catch (err) {
+    // Tyst fel - DI är inte kritisk för huvud-UI
   }
 }
 
@@ -2211,3 +2460,11 @@ def list_users(_superadmin: str = Depends(require_superadmin)):
     except Exception as e:
         logger.error("[SUPERADMIN] Failed to list users: %s", e)
         raise HTTPException(status_code=500, detail="Failed to list users") from e
+
+
+@app.get("/assets/logo")
+def serve_logo():
+    """Servera IK Kamp logga"""
+    from fastapi.responses import FileResponse
+    logo_path = os.path.join(os.path.dirname(__file__), 'assets', 'ik_kamp_logo.jpg')
+    return FileResponse(logo_path, media_type='image/jpeg')
