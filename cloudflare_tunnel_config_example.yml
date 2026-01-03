@@ -1,0 +1,76 @@
+# Cloudflare Tunnel Configuration för IK Kamp Bevattningssystem
+# 
+# INSTRUKTIONER:
+# 1. Byt ut <TUNNEL-UUID> mot din faktiska tunnel-UUID (från `cloudflared tunnel create`)
+# 2. Byt ut <TUNNEL-NAME> mot ditt tunnelnamn (t.ex. "bevattning-ikkamp")
+# 3. Byt ut <YOUR-DOMAIN> mot din faktiska domän (t.ex. "ik-kamp.se")
+# 4. Kopiera denna fil till: ~/.cloudflared/config.yml
+#    Kör: mkdir -p ~/.cloudflared && cp cloudflare_tunnel_config_example.yml ~/.cloudflared/config.yml
+# 5. Redigera filen och ersätt alla placeholder-värden
+#
+# VIKTIGT: Efter att du skapat tunneln med `cloudflared tunnel create <TUNNEL-NAME>`,
+# kommer du få en UUID. Använd den UUID:n nedan.
+
+tunnel: <TUNNEL-UUID>
+credentials-file: /home/kamp/.cloudflared/<TUNNEL-UUID>.json
+
+# Ingress-regler: Mappar subdomäner till lokala portar
+ingress:
+  # Dashboard Hub - Huvudingång till systemet
+  - hostname: bevattning.<YOUR-DOMAIN>
+    service: http://localhost:8090
+  
+  # DI Monitor - Digital Input Monitoring
+  - hostname: di.<YOUR-DOMAIN>
+    service: http://localhost:8081
+  
+  # Användarhantering
+  - hostname: users.<YOUR-DOMAIN>
+    service: http://localhost:8082
+  
+  # API - Huvudstyrning
+  - hostname: api.<YOUR-DOMAIN>
+    service: http://localhost:8000
+  
+  # Process View - Grafisk visualisering
+  - hostname: process.<YOUR-DOMAIN>
+    service: http://localhost:8050
+  
+  # TODO Checklist
+  - hostname: todo.<YOUR-DOMAIN>
+    service: http://localhost:8080
+  
+  # Catch-all regel (måste vara sist)
+  - service: http_status:404
+
+# Alternativ konfiguration med path-baserad routing (om du bara vill använda EN domän):
+# ingress:
+#   - hostname: bevattning.<YOUR-DOMAIN>
+#     path: ^/dashboard(/.*)?$
+#     service: http://localhost:8090
+#   
+#   - hostname: bevattning.<YOUR-DOMAIN>
+#     path: ^/di(/.*)?$
+#     service: http://localhost:8081
+#   
+#   - hostname: bevattning.<YOUR-DOMAIN>
+#     path: ^/users(/.*)?$
+#     service: http://localhost:8082
+#   
+#   - hostname: bevattning.<YOUR-DOMAIN>
+#     path: ^/api(/.*)?$
+#     service: http://localhost:8000
+#   
+#   - hostname: bevattning.<YOUR-DOMAIN>
+#     path: ^/process(/.*)?$
+#     service: http://localhost:8050
+#   
+#   - hostname: bevattning.<YOUR-DOMAIN>
+#     path: ^/todo(/.*)?$
+#     service: http://localhost:8080
+#   
+#   - hostname: bevattning.<YOUR-DOMAIN>
+#     service: http://localhost:8090  # Default till Dashboard Hub
+#   
+#   - service: http_status:404
+

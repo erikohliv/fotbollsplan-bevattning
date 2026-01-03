@@ -3,9 +3,12 @@
 Digital Input Monitor - Web UI
 Visar realtids-status för alla digitala ingångar (DI1-DI12) via webb
 """
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify, render_template_string, session, redirect, url_for, request
 from flask_cors import CORS
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 import os
+import secrets
+import requests
 from dotenv import load_dotenv
 
 load_dotenv("api_.env")
@@ -20,12 +23,35 @@ except ImportError:
 from di_config import get_di_info, get_status_text, is_alarm
 
 app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(32))
 CORS(app)
+
+# Flask-Login setup
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
 
 # Modbus-konfiguration
 MODBUS_HOST = os.getenv('MODBUS_HOST', '127.0.0.1')
 MODBUS_PORT = int(os.getenv('MODBUS_PORT', '502'))
 MODBUS_UNIT = int(os.getenv('MODBUS_UNIT', '1'))
+API_BASE = os.getenv('API_URL', 'http://localhost:8000')
+
+
+# Flask-Login User class
+class User(UserMixin):
+    def __init__(self, username, is_admin=False):
+        self.id = username
+        self.username = username
+        self.is_admin = is_admin
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    """Load user from session"""
+    if 'username' in session:
+        return User(session['username'], session.get('is_admin', False))
+    return None
 
 # DI-beskrivningar
 DI_DESCRIPTIONS = {
@@ -65,7 +91,50 @@ def read_digital_inputs():
         return None, str(e)
 
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login-sida"""
+    if request.method == 'POST':
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        
+        # Verifiera mot API
+        try:
+            r = requests.get(
+                f'{API_BASE}/users/list',
+                auth=(username, password),
+                timeout=2
+            )
+            
+            if r.status_code == 200:
+                session['username'] = username
+                session['password'] = password
+                session['is_admin'] = False
+                
+                user = User(username, session.get('is_admin', False))
+                login_user(user)
+                
+                return jsonify({'ok': True})
+            else:
+                return jsonify({'ok': False, 'error': 'Felaktigt användarnamn eller lösenord'}), 401
+        except Exception as e:
+            return jsonify({'ok': False, 'error': f'Anslutningsfel: {str(e)}'}), 500
+    
+    return render_template_string(LOGIN_TEMPLATE)
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    """Logga ut"""
+    logout_user()
+    session.clear()
+    return redirect(url_for('login'))
+
+
 @app.route('/')
+@login_required
 def index():
     """Visa DI-monitor UI"""
     return render_template_string(HTML_TEMPLATE)
@@ -86,6 +155,7 @@ def serve_logo():
 
 
 @app.route('/api/digital-inputs')
+@login_required
 def get_digital_inputs():
     """API endpoint för DI-status"""
     bits, error = read_digital_inputs()
@@ -121,6 +191,146 @@ def get_digital_inputs():
         "timestamp": int(os.times().elapsed * 1000)
     })
 
+
+LOGIN_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logga in - DI Monitor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 400px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .error.visible {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>🔌 DI Monitor</h1>
+        <div id="error" class="error"></div>
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label for="username">Användarnamn</label>
+                <input type="text" id="username" required autofocus>
+            </div>
+            <div class="form-group">
+                <label for="password">Lösenord</label>
+                <input type="password" id="password" required>
+            </div>
+            <button type="submit" id="loginBtn">Logga in</button>
+        </form>
+    </div>
+    
+    <script>
+        async function handleLogin(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('loginBtn');
+            const error = document.getElementById('error');
+            
+            btn.disabled = true;
+            btn.textContent = 'Loggar in...';
+            error.classList.remove('visible');
+            
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.ok) {
+                    window.location.href = '/';
+                } else {
+                    error.textContent = data.error || 'Inloggning misslyckades';
+                    error.classList.add('visible');
+                }
+            } catch (err) {
+                error.textContent = 'Anslutningsfel: ' + err.message;
+                error.classList.add('visible');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Logga in';
+            }
+        }
+    </script>
+</body>
+</html>
+"""
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -209,19 +419,19 @@ HTML_TEMPLATE = """
         }
         
         .di-card.active {
-            border-left-color: #ffc107;
-            background: #fff8e1;
+            border-left-color: #2196F3;
+            background: #e3f2fd;
         }
         
         .di-card.alarm {
-            border-left-color: #dc3545;
-            background: #ffe6e6;
+            border-left-color: #ff9800;
+            background: #fff3e0;
             animation: pulse 1.5s ease-in-out infinite;
         }
         
         .di-card.critical.alarm {
-            border-left-color: #8b0000;
-            background: #ffcccc;
+            border-left-color: #d32f2f;
+            background: #ffebee;
             animation: pulse-critical 1s ease-in-out infinite;
         }
         
@@ -272,17 +482,17 @@ HTML_TEMPLATE = """
         }
         
         .di-status.active {
-            background: #fff3cd;
-            color: #856404;
+            background: #e3f2fd;
+            color: #1565c0;
         }
         
         .di-status.alarm {
-            background: #f8d7da;
-            color: #721c24;
+            background: #fff3e0;
+            color: #e65100;
         }
         
         .di-status.critical {
-            background: #dc3545;
+            background: #d32f2f;
             color: white;
         }
         
@@ -370,15 +580,15 @@ HTML_TEMPLATE = """
                 <span>OK / Inaktiv</span>
             </div>
             <div class="legend-item">
-                <div class="legend-box" style="background: #fff3cd;"></div>
-                <span>Aktiv / Tryckt</span>
+                <div class="legend-box" style="background: #e3f2fd;"></div>
+                <span>✓ Tryckt / Aktiv</span>
             </div>
             <div class="legend-item">
-                <div class="legend-box" style="background: #f8d7da;"></div>
-                <span>Larm</span>
+                <div class="legend-box" style="background: #fff3e0;"></div>
+                <span>⚠️ Larm (sensor)</span>
             </div>
             <div class="legend-item">
-                <div class="legend-box" style="background: #dc3545;"></div>
+                <div class="legend-box" style="background: #d32f2f;"></div>
                 <span>🚨 Kritiskt Larm</span>
             </div>
         </div>

@@ -497,6 +497,7 @@ install_systemd_services() {
         "systemd_dashboard-hub.service:dashboard-hub.service"
         "systemd_user-management.service:user-management.service"
         "systemd_dash-process-view.service:dash-process-view.service"
+        "systemd_local-mode-monitor.service:local-mode-monitor.service"
     )
     
     # Installera varje service
@@ -540,6 +541,7 @@ install_systemd_services() {
     systemctl enable user-management.service 2>/dev/null || print_warning "Kunde inte aktivera user-management"
     systemctl enable todo-checklist.service 2>/dev/null || print_warning "Kunde inte aktivera todo-checklist"
     systemctl enable dash-process-view.service 2>/dev/null || print_warning "Kunde inte aktivera dash-process-view"
+    systemctl enable local-mode-monitor.service 2>/dev/null || print_warning "Kunde inte aktivera local-mode-monitor"
     
     print_success "systemd services installerade och aktiverade"
     print_warning "Services startar automatiskt efter omstart"

@@ -129,4 +129,6 @@ if __name__ == '__main__':
         save_state({"items": {}, "last_updated": None})
     
     # Run on all interfaces so it's accessible via Tailscale
-    app.run(host='0.0.0.0', port=8891, debug=False)
+    port = int(os.getenv('TODO_PORT', '8080'))
+    print(f"Starting TODO Checklist on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=False)

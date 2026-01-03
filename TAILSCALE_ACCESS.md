@@ -1,6 +1,38 @@
-# Tailscale Fjärråtkomst
+# Åtkomst till Bevattningssystemet
 
-## Tailscale IP-adress
+**Uppdaterad:** 2026-01-03
+
+---
+
+## 🔐 ÅTKOMSTMETODER
+
+Systemet kan nås på tre sätt beroende på din roll:
+
+### 1. 🏠 Lokalt (samma nätverk)
+```
+http://<raspberry-pi-ip>:PORT
+```
+Exempel: `http://10.219.1.116:8090`
+
+### 2. 🔒 Tailscale VPN (för administratörer)
+```
+http://100.124.254.103:PORT
+```
+**Används för:** Administration, användarhantering, felsökning  
+**Kräver:** Tailscale-appen installerad på din enhet
+
+### 3. 🌐 Cloudflare Tunnel (för slutanvändare)
+```
+https://<cloudflare-tunnel-url>
+```
+**Används för:** Slutanvändare, mobil åtkomst, publik åtkomst  
+**Kräver:** Endast webbläsare (ingen app behövs)
+
+---
+
+## 🔒 TAILSCALE VPN (ADMINISTRATÖRER)
+
+### Tailscale IP-adress
 ```
 100.124.254.103
 ```
@@ -118,5 +150,42 @@ sudo systemctl enable tailscaled
 - ⚠️ Se till att din jobbdator har Tailscale installerat och inloggat
 
 ---
-**Senast uppdaterat:** 2026-01-01
+
+## 🌐 CLOUDFLARE TUNNEL (SLUTANVÄNDARE)
+
+### Nginx Reverse Proxy
+Systemet använder Nginx som reverse proxy för att exponera alla tjänster via en enda URL.
+
+**Routing:**
+- `/` → Dashboard Hub (port 8090)
+- `/di` → DI Monitor (port 8081)
+- `/process` → Process View (port 8050)
+- `/users` → Användarhantering (port 8082)
+- `/api` → API (port 8000)
+- `/todo` → TODO Checklist (port 8080)
+
+### Åtkomst
+Slutanvändare får en Cloudflare Tunnel URL i välkomstmailet:
+```
+https://<tunnel-url>.trycloudflare.com
+```
+
+**Fördelar:**
+- ✅ Ingen VPN behövs
+- ✅ Fungerar från vilken webbläsare som helst
+- ✅ Fungerar på mobil och dator
+- ✅ Alla tjänster via samma URL
+
+**Se [CLOUDFLARE_TUNNEL_GUIDE.md](CLOUDFLARE_TUNNEL_GUIDE.md) för teknisk konfiguration.**
+
+---
+
+## 📖 ANVÄNDARGUIDE
+
+För instruktioner om hur användare loggar in, se:
+**[ANVANDARINLOGGNING_GUIDE.md](ANVANDARINLOGGNING_GUIDE.md)**
+
+---
+
+**Senast uppdaterat:** 2026-01-03  
 **Tailscale hostname:** fotbollsplan-plc-1

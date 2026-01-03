@@ -3,21 +3,46 @@
 Dashboard Hub - Central kontrollpanel för bevattningssystemet
 Visar översikt och länkar till alla webbgränssnitt
 """
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify, render_template_string, session, redirect, url_for, request
 from flask_cors import CORS
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 import os
 import requests
 from dotenv import load_dotenv
 from datetime import datetime
+import secrets
 
 load_dotenv("api_.env")
 
 app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(32))
 CORS(app)
+
+# Flask-Login setup
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
 
 # Konfiguration
 API_KEY = os.getenv('API_KEY', 'kamp')
+API_BASE = os.getenv('API_URL', 'http://localhost:8000')
 BASE_IP = os.getenv('DASHBOARD_IP', '10.219.1.116')
+
+
+# Flask-Login User class
+class User(UserMixin):
+    def __init__(self, username, is_admin=False):
+        self.id = username
+        self.username = username
+        self.is_admin = is_admin
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    """Load user from session"""
+    if 'username' in session:
+        return User(session['username'], session.get('is_admin', False))
+    return None
 
 # Webb-gränssnitt
 SERVICES = {
@@ -71,7 +96,50 @@ def check_service_health(port):
         return False
 
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login-sida"""
+    if request.method == 'POST':
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        
+        # Verifiera mot API
+        try:
+            r = requests.get(
+                f'{API_BASE}/users/list',
+                auth=(username, password),
+                timeout=2
+            )
+            
+            if r.status_code == 200:
+                session['username'] = username
+                session['password'] = password
+                session['is_admin'] = False  # Kan uppdateras från user_list om behövs
+                
+                user = User(username, session.get('is_admin', False))
+                login_user(user)
+                
+                return jsonify({'ok': True})
+            else:
+                return jsonify({'ok': False, 'error': 'Felaktigt användarnamn eller lösenord'}), 401
+        except Exception as e:
+            return jsonify({'ok': False, 'error': f'Anslutningsfel: {str(e)}'}), 500
+    
+    return render_template_string(LOGIN_TEMPLATE)
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    """Logga ut"""
+    logout_user()
+    session.clear()
+    return redirect(url_for('login'))
+
+
 @app.route('/')
+@login_required
 def index():
     """Visa Dashboard Hub"""
     return render_template_string(HTML_TEMPLATE)
@@ -92,6 +160,7 @@ def serve_logo():
 
 
 @app.route('/api/overview')
+@login_required
 def get_overview():
     """API endpoint för dashboard-översikt"""
     system = get_system_status()
@@ -134,6 +203,146 @@ def get_overview():
         'timestamp': datetime.now().isoformat()
     })
 
+
+LOGIN_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logga in - Dashboard Hub</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 400px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .error.visible {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>🌱 Dashboard Hub</h1>
+        <div id="error" class="error"></div>
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label for="username">Användarnamn</label>
+                <input type="text" id="username" required autofocus>
+            </div>
+            <div class="form-group">
+                <label for="password">Lösenord</label>
+                <input type="password" id="password" required>
+            </div>
+            <button type="submit" id="loginBtn">Logga in</button>
+        </form>
+    </div>
+    
+    <script>
+        async function handleLogin(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('loginBtn');
+            const error = document.getElementById('error');
+            
+            btn.disabled = true;
+            btn.textContent = 'Loggar in...';
+            error.classList.remove('visible');
+            
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.ok) {
+                    window.location.href = '/';
+                } else {
+                    error.textContent = data.error || 'Inloggning misslyckades';
+                    error.classList.add('visible');
+                }
+            } catch (err) {
+                error.textContent = 'Anslutningsfel: ' + err.message;
+                error.classList.add('visible');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Logga in';
+            }
+        }
+    </script>
+</body>
+</html>
+"""
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -506,7 +715,7 @@ HTML_TEMPLATE = """
                             Realtidsövervakning av knappar och sensorer. 
                             Uppdateras var 0.5 sekund.
                         </p>
-                        <a href="#" onclick="openService(8081); return false;" class="open-button">Öppna DI Monitor</a>
+                        <a href="#" onclick="openService('/di'); return false;" class="open-button">Öppna DI Monitor</a>
                     </div>
                 </div>
                 
@@ -523,7 +732,7 @@ HTML_TEMPLATE = """
                             Starta/stoppa zoner, konfigurera system, 
                             sensor-fallback och zonhantering.
                         </p>
-                        <a href="#" onclick="openService(8000); return false;" class="open-button">Öppna Styrpanel</a>
+                        <a href="#" onclick="openService('/api'); return false;" class="open-button">Öppna Styrpanel</a>
                     </div>
                 </div>
                 
@@ -540,7 +749,7 @@ HTML_TEMPLATE = """
                             Visuell fotbollsplan med zonöversikt, 
                             regnprognos och väderdata.
                         </p>
-                        <a href="#" onclick="openService(8050); return false;" class="open-button">Öppna Process View</a>
+                        <a href="#" onclick="openService('/process'); return false;" class="open-button">Öppna Process View</a>
                     </div>
                 </div>
                 
@@ -557,7 +766,7 @@ HTML_TEMPLATE = """
                             Skapa och hantera användarkonton. 
                             Kräver superadmin-inloggning.
                         </p>
-                        <a href="#" onclick="openService(8082); return false;" class="open-button">Öppna Användarhantering</a>
+                        <a href="#" onclick="openService('/users'); return false;" class="open-button">Öppna Användarhantering</a>
                     </div>
                 </div>
                 
@@ -574,7 +783,7 @@ HTML_TEMPLATE = """
                             Checklista för installation, tester 
                             och driftsättning av systemet.
                         </p>
-                        <a href="#" onclick="openService(8080); return false;" class="open-button">Öppna TODO Lista</a>
+                        <a href="#" onclick="openService('/todo'); return false;" class="open-button">Öppna TODO Lista</a>
                     </div>
                 </div>
             </div>
@@ -692,9 +901,10 @@ HTML_TEMPLATE = """
         setInterval(updateTime, 1000);  // Uppdatera tid varje sekund
         
         // Helper function för att öppna tjänster med dynamisk host
-        function openService(port) {
-            const host = window.location.hostname;
-            window.open(`http://${host}:${port}`, '_blank');
+        function openService(path) {
+            // Använd samma protokoll och host som vi är på (fungerar med Nginx reverse proxy)
+            const baseUrl = window.location.origin;
+            window.open(`${baseUrl}${path}`, '_blank');
         }
     </script>
 </body>

@@ -16,10 +16,12 @@ from typing import Dict, Any, List
 
 import dash
 from dash import dcc, html, Input, Output, State, callback_context
+import dash_auth
 import plotly.graph_objects as go
 import plotly.express as px
 from dotenv import load_dotenv
 import requests
+from user_management import UserManager
 
 load_dotenv()
 
@@ -39,6 +41,20 @@ app = dash.Dash(
     title="Bevattning Process View",
     update_title="Uppdaterar...",
     assets_folder='assets'
+)
+
+# Skapa autentiseringsfunktion
+user_manager = UserManager()
+
+def validate_user(username, password):
+    """Validera användare mot user_management systemet"""
+    user = user_manager.verify_user(username, password)
+    return user is not None
+
+# Aktivera Basic Auth
+auth = dash_auth.BasicAuth(
+    app,
+    validate_user
 )
 
 # Färgschema

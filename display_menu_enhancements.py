@@ -145,15 +145,22 @@ def _render_main_menu(self):
     
     > Starta Zon
       Stoppa Pump
+      Användarstyrning
     """
     self.lcd.clear()
     self.lcd.write_line(0, "  HUVUDMENY", align='center')
     self.lcd.write_line(1, "")
     
-    menu_items = ["Starta Zon", "Stoppa Pump", "Tillbaka"]
-    for i, item in enumerate(menu_items[:2]):  # Max 2 items på skärm
-        prefix = "> " if i == self.menu_selection else "  "
-        self.lcd.write_line(2 + i, prefix + item)
+    menu_items = ["Starta Zon", "Stoppa Pump", "Användarstyrning"]
+    # Visa 2 items i taget med scroll
+    max_items = 2
+    start_idx = max(0, min(self.menu_selection, len(menu_items) - max_items))
+    
+    for i in range(max_items):
+        idx = start_idx + i
+        if idx < len(menu_items):
+            prefix = "> " if idx == self.menu_selection else "  "
+            self.lcd.write_line(2 + i, prefix + menu_items[idx])
 
 
 def _render_zone_select(self):
@@ -294,6 +301,34 @@ def _render_unlocked_confirmation(self):
     self.lcd.write_line(3, " Aktiv i 10 min")
 
 
+def _render_user_control_menu(self):
+    """
+    Användarstyrning-menyn
+    
+    Format (20x4):
+    ANVÄNDARSTYRNING
+    
+    > Aktivera
+      Deaktivera
+    """
+    self.lcd.clear()
+    self.lcd.write_line(0, "ANVÄNDARSTYRNING", align='center')
+    self.lcd.write_line(1, "")
+    
+    try:
+        from user_control import is_user_control_enabled
+        current_status = is_user_control_enabled()
+        status_text = "AKTIVT" if current_status else "INAKTIVT"
+        self.lcd.write_line(1, f" Status: {status_text}", align='center')
+    except:
+        pass
+    
+    options = ["Aktivera", "Deaktivera"]
+    for i, option in enumerate(options):
+        prefix = "> " if i == self.menu_selection else "  "
+        self.lcd.write_line(2 + i, prefix + option)
+
+
 def handle_quick_start(self) -> bool:
     """
     Snabbstart: Håll OK i 3 sekunder från STATUS-vy
@@ -416,15 +451,57 @@ def handle_menu_navigation(self):
             if button == 'up':
                 self.menu_selection = max(0, self.menu_selection - 1)
             elif button == 'down':
-                self.menu_selection = min(2, self.menu_selection + 1)
+                self.menu_selection = min(2, self.menu_selection + 1)  # 3 items: 0, 1, 2
             elif button == 'ok':
                 if self.menu_selection == 0:  # Starta Zon
                     self.menu_state = MenuState.ZONE_SELECT
                 elif self.menu_selection == 1:  # Stoppa Pump
                     self.stop_pump()
                     self.menu_state = MenuState.AUTO_ROTATE
+                elif self.menu_selection == 2:  # Användarstyrning
+                    self.menu_state = MenuState.USER_CONTROL_MENU
             elif button == 'left':
                 self.menu_state = MenuState.AUTO_ROTATE
+        
+        elif self.menu_state == MenuState.USER_CONTROL_MENU:
+            self._render_user_control_menu()
+            button = self.buttons.get_button_press()
+            
+            if button == 'up' or button == 'down':
+                # Toggle mellan Aktivera/Deaktivera
+                self.menu_selection = 1 - self.menu_selection
+            elif button == 'ok':
+                # Aktivera eller deaktivera användarstyrning
+                try:
+                    from user_control import set_user_control, is_user_control_enabled
+                    current_status = is_user_control_enabled()
+                    
+                    if self.menu_selection == 0:  # Aktivera
+                        if not current_status:
+                            set_user_control(True, "arcade_buttons")
+                            self.show_feedback("✅ ANVÄNDARSTYRNING AKTIV", duration=5.0)
+                            self.log_event("Användarstyrning aktiverad")
+                            logger.info("🎮 Användarstyrning aktiverad via arcadknappar!")
+                        else:
+                            self.show_feedback("Redan aktivt!", duration=2.0)
+                    else:  # Deaktivera
+                        if current_status:
+                            set_user_control(False, "arcade_buttons")
+                            self.show_feedback("🔒 ANVÄNDARSTYRNING AV", duration=5.0)
+                            self.log_event("Användarstyrning deaktiverad")
+                            logger.info("🔒 Användarstyrning deaktiverad via arcadknappar!")
+                        else:
+                            self.show_feedback("Redan inaktivt!", duration=2.0)
+                    
+                    time.sleep(2)
+                    self.menu_state = MenuState.MAIN_MENU
+                except Exception as e:
+                    logger.error(f"Kunde inte ändra användarstyrning: {e}")
+                    self.show_feedback("Fel!", duration=2.0)
+                    time.sleep(2)
+                    self.menu_state = MenuState.MAIN_MENU
+            elif button == 'left':
+                self.menu_state = MenuState.MAIN_MENU
         
         elif self.menu_state == MenuState.ZONE_SELECT:
             self._render_zone_select()

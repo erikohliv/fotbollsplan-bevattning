@@ -41,7 +41,7 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login-sida"""
+    """Login-sida - med första-inloggning-hantering"""
     if request.method == 'POST':
         data = request.get_json()
         username = data.get('username')
@@ -56,16 +56,80 @@ def login():
             )
             
             if r.status_code == 200:
+                # Kontrollera om användaren behöver sätta lösenord
+                user_list = r.json().get('users', [])
+                user = next((u for u in user_list if u['username'] == username), None)
+                
+                if user and not user.get('password_set', True):
+                    # Användaren måste sätta lösenord första gången
+                    session['first_login'] = True
+                    session['username'] = username
+                    session['temp_password'] = password
+                    return jsonify({
+                        'ok': True,
+                        'first_login': True,
+                        'message': 'Du måste välja ditt lösenord vid första inloggningen'
+                    })
+                
                 session['logged_in'] = True
                 session['username'] = username
-                session['password'] = password  # Behövs för vidare API-anrop
-                return jsonify({'ok': True})
+                session['password'] = password
+                return jsonify({'ok': True, 'first_login': False})
             else:
                 return jsonify({'ok': False, 'error': 'Felaktigt användarnamn eller lösenord'}), 401
         except Exception as e:
             return jsonify({'ok': False, 'error': f'Anslutningsfel: {str(e)}'}), 500
     
     return render_template_string(LOGIN_TEMPLATE)
+
+
+@app.route('/set-password', methods=['GET', 'POST'])
+def set_password():
+    """Sida för att sätta lösenord vid första inloggning"""
+    if request.method == 'POST':
+        data = request.get_json()
+        username = session.get('username')
+        temp_password = session.get('temp_password')
+        new_password = data.get('new_password')
+        confirm_password = data.get('confirm_password')
+        
+        if not username or not temp_password:
+            return jsonify({'ok': False, 'error': 'Session expired. Please log in again.'}), 401
+        
+        if new_password != confirm_password:
+            return jsonify({'ok': False, 'error': 'Lösenorden matchar inte!'}), 400
+        
+        if len(new_password) < 8:
+            return jsonify({'ok': False, 'error': 'Lösenordet måste vara minst 8 tecken'}), 400
+        
+        try:
+            r = requests.post(
+                f'{API_BASE}/users/set-password',
+                json={
+                    'username': username,
+                    'current_password': temp_password,
+                    'new_password': new_password
+                },
+                timeout=2
+            )
+            
+            if r.status_code == 200:
+                session['logged_in'] = True
+                session['password'] = new_password
+                session.pop('first_login', None)
+                session.pop('temp_password', None)
+                return jsonify({'ok': True})
+            else:
+                data = r.json()
+                return jsonify({'ok': False, 'error': data.get('detail', 'Kunde inte sätta lösenord')}), r.status_code
+        except Exception as e:
+            return jsonify({'ok': False, 'error': f'Anslutningsfel: {str(e)}'}), 500
+    
+    # GET request - visa formulär
+    if 'first_login' not in session:
+        return redirect(url_for('login'))
+    
+    return render_template_string(SET_PASSWORD_TEMPLATE)
 
 
 @app.route('/logout')
@@ -318,7 +382,12 @@ LOGIN_TEMPLATE = """
                 const data = await response.json();
                 
                 if (data.ok) {
-                    window.location.href = '/';
+                    if (data.first_login) {
+                        // Omdirigera till lösenordsval
+                        window.location.href = '/set-password';
+                    } else {
+                        window.location.href = '/';
+                    }
                 } else {
                     errorEl.textContent = data.error || 'Inloggning misslyckades';
                     errorEl.classList.add('visible');
@@ -626,6 +695,10 @@ MAIN_TEMPLATE = """
             
             <div class="add-user-section">
                 <h3>➕ Lägg till ny användare</h3>
+                <p style="font-size: 12px; color: #666; margin-bottom: 15px;">
+                    Ett tillfälligt lösenord genereras automatiskt och skickas via e-post till användaren.
+                    Användaren måste välja sitt eget lösenord vid första inloggningen.
+                </p>
                 
                 <form id="addUserForm" onsubmit="handleAddUser(event)">
                     <div class="form-row">
@@ -637,6 +710,14 @@ MAIN_TEMPLATE = """
                         </div>
                         
                         <div class="form-group">
+                            <label for="newEmail">E-postadress *</label>
+                            <input type="email" id="newEmail" required 
+                                   placeholder="användare@example.com">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
                             <label for="newRole">Roll *</label>
                             <select id="newRole" required>
                                 <option value="false">Operatör</option>
@@ -647,19 +728,17 @@ MAIN_TEMPLATE = """
                     
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="newPassword">Lösenord *</label>
-                            <input type="password" id="newPassword" required minlength="8" 
-                                   placeholder="Minst 8 tecken">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="confirmPassword">Bekräfta lösenord *</label>
-                            <input type="password" id="confirmPassword" required minlength="8" 
-                                   placeholder="Bekräfta lösenord">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" id="receiveAlarms" style="width: auto; margin: 0;">
+                                <span>Ta emot larm via e-post</span>
+                            </label>
+                            <small style="color: #666; display: block; margin-top: 4px;">
+                                Larmen skickas till den registrerade e-postadressen
+                            </small>
                         </div>
                     </div>
                     
-                    <button type="submit" class="btn-primary" id="addUserBtn">Skapa användare</button>
+                    <button type="submit" class="btn-primary" id="addUserBtn">Skapa användare & Skicka välkomstmail</button>
                 </form>
             </div>
         </div>
@@ -697,13 +776,21 @@ MAIN_TEMPLATE = """
                         '<span class="user-badge badge-admin">ADMIN</span>' : 
                         '<span class="user-badge badge-operator">OPERATÖR</span>';
                     
+                    const alarmBadge = user.receive_alarms ? 
+                        '<span class="user-badge" style="background: #ff9800; color: white;">🔔 LARM</span>' : '';
+                    
+                    const emailInfo = user.email ? 
+                        `<div class="user-role">📧 ${user.email}</div>` : '';
+                    
                     html += `
                         <div class="user-card ${roleClass}">
                             <div class="user-info">
                                 <div class="user-name">
                                     ${user.username}
                                     ${roleBadge}
+                                    ${alarmBadge}
                                 </div>
+                                ${emailInfo}
                                 <div class="user-role">
                                     Skapad: ${new Date(user.created_at || Date.now()).toLocaleDateString('sv-SE')}
                                 </div>
@@ -725,24 +812,19 @@ MAIN_TEMPLATE = """
             e.preventDefault();
             
             const username = document.getElementById('newUsername').value;
-            const password = document.getElementById('newPassword').value;
-            const confirmPassword = document.getElementById('confirmPassword').value;
+            const email = document.getElementById('newEmail').value;
             const isAdmin = document.getElementById('newRole').value === 'true';
+            const receiveAlarms = document.getElementById('receiveAlarms').checked;
             const btn = document.getElementById('addUserBtn');
             
-            // Validera lösenord
-            if (password !== confirmPassword) {
-                showMessage('Lösenorden matchar inte!', true);
-                return;
-            }
-            
-            if (password.length < 8) {
-                showMessage('Lösenordet måste vara minst 8 tecken', true);
+            // Validera e-post
+            if (!email || !email.includes('@')) {
+                showMessage('Ogiltig e-postadress!', true);
                 return;
             }
             
             btn.disabled = true;
-            btn.textContent = 'Skapar...';
+            btn.textContent = 'Skapar & skickar mail...';
             
             try {
                 const response = await fetch('/api/users/create', {
@@ -750,15 +832,17 @@ MAIN_TEMPLATE = """
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         username: username,
-                        password: password,
-                        is_admin: isAdmin
+                        password: null,  // Generera tillfälligt lösenord
+                        is_admin: isAdmin,
+                        email: email,
+                        receive_alarms: receiveAlarms
                     })
                 });
                 
                 const data = await response.json();
                 
                 if (data.ok) {
-                    showMessage(`✅ Användare "${username}" skapad!`);
+                    showMessage(`✅ Användare "${username}" skapad! Välkomstmail skickat till ${email}`);
                     document.getElementById('addUserForm').reset();
                     loadUsers();
                 } else {
@@ -768,7 +852,7 @@ MAIN_TEMPLATE = """
                 showMessage('Fel: ' + error.message, true);
             } finally {
                 btn.disabled = false;
-                btn.textContent = 'Skapa användare';
+                btn.textContent = 'Skapa användare & Skicka välkomstmail';
             }
         }
         

@@ -108,6 +108,7 @@ class MenuState(IntEnum):
     ERROR_VIEW = 8         # Felmeddelande
     UNLOCK_VIEW = 9        # Unlock-prompt
     TIMEOUT_WARNING = 10   # Timeout-varning (60s kvar)
+    USER_CONTROL_MENU = 11 # Användarstyrning-menyn
 
 
 # Display2View and Display2Manager removed in hardware refactor V2
@@ -294,6 +295,7 @@ class ArcadeButtonManager:
         logger.debug(f"Unlock failed: {sequence}")
         return False
     
+    
     def get_time_until_lock(self) -> int:
         """
         Get remaining time before auto-lock in seconds
@@ -414,7 +416,7 @@ class LCD_I2C:
         max_bus_retries = 5
         for bus_attempt in range(max_bus_retries):
             try:
-        self.bus = smbus.SMBus(bus_num)
+                self.bus = smbus.SMBus(bus_num)
                 # Testa att bussen fungerar genom att försöka läsa från displayen
                 try:
                     # Försök läsa en byte (kan misslyckas om displayen inte är redo)
@@ -530,7 +532,7 @@ class LCD_I2C:
         
         # AGGRESSIV CLEAR: Rensa displayen flera gånger för att säkerställa att allt är borta
         for clear_attempt in range(3):
-        self.clear()
+            self.clear()
             time.sleep(0.010)  # Längre delay för clear
         
         # Entry mode: left to right
@@ -797,6 +799,15 @@ class Display1Manager:
         self.error_list = []
         self.error_scroll_index = 0
         self.last_started_zone = 1  # For quick-start
+        
+        # Feedback och händelselogg
+        self.feedback_message = None  # Temporary message
+        self.feedback_expire_time = 0  # When to clear message
+        self.last_event = ""  # Senaste händelse
+        self.last_event_time = ""  # Tidstämpel
+        
+        # DI-övervåkning för knapp-feedback
+        self.prev_di_state = [True] * 12  # Previous DI states
     
     def get_system_status(self) -> Dict[str, Any]:
         """Read current system status from Modbus"""
@@ -863,25 +874,39 @@ class Display1Manager:
         return status
     
     def _render_status_view(self, status: Dict[str, Any]):
-        """Render main status view (20x4)"""
+        """Render main status view (20x4) - FÖRBÄTTRAD MED FEEDBACK"""
         # Line 0: Mode, Zone, Pump
         mode_str = status['mode']
         zone_str = f"Z:{status['selected_zone']}/{status['zone']}"
         pump_str = "PUMP:ON " if status['pump_on'] else "PUMP:OFF"
         line0 = f"{mode_str:6} {zone_str:6} {pump_str:7}"
         
-        # Line 1: Stage and heartbeat
-        steg_str = f"Stage:{status['steg']}"
-        hb_indicator = "*" if (status['heartbeat_cnt'] % 2) == 0 else " "
-        line1 = f"{steg_str:15} HB:{hb_indicator}"
+        # Line 1: Feedback eller Stage
+        # Visa feedback-meddelande om aktivt, annars stage
+        if self.feedback_message and time.time() < self.feedback_expire_time:
+            line1 = self.feedback_message[:20].center(20)
+        elif self.last_event:
+            # Visa senaste händelse
+            line1 = f"{self.last_event[:20]}"
+        else:
+            # Standard: Stage och heartbeat
+            steg_str = f"Stage:{status['steg']}"
+            hb_indicator = "*" if (status['heartbeat_cnt'] % 2) == 0 else " "
+            line1 = f"{steg_str:15} HB:{hb_indicator}"
         
-        # Line 2: Environmental conditions
-        line2 = f"T:{status['temp']:2}C M:{status['moisture']:2}% R:{status['rain']:2}mm"
+        # Line 2: Environmental conditions eller varning för lokalt läge
+        if status.get('switch_mode') == 1:  # Lokalt läge aktivt
+            line2 = "⚠️ LOKALT LÄGE AKTIVT"
+        else:
+            line2 = f"T:{status['temp']:2}C M:{status['moisture']:2}% R:{status['rain']:2}mm"
         
         # Line 3: Block status
         block = status['block_reason']
         if block == BlockReason.OK:
-            line3 = "Status: OK"
+            if status.get('switch_mode') == 1:  # Lokalt läge aktivt
+                line3 = "Fjärrkommandon blockade"
+            else:
+                line3 = "Status: OK"
         elif block == BlockReason.RAIN_THRESHOLD:
             line3 = "Block: Rain"
         elif block == BlockReason.MOISTURE_THRESHOLD:
@@ -923,16 +948,27 @@ class Display1Manager:
         self.lcd.write_line(3, f"Time: {now}")
     
     def _render_mode_status_view(self, status: Dict[str, Any]):
-        """Render mode status view (Lokal/Fjärr-styrning)"""
+        """Render mode status view (Lokal/Fjärr-styrning) - MED VARNING"""
         self.lcd.write_line(0, "STYRNINGSLÄGE", align='center')
         self.lcd.write_line(1, "", align='center')
         self.lcd.write_line(2, status['switch_mode_text'], align='center')
-        self.lcd.write_line(3, "", align='center')
+        
+        # Visa varning om lokalt läge är aktivt
+        if status.get('switch_mode') == 1:  # Lokalt läge
+            self.lcd.write_line(3, "⚠️ Fjärrkommandon blockade", align='center')
+        else:
+            self.lcd.write_line(3, "", align='center')
     
     def update_display(self):
-        """Update display with current view"""
+        """Update display with current view - MED KNAPP-FEEDBACK"""
         try:
             status = self.get_system_status()
+            
+            # Övervaka DI för knapp-feedback
+            self._check_button_feedback()
+            
+            # Övervaka pump-status för kommando-bekräftelse
+            self._check_pump_status_change(status)
             
             if self.current_view == Display1View.STATUS:
                 self._render_status_view(status)
@@ -949,16 +985,393 @@ class Display1Manager:
         except Exception as e:
             logger.error(f"Error updating Display 1: {e}")
     
+    def _check_button_feedback(self):
+        """Kontrollera DI för knapptryck och visa feedback"""
+        try:
+            # Läs DI-status från Modbus
+            di_regs = self.modbus.read_discrete_inputs(0, 6)  # DI1-DI6 (knappar)
+            if not di_regs:
+                return
+            
+            current_di = di_regs[:6]
+            
+            # Kontrollera varje knapp för tryck (falling edge: HIGH → LOW)
+            button_names = {
+                0: "STOPP TRYCKT!",
+                1: "START TRYCKT! ⚡",
+                3: "RESET TRYCKT!",
+                4: "AUTO-LÄGE ⚙",
+                5: "MANUAL-LÄGE ⚙"
+            }
+            
+            for i, name in button_names.items():
+                # Falling edge: Previous HIGH and current LOW = knapp just tryckt
+                if self.prev_di_state[i] and not current_di[i]:
+                    self.show_feedback(name, duration=2.0)
+                    logger.info(f"Button feedback: {name}")
+            
+            # Uppdatera previous state
+            self.prev_di_state[:6] = current_di
+            
+        except Exception as e:
+            logger.debug(f"Button feedback check error: {e}")
+    
+    def _check_pump_status_change(self, status: Dict[str, Any]):
+        """Övervaka pump-status för bekräftelse-meddelanden"""
+        current_pump = status.get('pump_on', False)
+        previous_pump = self.last_data.get('pump_on', False)
+        
+        # Pump started
+        if current_pump and not previous_pump:
+            self.show_feedback("✓ PUMP STARTAR...", duration=3.0)
+            self.log_event("Pump startad")
+            logger.info("Pump started - displaying confirmation")
+        
+        # Pump stopped
+        elif not current_pump and previous_pump:
+            self.show_feedback("✓ PUMP STOPPAD", duration=3.0)
+            self.log_event("Pump stoppad")
+            logger.info("Pump stopped - displaying confirmation")
+    
+    def show_feedback(self, message: str, duration: float = 2.0):
+        """Visa feedback-meddelande på display"""
+        self.feedback_message = message
+        self.feedback_expire_time = time.time() + duration
+    
+    def log_event(self, event: str):
+        """Logga händelse med tidstämpel"""
+        now = datetime.now()
+        self.last_event = f"{event} {now.strftime('%H:%M')}"
+        self.last_event_time = now.strftime('%H:%M:%S')
+    
+    def _check_user_control_sequence(self):
+        """DEPRECATED - Användarstyrning aktiveras via menyn, inte sekvens"""
+        # Denna metod används inte längre - användarstyrning aktiveras via menyn
+        pass
+    
+    def render_progressbar(self, percent: int, width: int = 10) -> str:
+        """Render ASCII progressbar"""
+        filled = int((percent / 100.0) * width)
+        bar = '█' * filled + '-' * (width - filled)
+        return f"[{bar}]"
+    
+    def _render_unlock_view(self):
+        """Visa unlock-prompt"""
+        self.lcd.clear()
+        self.lcd.write_line(0, "   🔒 LÅST 🔒", align='center')
+        self.lcd.write_line(1, "")
+        self.lcd.write_line(2, " Tryck sekvens:")
+        self.lcd.write_line(3, " NER→UPP→UPP→OK")
+    
+    def _render_timeout_warning(self):
+        """Visa timeout-varning (60s kvar)"""
+        remaining = self.buttons.get_time_until_lock()
+        self.lcd.clear()
+        self.lcd.write_line(0, "  AUTO-LOCK OM", align='center')
+        self.lcd.write_line(1, f"    {remaining} SEK", align='center')
+        self.lcd.write_line(2, " Tryck knapp för")
+        self.lcd.write_line(3, "   att förlänga")
+    
+    def _render_unlocked_confirmation(self):
+        """Bekräfta upplåsning"""
+        self.lcd.clear()
+        self.lcd.write_line(0, "")
+        self.lcd.write_line(1, "   ✓ UPPLÅST", align='center')
+        self.lcd.write_line(2, "")
+        self.lcd.write_line(3, " Aktiv i 10 min")
+    
+    def _render_main_menu(self):
+        """Huvudmeny"""
+        self.lcd.clear()
+        self.lcd.write_line(0, "  HUVUDMENY", align='center')
+        self.lcd.write_line(1, "")
+        menu_items = ["Starta Zon", "Stoppa Pump", "Användarstyrning"]
+        max_items = 2
+        start_idx = max(0, min(self.menu_selection, len(menu_items) - max_items))
+        for i in range(max_items):
+            idx = start_idx + i
+            if idx < len(menu_items):
+                prefix = "> " if idx == self.menu_selection else "  "
+                self.lcd.write_line(2 + i, prefix + menu_items[idx])
+    
+    def _render_user_control_menu(self):
+        """Användarstyrning-menyn"""
+        self.lcd.clear()
+        self.lcd.write_line(0, "ANVÄNDARSTYRNING", align='center')
+        self.lcd.write_line(1, "")
+        try:
+            from user_control import is_user_control_enabled
+            current_status = is_user_control_enabled()
+            status_text = "AKTIVT" if current_status else "INAKTIVT"
+            self.lcd.write_line(1, f" Status: {status_text}", align='center')
+        except:
+            pass
+        options = ["Aktivera", "Deaktivera"]
+        for i, option in enumerate(options):
+            prefix = "> " if i == self.menu_selection else "  "
+            self.lcd.write_line(2 + i, prefix + option)
+    
+    def _render_zone_select(self):
+        """Zonval"""
+        self.lcd.clear()
+        self.lcd.write_line(0, "   VÄLJ ZON", align='center')
+        self.lcd.write_line(1, "")
+        start_zone = max(1, self.selected_zone - 1)
+        for i in range(2):
+            zone_num = start_zone + i
+            if zone_num <= 7:
+                prefix = "> " if zone_num == self.selected_zone else "  "
+                self.lcd.write_line(2 + i, f"{prefix}Zon {zone_num}")
+    
+    def _render_time_select(self):
+        """Tidsval (minuter)"""
+        self.lcd.clear()
+        self.lcd.write_line(0, "   VÄLJ TID", align='center')
+        self.lcd.write_line(1, "")
+        self.lcd.write_line(2, f"  {self.selected_time} minuter", align='center')
+        self.lcd.write_line(3, " UPP/NER ändra")
+    
+    def _render_schedule_select(self):
+        """Schemaläggning: Nu eller senare?"""
+        self.lcd.clear()
+        self.lcd.write_line(0, "  STARTA ZON", align='center')
+        self.lcd.write_line(1, "")
+        options = ["Starta Nu", "Schemalägg"]
+        for i, option in enumerate(options):
+            prefix = "> " if i == self.selected_schedule_mode else "  "
+            self.lcd.write_line(2 + i, prefix + option)
+    
+    def _render_schedule_time(self):
+        """Välj starttid (HH:MM)"""
+        self.lcd.clear()
+        self.lcd.write_line(0, " VÄLJ STARTTID", align='center')
+        self.lcd.write_line(1, "")
+        time_str = f"{self.selected_hour:02d}:{self.selected_minute:02d}"
+        self.lcd.write_line(2, f"    {time_str}", align='center')
+        self.lcd.write_line(3, "UPP/NER ändra tim")
+    
+    def _render_confirm(self):
+        """Bekräfta start"""
+        self.lcd.clear()
+        self.lcd.write_line(0, f" STARTA ZON {self.selected_zone}?", align='center')
+        if self.selected_schedule_mode == 0:
+            self.lcd.write_line(1, f"   {self.selected_time} min", align='center')
+        else:
+            time_str = f"{self.selected_hour:02d}:{self.selected_minute:02d}"
+            self.lcd.write_line(1, f"  Kl {time_str}", align='center')
+        self.lcd.write_line(2, "[OK] Starta")
+        self.lcd.write_line(3, "[←] Avbryt")
+    
+    def _render_running(self, status: Dict[str, Any]):
+        """Körning pågår"""
+        self.lcd.clear()
+        zone = status.get('zone', self.selected_zone)
+        self.lcd.write_line(0, f" ✓ ZON {zone} STARTAR", align='center')
+        self.lcd.write_line(1, "")
+        self.lcd.write_line(2, "  Återgår till")
+        self.lcd.write_line(3, "    status...")
+    
+    def handle_quick_start(self) -> bool:
+        """Snabbstart: Håll OK i 3 sekunder från STATUS-vy"""
+        for i in range(3, 0, -1):
+            buttons = self.buttons.read_buttons()
+            if not buttons.get('ok'):
+                return False
+            self.lcd.clear()
+            self.lcd.write_line(0, "   SNABBSTART", align='center')
+            self.lcd.write_line(1, "")
+            self.lcd.write_line(2, f" Startar Zon {self.last_started_zone}", align='center')
+            self.lcd.write_line(3, f"    i {i} sek...", align='center')
+            time.sleep(1)
+        self.start_zone(self.last_started_zone, self.selected_time)
+        return True
+    
+    def start_zone(self, zone: int, duration_minutes: int):
+        """Starta bevattning av zon via Modbus"""
+        logger.info(f"🚿 Startar Zon {zone}, {duration_minutes} min")
+        self.modbus.write_register(70, zone)  # MW_MANUAL_ZONE
+        self.modbus.write_register(71, duration_minutes)  # MW_MANUAL_TIME
+        self.modbus.write_register(60, 2)  # MW_MANUAL_START = 2
+        self.last_started_zone = zone
+    
+    def stop_pump(self):
+        """Stoppa pump via Modbus"""
+        logger.info("🛑 Stoppar pump")
+        self.modbus.write_register(60, 0)  # MW_MANUAL_START = 0
+    
     def _rotation_loop(self):
-        """Background thread for auto-rotating views"""
+        """Background thread for auto-rotating views and menu navigation"""
         view_count = 5  # Updated to include MODE_STATUS view
+        
         while self.running:
             try:
-                self.update_display()
-                time.sleep(self.update_interval)
+                # Check lock status
+                if self.buttons.locked:
+                    self._render_unlock_view()
+                    if self.buttons.check_unlock_sequence():
+                        self._render_unlocked_confirmation()
+                        time.sleep(2)
+                        self.menu_state = MenuState.AUTO_ROTATE
+                    time.sleep(0.5)
+                    continue
                 
-                # Rotate to next view
-                self.current_view = Display1View((self.current_view + 1) % view_count)
+                # Check timeout warning
+                if self.buttons.check_lock_timeout():
+                    self._render_timeout_warning()
+                    time.sleep(2)
+                    continue
+                
+                # Handle menu states
+                if self.menu_state == MenuState.AUTO_ROTATE:
+                    # Auto-rotating views
+                    self.update_display()
+                    time.sleep(self.update_interval)
+                    
+                    # Check for button press
+                    button = self.buttons.get_button_press()
+                    if button == 'ok':
+                        # Check for quick-start (hold OK for 3s)
+                        if self.handle_quick_start():
+                            self.menu_state = MenuState.RUNNING
+                        else:
+                            # Open main menu
+                            self.menu_state = MenuState.MAIN_MENU
+                            self.menu_selection = 0
+                    else:
+                        # Rotate to next view
+                        self.current_view = Display1View((self.current_view + 1) % view_count)
+                
+                elif self.menu_state == MenuState.MAIN_MENU:
+                    self._render_main_menu()
+                    button = self.buttons.get_button_press()
+                    if button == 'up':
+                        self.menu_selection = max(0, self.menu_selection - 1)
+                    elif button == 'down':
+                        self.menu_selection = min(2, self.menu_selection + 1)
+                    elif button == 'ok':
+                        if self.menu_selection == 0:  # Starta Zon
+                            self.menu_state = MenuState.ZONE_SELECT
+                        elif self.menu_selection == 1:  # Stoppa Pump
+                            self.stop_pump()
+                            self.menu_state = MenuState.AUTO_ROTATE
+                        elif self.menu_selection == 2:  # Användarstyrning
+                            self.menu_state = MenuState.USER_CONTROL_MENU
+                    elif button == 'left':
+                        self.menu_state = MenuState.AUTO_ROTATE
+                    time.sleep(0.2)
+                
+                elif self.menu_state == MenuState.USER_CONTROL_MENU:
+                    self._render_user_control_menu()
+                    button = self.buttons.get_button_press()
+                    if button == 'up' or button == 'down':
+                        self.menu_selection = 1 - self.menu_selection
+                    elif button == 'ok':
+                        try:
+                            from user_control import set_user_control, is_user_control_enabled
+                            current_status = is_user_control_enabled()
+                            if self.menu_selection == 0:  # Aktivera
+                                if not current_status:
+                                    set_user_control(True, "arcade_buttons")
+                                    self.show_feedback("✅ ANVÄNDARSTYRNING AKTIV", duration=5.0)
+                                    self.log_event("Användarstyrning aktiverad")
+                                    logger.info("🎮 Användarstyrning aktiverad via arcadknappar!")
+                                else:
+                                    self.show_feedback("Redan aktivt!", duration=2.0)
+                            else:  # Deaktivera
+                                if current_status:
+                                    set_user_control(False, "arcade_buttons")
+                                    self.show_feedback("🔒 ANVÄNDARSTYRNING AV", duration=5.0)
+                                    self.log_event("Användarstyrning deaktiverad")
+                                    logger.info("🔒 Användarstyrning deaktiverad via arcadknappar!")
+                                else:
+                                    self.show_feedback("Redan inaktivt!", duration=2.0)
+                            time.sleep(2)
+                            self.menu_state = MenuState.MAIN_MENU
+                        except Exception as e:
+                            logger.error(f"Kunde inte ändra användarstyrning: {e}")
+                            self.show_feedback("Fel!", duration=2.0)
+                            time.sleep(2)
+                            self.menu_state = MenuState.MAIN_MENU
+                    elif button == 'left':
+                        self.menu_state = MenuState.MAIN_MENU
+                    time.sleep(0.2)
+                
+                elif self.menu_state == MenuState.ZONE_SELECT:
+                    self._render_zone_select()
+                    button = self.buttons.get_button_press()
+                    if button == 'up':
+                        self.selected_zone = max(1, self.selected_zone - 1)
+                    elif button == 'down':
+                        self.selected_zone = min(7, self.selected_zone + 1)
+                    elif button == 'ok':
+                        self.menu_state = MenuState.TIME_SELECT
+                    elif button == 'left':
+                        self.menu_state = MenuState.MAIN_MENU
+                    time.sleep(0.2)
+                
+                elif self.menu_state == MenuState.TIME_SELECT:
+                    self._render_time_select()
+                    button = self.buttons.get_button_press()
+                    if button == 'up':
+                        self.selected_time = min(60, self.selected_time + 5)
+                    elif button == 'down':
+                        self.selected_time = max(5, self.selected_time - 5)
+                    elif button == 'ok':
+                        self.menu_state = MenuState.SCHEDULE_SELECT
+                    elif button == 'left':
+                        self.menu_state = MenuState.ZONE_SELECT
+                    time.sleep(0.2)
+                
+                elif self.menu_state == MenuState.SCHEDULE_SELECT:
+                    self._render_schedule_select()
+                    button = self.buttons.get_button_press()
+                    if button == 'up' or button == 'down':
+                        self.selected_schedule_mode = 1 - self.selected_schedule_mode
+                    elif button == 'ok':
+                        if self.selected_schedule_mode == 0:
+                            self.menu_state = MenuState.CONFIRM
+                        else:
+                            self.menu_state = MenuState.SCHEDULE_TIME
+                    elif button == 'left':
+                        self.menu_state = MenuState.TIME_SELECT
+                    time.sleep(0.2)
+                
+                elif self.menu_state == MenuState.SCHEDULE_TIME:
+                    self._render_schedule_time()
+                    button = self.buttons.get_button_press()
+                    if button == 'up':
+                        self.selected_hour = (self.selected_hour + 1) % 24
+                    elif button == 'down':
+                        self.selected_hour = (self.selected_hour - 1) % 24
+                    elif button == 'ok':
+                        self.menu_state = MenuState.CONFIRM
+                    elif button == 'left':
+                        self.menu_state = MenuState.SCHEDULE_SELECT
+                    time.sleep(0.2)
+                
+                elif self.menu_state == MenuState.CONFIRM:
+                    self._render_confirm()
+                    button = self.buttons.get_button_press()
+                    if button == 'ok':
+                        self.start_zone(self.selected_zone, self.selected_time)
+                        self.menu_state = MenuState.RUNNING
+                        status = self.get_system_status()
+                        self._render_running(status)
+                        time.sleep(3)
+                        self.menu_state = MenuState.AUTO_ROTATE
+                    elif button == 'left':
+                        self.menu_state = MenuState.SCHEDULE_SELECT
+                    time.sleep(0.2)
+                
+                elif self.menu_state == MenuState.RUNNING:
+                    status = self.get_system_status()
+                    self._render_running(status)
+                    time.sleep(1)
+                    self.menu_state = MenuState.AUTO_ROTATE
+                
+                else:
+                    time.sleep(0.1)
+                    
             except Exception as e:
                 logger.error(f"Error in Display 1 rotation loop: {e}")
                 time.sleep(1)

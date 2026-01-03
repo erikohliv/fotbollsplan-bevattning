@@ -1,0 +1,20 @@
+[Unit]
+Description=Local Mode Monitor - Övervakar lokalt läge och skickar e-postvarning
+After=network.target unipi-modbus.service
+Wants=unipi-modbus.service
+
+[Service]
+Type=simple
+User=kamp
+Group=kamp
+WorkingDirectory=/home/kamp/fotbollsplan-bevattning
+Environment="PATH=/home/kamp/fotbollsplan-bevattning/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/kamp/fotbollsplan-bevattning/.venv/bin/python3 /home/kamp/fotbollsplan-bevattning/local_mode_monitor.py
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

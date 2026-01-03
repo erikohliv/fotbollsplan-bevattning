@@ -1,9 +1,12 @@
 import logging
 import os
 import time
+import smtplib
+import ssl
 from typing import Optional
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from email.message import EmailMessage
 
 from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.responses import HTMLResponse
@@ -132,8 +135,29 @@ except ImportError:
 
 
 def require_key(x_api_key: Optional[str]):
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    """
+    Kräv API-nyckel ELLER användarstyrning-läge.
+    
+    Om användarstyrning är aktivt, accepterar vi alla förfrågningar
+    (användarautentisering hanteras i webbgränssnittet via session).
+    """
+    # Standard: kräv API-nyckel
+    if x_api_key == API_KEY:
+        return  # API-nyckel OK
+    
+    # Kontrollera om användarstyrning är aktivt
+    try:
+        from user_control import is_user_control_enabled
+        if is_user_control_enabled():
+            # Användarstyrning aktivt - acceptera alla förfrågningar
+            # (användarautentisering hanteras i webbgränssnittet)
+            logger.debug("User control enabled - accepting request without API key")
+            return
+    except ImportError:
+        pass  # user_control module not available, fall back to API key only
+    
+    # Ingen matchning - kräv API-nyckel
+    raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def require_superadmin(credentials: HTTPBasicCredentials = Depends(security)):
@@ -315,6 +339,23 @@ def status(x_api_key: Optional[str] = Header(None)):
     # Relä 8 är pumpen
     pump_on = hw.get_relay_state(8)
     
+    # Läs mode switch (MW100) från PLC
+    switch_mode = 2  # Default: fjärrläge
+    switch_mode_text = "Fjärrläge aktivt"
+    try:
+        with get_modbus_connection() as client:
+            mode_reg = client.read_holding_registers(MW_MODE, 1, device_id=MODBUS_UNIT)
+            if mode_reg and not mode_reg.isError():
+                switch_mode = mode_reg.registers[0] if mode_reg.registers else 2
+                if switch_mode == 1:
+                    switch_mode_text = "Lokalt läge aktivt"
+                elif switch_mode == 2:
+                    switch_mode_text = "Fjärrläge aktivt"
+                else:
+                    switch_mode_text = "Inget läge valt"
+    except Exception as e:
+        logger.debug(f"Could not read mode switch: {e}")
+    
     return {
         "zone": active_zone if active_zone else 0,
         "active_zone": active_zone,
@@ -326,6 +367,9 @@ def status(x_api_key: Optional[str] = Header(None)):
         },
         "mode": 2,  # Fjärrläge (direktstyrning via I2C)
         "mode_text": "I2C Direktstyrning",
+        "switch_mode": switch_mode,  # 0=Neutral, 1=Lokalt, 2=Fjärr
+        "switch_mode_text": switch_mode_text,
+        "local_mode_warning": switch_mode == 1,  # True om lokalt läge är aktivt
         "last_update": datetime.now().isoformat()
     }
 
@@ -1098,6 +1142,16 @@ label { font-weight: bold; margin-right: 5px; }
     <img src="/assets/logo" alt="IK Kamp" style="width: 70px; height: 70px;">
   </div>
   
+  <div id="local-mode-warning" style="display: none; margin: 20px 0; padding: 15px; background: #fff3cd; border: 2px solid #ff9800; border-radius: 8px; animation: pulse 1.5s ease-in-out infinite;">
+    <h3 style="margin: 0 0 10px 0; color: #e65100;">⚠️ LOKALT LÄGE AKTIVT</h3>
+    <p style="margin: 5px 0; color: #856404;">
+      Systemet är i lokalt läge. Fjärrkommandon via API/webb kan fortfarande fungera, men rekommenderas att växla tillbaka till fjärrläge när lokalt arbete är klart.
+    </p>
+    <button onclick="setSwitchMode(2)" style="margin-top: 10px; padding: 8px 16px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+      Växla till Fjärrläge
+    </button>
+  </div>
+  
   <div class="quick-stats" id="quick-stats">
     <div class="stat-card">
       <h4>Aktiv Zon</h4>
@@ -1304,6 +1358,14 @@ async function loadStatus() {
     } else {
       pumpCard.classList.add('pump-off');
       pumpCard.classList.remove('pump-on');
+    }
+    
+    // Visa varning om lokalt läge är aktivt
+    const warningDiv = document.getElementById('local-mode-warning');
+    if (d.local_mode_warning || d.switch_mode === 1) {
+      warningDiv.style.display = 'block';
+    } else {
+      warningDiv.style.display = 'none';
     }
     
     // Format detailed status
@@ -2334,8 +2396,288 @@ def zone_control(cmd: ZoneControlCommand, x_api_key: Optional[str] = Header(None
 class CreateUserRequest(BaseModel):
     """Request model for creating a user."""
     username: str
-    password: str
+    password: Optional[str] = None  # Optional - generates temporary password if not provided
     is_admin: bool = False
+    email: Optional[str] = None  # Email for welcome message
+    receive_alarms: bool = False  # Whether user receives alarm emails
+
+
+class SetPasswordRequest(BaseModel):
+    """Request model for setting password (first-time login)."""
+    username: str
+    current_password: str  # Temporary password
+    new_password: str
+
+
+def send_welcome_email(email: str, username: str, temp_password: str, is_admin: bool):
+    """Skicka välkomstmail med instruktioner och tillfälligt lösenord."""
+    smtp_host = os.getenv('SMTP_HOST')
+    smtp_port = int(os.getenv('SMTP_PORT', '587'))
+    smtp_user = os.getenv('SMTP_USER')
+    smtp_pass = os.getenv('SMTP_PASS')
+    smtp_from = os.getenv('SMTP_FROM', smtp_user)
+    
+    if not all([smtp_host, smtp_user, smtp_pass]):
+        logger.warning("SMTP-konfiguration saknas, kan inte skicka välkomstmail")
+        return False
+    
+    # Hämta åtkomst-URLs
+    cloudflare_domain = os.getenv('CLOUDFLARE_DOMAIN', 'bevattning.ik-kamp.se')  # Cloudflare Tunnel domain
+    tailscale_ip = "100.124.254.103"  # Från TAILSCALE_ACCESS.md
+    local_ip = os.getenv('LOCAL_IP', '10.219.1.116')  # Fallback
+    
+    role_text = "Administratör" if is_admin else "Operatör"
+    
+    msg = EmailMessage()
+    msg["Subject"] = f"Välkommen till IK Kamps bevattningssystem - {username}"
+    msg["From"] = smtp_from
+    msg["To"] = email
+    msg.set_content(f"""
+Välkommen till IK Kamps bevattningssystem!
+
+Ditt användarkonto har skapats:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Användarnamn: {username}
+Roll: {role_text}
+Tillfälligt lösenord: {temp_password}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+VIKTIGT: Du måste logga in och välja ditt eget lösenord vid första inloggningen!
+
+INLOGGNING (ENKELT - INGEN VPN BEHÖVS):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Du kan logga in direkt från vilken webbläsare som helst, var du än är!
+
+1. Öppna Dashboard Hub i din webbläsare:
+   https://{cloudflare_domain}
+
+2. Logga in med:
+   • Användarnamn: {username}
+   • Lösenord: {temp_password}
+
+3. Vid första inloggning måste du välja ditt eget lösenord.
+   (Du kommer automatiskt att omdirigeras till lösenordsinställning)
+
+4. Från Dashboard Hub når du alla andra funktioner:
+   • Bevattningsstyrning
+   • Sensor-övervakning (DI Monitor)
+   • Process-visualisering
+   • Användarhantering
+   • m.m.
+
+INGEN EXTRA APP BEHÖVS!
+Du behöver bara en webbläsare (Chrome, Safari, Firefox, etc.)
+Fungerar på dator, mobil och surfplatta.
+
+ALTERNATIV: TAILSCALE VPN (för privat åtkomst):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Om du föredrar privat VPN-åtkomst kan du använda Tailscale:
+
+Steg 1: Installera Tailscale
+   • Gå till: https://tailscale.com/download
+   • Välj din enhet (Windows/Mac/iPhone/Android)
+   • Installera appen (tar ca 2 minuter)
+
+Steg 2: Logga in
+   • Öppna Tailscale-appen
+   • Klicka på "Sign in"
+   • Logga in med: erik.ohliv@gmail.com
+   • Följ instruktionerna (enkel inloggning via webbläsare)
+
+Steg 3: Öppna Dashboard Hub
+   • http://{tailscale_ip}:8090
+   • Logga in med samma användarnamn och lösenord
+
+SÄKERHET:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Detta tillfälliga lösenord är endast för första inloggningen
+• Du måste välja ett nytt lösenord vid första inloggning
+• Använd ett starkt lösenord (minst 8 tecken)
+• Dela inte ditt lösenord med andra
+
+LOKAL ÅTKOMST (om du är på samma nätverk):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Dashboard Hub: http://{local_ip}:8090
+(Ingen extra app behövs - använd bara webbläsare)
+
+OBS: Om du är på samma nätverk som systemet kan du använda den lokala
+IP-adressen ovan. Annars använd den publika URL:en ovan (https://...)
+
+SUPPORT:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Om du har frågor eller problem, kontakta systemadministratören.
+
+Välkommen till IK Kamp!
+Bevattningssystem
+""")
+    
+    # Add HTML version with logo
+    html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }}
+        .header {{
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 3px solid #2c5aa0;
+        }}
+        .logo {{
+            max-width: 200px;
+            height: auto;
+        }}
+        .section {{
+            margin: 20px 0;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 8px;
+        }}
+        .credentials {{
+            background: #e3f2fd;
+            padding: 15px;
+            border-left: 4px solid #2c5aa0;
+            margin: 20px 0;
+        }}
+        .button {{
+            display: inline-block;
+            padding: 12px 30px;
+            background: #2c5aa0;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 10px 0;
+        }}
+        .footer {{
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #ddd;
+            color: #666;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="https://raw.githubusercontent.com/erikohliv/fotbollsplan-bevattning/main/ik_kamp_logo.jpg" alt="IK Kamp" class="logo">
+        <h1>Välkommen till IK Kamps bevattningssystem!</h1>
+    </div>
+    
+    <div class="section">
+        <h2>Ditt användarkonto har skapats</h2>
+        <div class="credentials">
+            <strong>Användarnamn:</strong> {username}<br>
+            <strong>Roll:</strong> {role_text}<br>
+            <strong>Tillfälligt lösenord:</strong> {temp_password}
+        </div>
+        <p><strong>⚠️ VIKTIGT:</strong> Du måste logga in och välja ditt eget lösenord vid första inloggningen!</p>
+    </div>
+    
+    <div class="section" style="background: #e8f5e9; border-left: 4px solid #4caf50;">
+        <h2>🚀 Kom igång (ENKELT - INGEN VPN BEHÖVS!)</h2>
+        <p><strong>Du kan logga in direkt från vilken webbläsare som helst, var du än är!</strong></p>
+        
+        <ol style="margin: 15px 0; padding-left: 20px;">
+            <li style="margin: 10px 0;">
+                <strong>Öppna Dashboard Hub i din webbläsare:</strong><br>
+                <a href="https://{cloudflare_domain}" class="button" style="margin-top: 10px;">Öppna Dashboard Hub</a>
+            </li>
+            <li style="margin: 10px 0;">
+                <strong>Logga in med:</strong><br>
+                • Användarnamn: <code>{username}</code><br>
+                • Lösenord: <code>{temp_password}</code>
+            </li>
+            <li style="margin: 10px 0;">
+                <strong>Välj ditt eget lösenord</strong> vid första inloggningen<br>
+                (Du kommer automatiskt att omdirigeras till lösenordsinställning)
+            </li>
+            <li style="margin: 10px 0;">
+                <strong>Från Dashboard Hub når du alla andra funktioner:</strong><br>
+                • Bevattningsstyrning<br>
+                • Sensor-övervakning (DI Monitor)<br>
+                • Process-visualisering<br>
+                • Användarhantering<br>
+                • m.m.
+            </li>
+        </ol>
+        
+        <p style="background: #fff; padding: 10px; border-radius: 5px; margin-top: 15px;">
+            <strong>✅ INGEN EXTRA APP BEHÖVS!</strong><br>
+            Du behöver bara en webbläsare (Chrome, Safari, Firefox, etc.)<br>
+            Fungerar på dator, mobil och surfplatta.
+        </p>
+    </div>
+    
+    <div class="section" style="background: #fff3cd; border-left: 4px solid #ffc107;">
+        <h2>🔐 Alternativ: Tailscale VPN (för privat åtkomst)</h2>
+        <p>Om du föredrar privat VPN-åtkomst kan du använda Tailscale:</p>
+        
+        <h3>Steg 1: Installera Tailscale</h3>
+        <ul>
+            <li>Gå till: <a href="https://tailscale.com/download">https://tailscale.com/download</a></li>
+            <li>Välj din enhet (Windows/Mac/iPhone/Android)</li>
+            <li>Installera appen (tar ca 2 minuter)</li>
+        </ul>
+        
+        <h3>Steg 2: Logga in</h3>
+        <ul>
+            <li>Öppna Tailscale-appen</li>
+            <li>Klicka på "Sign in"</li>
+            <li>Logga in med: <strong>erik.ohliv@gmail.com</strong></li>
+            <li>Följ instruktionerna (enkel inloggning via webbläsare)</li>
+        </ul>
+        
+        <h3>Steg 3: Öppna Dashboard Hub</h3>
+        <ul>
+            <li><a href="http://{tailscale_ip}:8090">http://{tailscale_ip}:8090</a></li>
+            <li>Logga in med samma användarnamn och lösenord</li>
+        </ul>
+    </div>
+    
+    <div class="section">
+        <h2>🔒 Säkerhet</h2>
+        <ul>
+            <li>Detta tillfälliga lösenord är endast för första inloggningen</li>
+            <li>Använd ett starkt lösenord (minst 8 tecken)</li>
+            <li>Dela inte ditt lösenord med andra</li>
+        </ul>
+    </div>
+    
+    <div class="section" style="background: #e3f2fd; border-left: 4px solid #2196f3;">
+        <h3>💡 Lokal åtkomst (om du är på samma nätverk)</h3>
+        <p>Dashboard Hub: <a href="http://{local_ip}:8090">http://{local_ip}:8090</a></p>
+        <p><small>OBS: Om du är på samma nätverk som systemet kan du använda den lokala IP-adressen ovan. Annars använd den publika URL:en ovan (https://...)</small></p>
+    </div>
+    
+    <div class="footer">
+        <p>Om du har frågor eller problem, kontakta systemadministratören.</p>
+        <p><strong>Välkommen till IK Kamp!</strong></p>
+    </div>
+</body>
+</html>
+"""
+    
+    msg.add_alternative(html_content, subtype='html')
+    
+    try:
+        context = ssl.create_default_context()
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+            server.starttls(context=context)
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+        logger.info(f"Welcome email sent to {email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send welcome email: {e}")
+        return False
 
 
 class DeleteUserRequest(BaseModel):
@@ -2360,13 +2702,16 @@ def create_user(
             detail="User management not available - missing dependencies"
         )
     
-    logger.info("[SUPERADMIN] Creating user: %s (admin=%s)", request.username, request.is_admin)
+    logger.info("[SUPERADMIN] Creating user: %s (admin=%s, email=%s)", 
+                request.username, request.is_admin, request.email)
     
     try:
-        success = user_manager.create_user(
+        success, temp_password = user_manager.create_user(
             username=request.username,
             password=request.password,
-            is_admin=request.is_admin
+            is_admin=request.is_admin,
+            email=request.email,
+            receive_alarms=request.receive_alarms
         )
         
         if not success:
@@ -2375,12 +2720,23 @@ def create_user(
                 detail=f"User '{request.username}' already exists"
             )
         
+        # Send welcome email if email is provided
+        if request.email and temp_password:
+            try:
+                send_welcome_email(request.email, request.username, temp_password, request.is_admin)
+                logger.info("[SUPERADMIN] Welcome email sent to %s", request.email)
+            except Exception as e:
+                logger.warning("[SUPERADMIN] Failed to send welcome email: %s", e)
+                # Don't fail user creation if email fails
+        
         logger.info("[SUPERADMIN] User created successfully: %s", request.username)
         return {
             "ok": True,
             "message": f"User '{request.username}' created successfully",
             "username": request.username,
-            "is_admin": request.is_admin
+            "is_admin": request.is_admin,
+            "email": request.email,
+            "temporary_password": temp_password if temp_password else None
         }
     
     except ValueError as e:
@@ -2390,6 +2746,128 @@ def create_user(
     except Exception as e:
         logger.error("[SUPERADMIN] Failed to create user: %s", e)
         raise HTTPException(status_code=500, detail="Failed to create user") from e
+
+
+@app.post("/users/set-password")
+def set_user_password(request: SetPasswordRequest):
+    """
+    Set password for first-time login.
+    
+    User must provide their temporary password and choose a new password.
+    """
+    if user_manager is None:
+        raise HTTPException(
+            status_code=503,
+            detail="User management not available - missing dependencies"
+        )
+    
+    # Verify current password
+    user = user_manager.verify_user(request.username, request.current_password)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid username or password"
+        )
+    
+    # Check if password already set by getting user info
+    user_list = user_manager.list_users()
+    for u in user_list:
+        if u['username'] == request.username:
+            if u.get('password_set', True):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Password already set. Use regular login."
+                )
+            break
+    
+    # Set new password
+    try:
+        success = user_manager.set_user_password(request.username, request.new_password)
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail=f"User '{request.username}' not found"
+            )
+        
+        logger.info("User %s set their password (first-time login)", request.username)
+        return {
+            "ok": True,
+            "message": "Password set successfully. You can now log in with your new password."
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/system/user-control/enable")
+def enable_user_control(
+    _superadmin: str = Depends(require_superadmin)
+):
+    """
+    Aktivera användarstyrning-läge (superadmin only).
+    
+    När aktivt kan alla inloggade användare styra systemet utan API-nyckel.
+    """
+    try:
+        from user_control import set_user_control
+        set_user_control(True, "api_superadmin")
+        logger.info("[SUPERADMIN] Användarstyrning aktiverad")
+        return {
+            "ok": True,
+            "message": "Användarstyrning aktiverad. Alla inloggade användare kan nu styra systemet.",
+            "enabled": True
+        }
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="User control module not available"
+        )
+
+
+@app.post("/system/user-control/disable")
+def disable_user_control(
+    _superadmin: str = Depends(require_superadmin)
+):
+    """
+    Deaktivera användarstyrning-läge (superadmin only).
+    
+    Återgår till att kräva API-nyckel för styrning.
+    """
+    try:
+        from user_control import set_user_control
+        set_user_control(False, "api_superadmin")
+        logger.info("[SUPERADMIN] Användarstyrning deaktiverad")
+        return {
+            "ok": True,
+            "message": "Användarstyrning deaktiverad. Endast användare med API-nyckel kan styra.",
+            "enabled": False
+        }
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="User control module not available"
+        )
+
+
+@app.get("/system/user-control/status")
+def get_user_control_status(x_api_key: Optional[str] = Header(None)):
+    """
+    Hämta status för användarstyrning-läge.
+    """
+    try:
+        from user_control import get_user_control_status
+        status = get_user_control_status()
+        return {
+            "ok": True,
+            "enabled": status.get('enabled', False),
+            "activated_by": status.get('activated_by'),
+            "activated_at": status.get('activated_at')
+        }
+    except ImportError:
+        return {
+            "ok": True,
+            "enabled": False,
+            "note": "User control module not available"
+        }
 
 
 @app.post("/users/delete")

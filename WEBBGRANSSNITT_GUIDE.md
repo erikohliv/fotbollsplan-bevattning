@@ -16,21 +16,41 @@ Börja alltid på **Dashboard Hub** → Klicka dig vidare till det du behöver!
 
 ## 📱 ÅTKOMST
 
-### Lokalt (samma nätverk som Raspberry Pi)
+### 1. Lokalt (samma nätverk som Raspberry Pi)
 ```
 http://<raspberry-pi-ip>:PORT
 ```
 Hitta IP: `hostname -I` på Raspberry Pi
 
-### Fjärråtkomst via Tailscale
+**Exempel:** `http://10.219.1.116:8090`
+
+### 2. Fjärråtkomst via Tailscale (för administratörer)
 ```
 http://<tailscale-ip>:PORT
 ```
 Hitta IP: `sudo tailscale ip -4` på Raspberry Pi
 
-**Exempel:**
-- Lokalt: `http://10.219.1.116:8090`
-- Tailscale: `http://100.124.254.103:8090`
+**Exempel:** `http://100.124.254.103:8090`
+
+### 3. Via Cloudflare Tunnel (för slutanvändare)
+```
+https://<cloudflare-tunnel-url>/PATH
+```
+
+**Nginx Reverse Proxy - Alla tjänster via samma URL:**
+- Dashboard Hub: `https://<url>/`
+- DI Monitor: `https://<url>/di`
+- Process View: `https://<url>/process`
+- Användarhantering: `https://<url>/users`
+- API: `https://<url>/api`
+- TODO Checklist: `https://<url>/todo`
+
+**Exempel:** `https://scan-mode-laws-constantly.trycloudflare.com/`
+
+**Fördelar:**
+- ✅ Ingen VPN behövs
+- ✅ Fungerar från vilken webbläsare som helst
+- ✅ Fungerar på mobil och dator
 
 ---
 

@@ -32,24 +32,43 @@ Huvudstyrning för bevattningssystemet:
 - Felsökning och felåterställning
 
 ### 🔌 DI Monitor (Port 8081)
+**URL:** 
+- Lokalt: `http://<ip>:8081`
+- Tailscale: `http://<tailscale-ip>:8081`
+- Cloudflare: `https://<tunnel-url>/di`
+
 Realtidsövervakning av digitala ingångar:
 - Alla 12 DI visas live (uppdatering var 0.5 sekund)
 - Färgkodning: Grön=OK, Gul=Aktiv, Röd=Larm
 - Perfekt för att testa knappar och sensorer
 - Kritiska larm pulserar
+- **Kräver inloggning** (Flask-Login)
 
 ### 👥 Användarhantering (Port 8082)
+**URL:** 
+- Lokalt: `http://<ip>:8082`
+- Tailscale: `http://<tailscale-ip>:8082`
+- Cloudflare: `https://<tunnel-url>/users`
+
 Administrera användarkonton:
 - Skapa nya användare (Operatör eller Admin)
 - Ta bort användare
 - Visa alla användarkonton
-- Kräver superadmin-inloggning
+- Aktivera/deaktivera användarstyrning-läge (superadmin)
+- Konfigurera larm-mottagare per användare
+- **Kräver superadmin-inloggning** (Session-baserad auth)
 
 ### 📊 Process View (Port 8050)
+**URL:** 
+- Lokalt: `http://<ip>:8050`
+- Tailscale: `http://<tailscale-ip>:8050`
+- Cloudflare: `https://<tunnel-url>/process`
+
 Grafisk visualisering med Plotly Dash:
 - Fotbollsplan med zonöversikt
 - Regnprognos och väderdata
 - Live processtatus
+- **Kräver inloggning** (Dash BasicAuth)
 
 ### 📋 TODO Checklist (Port 8080)
 Projekthantering och checklista:
@@ -58,6 +77,12 @@ Projekthantering och checklista:
 - Kontaktinformation
 
 **Alla gränssnitt fungerar på både mobil och desktop!**
+
+### 🔐 Inloggning
+Alla webbgränssnitt kräver inloggning. Se [ANVANDARINLOGGNING_GUIDE.md](ANVANDARINLOGGNING_GUIDE.md) för instruktioner.
+
+### 🌐 Nginx Reverse Proxy
+Systemet använder Nginx som reverse proxy för att exponera alla tjänster via en enda URL (Cloudflare Tunnel). Se [CLOUDFLARE_TUNNEL_GUIDE.md](CLOUDFLARE_TUNNEL_GUIDE.md) för konfiguration.
 
 ## Rörledningsnät och Zonspecifikationer
 Systemet använder ett hybridnät med PEM 90/75/50 rör. **Viktigt**: Zon 7 har PEM 50 (mindre dimension) medan Zon 5 har PEM 75, vilket ger naturlig tryckdämpning i Zon 7. Se [PIPE_NETWORK_DOCUMENTATION.md](PIPE_NETWORK_DOCUMENTATION.md) för detaljerad förklaring av hydraulik, tryckskillnader och varför dimensionen spelar roll.
@@ -239,6 +264,48 @@ Alternativt kan du manuellt redigera `api_.env` och ställa in:
 - `SMTP_FROM`, `SMTP_TO` (kommaseparerade mottagare)
 
 **OBS för Gmail-användare med 2FA:** Generera ett "App Password" på https://myaccount.google.com/apppasswords
+
+## Användarstyrning-läge
+
+Systemet har två sätt att styra bevattningen:
+
+### 1. API-nyckel-läge (Standard)
+- Endast användare med API-nyckel kan styra systemet via webbgränssnitt
+- API-nyckel konfigureras i `api_.env` (variabel: `API_KEY`)
+- Säkerställer att endast auktoriserade användare kan styra
+
+### 2. Användarstyrning-läge (Valfritt)
+När användarstyrning är **aktiverat**:
+- ✅ Alla inloggade användare (via användarhantering) kan styra systemet via webbgränssnitt
+- ✅ API-nyckel krävs **INTE** längre
+- ✅ Perfekt för när flera användare ska kunna styra systemet
+
+**Aktivera användarstyrning:**
+1. **Via arcadknappar (när installerade):**
+   - Unlock: NER→UPP→UPP→OK
+   - HUVUDMENY → Användarstyrning → Aktivera
+2. **Via webbgränssnitt (superadmin):**
+   - Gå till Användarhantering (port 8082)
+   - Logga in som superadmin
+   - Klicka på "Aktivera användarstyrning"
+3. **Via terminal:**
+   ```bash
+   python3 user_control.py enable
+   ```
+
+**Deaktivera användarstyrning:**
+- Samma sätt som aktivering, men välj "Deaktivera" istället
+- Eller: `python3 user_control.py disable`
+
+**Kontrollera status:**
+```bash
+python3 user_control.py status
+```
+
+**Rekommendation:**
+- Under testning: Låt användarstyrning vara **INAKTIVT** (standard)
+- När systemet är klart: Aktivera via arcadknappar eller webbgränssnitt
+- Då kan alla användare styra utan att behöva API-nyckel
 
 ### Konfigurera Tailscale (Fjärråtkomst)
 Tailscale installeras automatiskt om du använder `setup.py`. För manuell installation:
@@ -830,6 +897,36 @@ journalctl -u bevattning-api -n 50
   - Meny Tillbaka `%IX1.5` (DI14 - PLC-knapp)
 
 ## Webb-åtkomst
+
+Systemet kan nås på tre sätt:
+
+### 1. Lokalt (samma nätverk)
+```
+http://<raspberry-pi-ip>:PORT
+```
+Exempel: `http://10.219.1.116:8090`
+
+### 2. Via Tailscale VPN (för administratörer)
+```
+http://100.124.254.103:PORT
+```
+Se [TAILSCALE_ACCESS.md](TAILSCALE_ACCESS.md) för detaljer.
+
+### 3. Via Cloudflare Tunnel (för slutanvändare)
+```
+https://<cloudflare-tunnel-url>
+```
+**Nginx Reverse Proxy:** Alla tjänster nås via samma URL med paths:
+- `/` → Dashboard Hub
+- `/di` → DI Monitor
+- `/process` → Process View
+- `/users` → Användarhantering
+- `/api` → API
+- `/todo` → TODO Checklist
+
+Se [CLOUDFLARE_TUNNEL_GUIDE.md](CLOUDFLARE_TUNNEL_GUIDE.md) för konfiguration.
+
+## Webb-åtkomst (GAMMAL - FÖR REFERENS)
 
 ### Lokal åtkomst (samma nätverk)
 Hitta Raspberry Pi:s IP-adress:

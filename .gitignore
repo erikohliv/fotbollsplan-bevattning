@@ -24,6 +24,12 @@ ENV/
 # Logs
 *.log
 bevattning_log.csv
+# Cloudflared quick tunnel logs
+/tmp/cloudflared*.log
+/tmp/cloudflared_nginx.log
+
+# Systemd logs
+*.service.log
 
 # Environment files
 .env
@@ -38,3 +44,4 @@ demo_users.json
 # OS
 .DS_Store
 Thumbs.db
+._*

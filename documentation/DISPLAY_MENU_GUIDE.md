@@ -109,12 +109,18 @@ Status: OK
  
 > Starta Zon
   Stoppa Pump
+  Användarstyrning
 ```
 
 **Navigation:**
-- **UPP/NER:** Byt markering
+- **UPP/NER:** Byt markering (scrollar om fler än 2 items)
 - **OK:** Välj alternativ
 - **VÄNSTER:** Tillbaka till STATUS
+
+**Användarstyrning:**
+- Välj "Användarstyrning" i huvudmenyn
+- Välj "Aktivera" eller "Deaktivera"
+- När aktivt kan alla inloggade användare styra systemet via webbgränssnitt utan API-nyckel
 
 ---
 
