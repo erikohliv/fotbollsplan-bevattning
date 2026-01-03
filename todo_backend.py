@@ -46,6 +46,20 @@ def index():
     """Serve the HTML checklist"""
     return send_file(HTML_FILE)
 
+
+@app.route('/assets/logo')
+def serve_logo():
+    """Servera IK Kamp logga"""
+    import pathlib
+    logo_path = BASE_DIR / 'assets' / 'ik_kamp_logo.jpg'
+    
+    # Verifiera att filen finns
+    if not logo_path.exists():
+        return jsonify({"error": "Logo not found"}), 404
+    
+    return send_file(logo_path, mimetype='image/jpeg')
+
+
 @app.route('/api/state', methods=['GET'])
 def get_state():
     """Get current TODO state"""

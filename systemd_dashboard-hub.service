@@ -1,0 +1,19 @@
+[Unit]
+Description=Dashboard Hub - Central Control Panel
+After=network-online.target bevattning-api.service di-monitor.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kamp
+Group=kamp
+WorkingDirectory=/home/kamp/fotbollsplan-bevattning
+Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=/home/kamp/fotbollsplan-bevattning/api_.env
+ExecStart=/home/kamp/fotbollsplan-bevattning/.venv/bin/python3 /home/kamp/fotbollsplan-bevattning/dashboard_hub.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+
